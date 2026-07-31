@@ -56,6 +56,18 @@ button, input { font-family: inherit; }
   color: var(--texto); font-weight: 600; cursor: pointer; width: 100%; max-width: 280px; margin-top: 8px;
 }
 
+.popup-fondo {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex;
+  align-items: center; justify-content: center; z-index: 60; padding: 24px;
+}
+.popup-caja {
+  background: var(--superficie); border-radius: 16px; padding: 20px; max-width: 300px;
+  width: 100%; text-align: center; box-shadow: var(--sombra);
+}
+.popup-caja p { margin: 0 0 16px; font-size: 0.92rem; }
+.popup-botones { display: flex; gap: 8px; }
+.popup-botones button { flex: 1; margin-top: 0; }
+
 .faceid-lista { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; margin-bottom: 18px; }
 .btn-faceid {
   display: flex; align-items: center; justify-content: center; gap: 10px;

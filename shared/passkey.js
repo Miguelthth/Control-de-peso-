@@ -24,12 +24,27 @@ function aBuffer(b64) {
 }
 
 export async function disponible() {
-  if (!window.PublicKeyCredential || !navigator.credentials) return false;
-  try {
-    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-  } catch {
-    return false;
+  return (await porQueNoDisponible()) === null;
+}
+
+// Regresa null si Face ID se puede usar, o el motivo en texto claro si no --
+// sin esto el usuario solo ve que "no pasa nada" y no hay forma de saber si
+// es el navegador, el dispositivo, o que la app se abrió desde un archivo
+// local en vez de su liga https.
+export async function porQueNoDisponible() {
+  if (!window.isSecureContext) {
+    return 'Face ID solo funciona con la app abierta desde su liga https, no desde el archivo en la computadora.';
   }
+  if (!window.PublicKeyCredential || !navigator.credentials) {
+    return 'Este navegador no soporta Face ID para apps web (en iPhone tiene que ser Safari).';
+  }
+  try {
+    const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    if (!ok) return 'Este dispositivo no tiene Face ID / Touch ID disponible.';
+  } catch (e) {
+    return 'No se pudo consultar el sensor: ' + e.message;
+  }
+  return null;
 }
 
 export function tieneRegistro(usuario) {
@@ -49,26 +64,35 @@ export function usuariosRegistrados() {
   return usuarios;
 }
 
+// IMPORTANTE: esto TIENE que llamarse desde el handler de un toque del
+// usuario, y ser lo PRIMERO que se hace ahí (nada de await, confirm() ni
+// prompt() antes). Safari exige que la llamada salga directo del toque; si
+// algo se mete en medio, la rechaza con NotAllowedError sin explicación.
 export async function registrar(usuario) {
-  const cred = await navigator.credentials.create({
-    publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      rp: { name: 'Mis Apps' },
-      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: usuario, displayName: usuario },
-      pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
-      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
-      timeout: 60000,
-    },
-  });
-  if (!cred) throw new Error('No se pudo activar Face ID');
-  localStorage.setItem(claveUsuario(usuario), aBase64(cred.rawId));
+  try {
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp: { name: 'Mis Apps' },
+        user: { id: crypto.getRandomValues(new Uint8Array(16)), name: usuario, displayName: usuario },
+        pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+        timeout: 60000,
+      },
+    });
+    if (!cred) throw new Error('No se pudo activar Face ID.');
+    localStorage.setItem(claveUsuario(usuario), aBase64(cred.rawId));
+  } catch (e) {
+    throw new Error(mensajeError(e));
+  }
 }
 
-// true si el sensor confirmó (Face ID / Touch ID / código del iPhone como
-// respaldo del sistema); false si canceló o falló -- nunca truena para eso.
+// OJO: igual que registrar(), TIENE que llamarse dentro del handler de un
+// toque del usuario. Avienta con un mensaje legible si falla, en vez de
+// regresar false en silencio -- así el error sí llega a la pantalla.
 export async function verificar(usuario) {
   const idGuardado = localStorage.getItem(claveUsuario(usuario));
-  if (!idGuardado) return false;
+  if (!idGuardado) throw new Error('Face ID no está activado en este dispositivo.');
   try {
     const cred = await navigator.credentials.get({
       publicKey: {
@@ -78,8 +102,20 @@ export async function verificar(usuario) {
         timeout: 60000,
       },
     });
-    return !!cred;
-  } catch {
-    return false;
+    if (!cred) throw new Error('Face ID no confirmó.');
+    return true;
+  } catch (e) {
+    throw new Error(mensajeError(e));
   }
+}
+
+// Traduce los errores de WebAuthn a algo que se entienda. NotAllowedError
+// sale tanto si el usuario canceló como si el navegador bloqueó la llamada
+// por no venir de un toque directo -- de ahí la mención al toque.
+function mensajeError(e) {
+  if (e && e.name === 'NotAllowedError') return 'Face ID se canceló o el navegador lo bloqueó. Toca el botón otra vez.';
+  if (e && e.name === 'InvalidStateError') return 'Este dispositivo ya tenía un registro distinto. Desactiva y vuelve a activar Face ID.';
+  if (e && e.name === 'SecurityError') return 'Face ID necesita que la app esté abierta desde su liga https.';
+  if (e && e.name === 'AbortError') return 'Se agotó el tiempo de Face ID. Intenta de nuevo.';
+  return (e && e.message) || 'No se pudo usar Face ID.';
 }

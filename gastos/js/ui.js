@@ -137,43 +137,59 @@ function mostrarPantallaPassword(modo) {
   document.getElementById('password-input').value = '';
   document.getElementById('password-confirmar').value = '';
   document.getElementById('password-input').focus();
-  if (modo === 'entrar') intentarFaceId();
+  if (modo === 'entrar') mostrarBotonFaceId();
   else document.getElementById('btn-faceid-password').classList.add('oculto');
 }
 
 // Face ID es un candado local por dispositivo (ver shared/passkey.js) que
-// evita volver a teclear la contraseña de cifrado cada vez que abres Gastos
-// -- se intenta solo, y además queda el botón por si el navegador bloqueó
-// el intento automático (WebAuthn a veces pide un toque previo del usuario).
-// El registro de Face ID (passkey.registrar) es UNO solo por usuario y sirve
-// para las dos apps -- lo que decide si Gastos lo usa es si hay una
-// contraseña cacheada aquí (candado 'gastos'), no si el passkey existe (ese
-// puede haberse creado desde el launcher, para el PIN, sin que Gastos sepa).
+// evita volver a teclear la contraseña de cifrado cada vez que abres Gastos.
+// El registro (passkey.registrar) es UNO solo por usuario y sirve para las
+// dos apps -- lo que decide si Gastos lo usa es si hay una contraseña
+// cacheada aquí (candado 'gastos'), no si el passkey existe (ese puede
+// haberse creado desde el launcher, para el PIN, sin que Gastos sepa).
+async function mostrarBotonFaceId() {
+  const disponible = await passkey.disponible();
+  const mostrar = disponible && !!candado.leer('gastos', getUsuario());
+  document.getElementById('btn-faceid-password').classList.toggle('oculto', !mostrar);
+}
+
+// Colgada del botón, NUNCA automática: Safari rechaza cualquier Face ID que
+// no salga directo de un toque, y al cargar la pantalla no hay ninguno.
 async function intentarFaceId() {
   const usuario = getUsuario();
-  const disponible = await passkey.disponible();
   const datosCache = candado.leer('gastos', usuario);
-  const mostrar = disponible && !!datosCache;
-  document.getElementById('btn-faceid-password').classList.toggle('oculto', !mostrar);
-  if (!mostrar) return;
-  const ok = await passkey.verificar(usuario);
-  if (!ok) return;
+  if (!datosCache) return;
+  try {
+    await passkey.verificar(usuario);
+  } catch (e) {
+    mostrarErrorPassword(e.message);
+    return;
+  }
   document.getElementById('password-input').value = datosCache.password;
   await confirmarPassword();
+}
+
+// Corre DENTRO del click del popup -- el registro es lo primero que hace.
+async function registrarFaceIdGastos(pass) {
+  const usuario = getUsuario();
+  try {
+    if (!passkey.tieneRegistro(usuario)) await passkey.registrar(usuario); // reusa el del launcher si ya existe
+    candado.guardar('gastos', usuario, { password: pass });
+    toast('Face ID activado ✓');
+    actualizarBotonesFaceIdAjustes();
+  } catch (e) {
+    toast('No se pudo activar Face ID: ' + e.message, true);
+  }
 }
 
 async function ofrecerActivarFaceId(pass) {
   const usuario = getUsuario();
   if (candado.leer('gastos', usuario)) return; // ya activado para Gastos -- no volver a preguntar
   if (!(await passkey.disponible())) return;
-  if (!confirm('¿Activar Face ID en este iPhone para no volver a teclear tu contraseña de Gastos?')) return;
-  try {
-    if (!passkey.tieneRegistro(usuario)) await passkey.registrar(usuario); // reusa el de Peso/launcher si ya existe
-    candado.guardar('gastos', usuario, { password: pass });
-    toast('Face ID activado ✓');
-  } catch (e) {
-    toast('No se pudo activar Face ID', true);
-  }
+  popupFaceId(
+    '¿Activar Face ID en este iPhone para no volver a teclear tu contraseña de Gastos?',
+    () => registrarFaceIdGastos(pass)
+  );
 }
 
 function mostrarErrorPassword(msg) {
@@ -653,6 +669,11 @@ async function actualizarBotonesFaceIdAjustes() {
 }
 
 async function activarFaceIdDesdeAjustes() {
+  const motivo = await passkey.porQueNoDisponible();
+  if (motivo) {
+    toast(motivo, true);
+    return;
+  }
   const pass = prompt('Escribe tu contraseña de Gastos para activar Face ID:');
   if (!pass) return;
   try {
@@ -661,14 +682,9 @@ async function activarFaceIdDesdeAjustes() {
     toast(e.message || 'Contraseña incorrecta', true);
     return;
   }
-  try {
-    if (!passkey.tieneRegistro(getUsuario())) await passkey.registrar(getUsuario()); // reusa el de Peso/launcher si ya existe
-    candado.guardar('gastos', getUsuario(), { password: pass });
-    toast('Face ID activado ✓');
-    actualizarBotonesFaceIdAjustes();
-  } catch (e) {
-    toast('No se pudo activar Face ID', true);
-  }
+  // El registro se hace hasta que toques el botón del popup: el prompt de
+  // arriba y la lectura del servidor ya "gastaron" el toque original.
+  popupFaceId('Confirma para activar Face ID en este iPhone.', () => registrarFaceIdGastos(pass));
 }
 
 function desactivarFaceIdDesdeAjustes() {
@@ -880,6 +896,26 @@ function abrirModalCambiarPassword() {
 }
 
 // ---------- popup de confirmación (reemplaza confirm() nativo) ----------
+
+// Variante con callback (no promesa) para Face ID: `onAceptar` corre DENTRO
+// del handler del click, que es lo que Safari exige para dejar registrar la
+// huella/cara. Con la versión de promesa el await rompe ese requisito.
+function popupFaceId(mensaje, onAceptar) {
+  const fondo = document.getElementById('popup-faceid');
+  document.getElementById('popup-faceid-mensaje').textContent = mensaje;
+  fondo.classList.remove('oculto');
+  const btnSi = document.getElementById('popup-faceid-si');
+  const btnNo = document.getElementById('popup-faceid-no');
+  const cerrar = () => {
+    fondo.classList.add('oculto');
+    btnSi.removeEventListener('click', onSi);
+    btnNo.removeEventListener('click', onNo);
+  };
+  const onSi = () => { cerrar(); onAceptar(); };
+  const onNo = () => cerrar();
+  btnSi.addEventListener('click', onSi);
+  btnNo.addEventListener('click', onNo);
+}
 
 function confirmarPopup(mensaje) {
   return new Promise((resolve) => {

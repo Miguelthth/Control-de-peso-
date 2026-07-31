@@ -56,6 +56,14 @@ button, input { font-family: inherit; }
   color: var(--texto); font-weight: 600; cursor: pointer; width: 100%; max-width: 280px; margin-top: 8px;
 }
 
+.faceid-lista { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; margin-bottom: 18px; }
+.btn-faceid {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 14px; border-radius: 14px; border: 1px solid var(--borde); background: var(--superficie);
+  color: var(--texto); font-weight: 700; font-size: 1rem; cursor: pointer; box-shadow: var(--sombra);
+}
+.faceid-separador { color: var(--texto-suave); font-size: 0.8rem; margin: 4px 0 14px; }
+
 .botones-launcher { display: flex; flex-direction: column; gap: 14px; margin-top: 20px; width: 100%; max-width: 300px; }
 .btn-launcher {
   display: flex; align-items: center; gap: 14px; padding: 22px 24px; border-radius: 18px;

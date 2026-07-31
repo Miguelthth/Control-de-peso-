@@ -1145,6 +1145,40 @@ function mostrarPantallaPassword(modo) {
   document.getElementById('password-input').value = '';
   document.getElementById('password-confirmar').value = '';
   document.getElementById('password-input').focus();
+  if (modo === 'entrar') intentarFaceId();
+  else document.getElementById('btn-faceid-password').classList.add('oculto');
+}
+
+// Face ID es un candado local por dispositivo (ver shared/passkey.js) que
+// evita volver a teclear la contraseña de cifrado cada vez que abres Gastos
+// -- se intenta solo, y además queda el botón por si el navegador bloqueó
+// el intento automático (WebAuthn a veces pide un toque previo del usuario).
+async function intentarFaceId() {
+  const usuario = getUsuario();
+  const disponible = await passkey.disponible();
+  const mostrar = disponible && passkey.tieneRegistro('gastos', usuario);
+  document.getElementById('btn-faceid-password').classList.toggle('oculto', !mostrar);
+  if (!mostrar) return;
+  const ok = await passkey.verificar(usuario);
+  if (!ok) return;
+  const datos = candado.leer('gastos', usuario);
+  if (!datos || !datos.password) return;
+  document.getElementById('password-input').value = datos.password;
+  await confirmarPassword();
+}
+
+async function ofrecerActivarFaceId(pass) {
+  const usuario = getUsuario();
+  if (passkey.tieneRegistro('gastos', usuario)) return; // ya activado -- no volver a preguntar
+  if (!(await passkey.disponible())) return;
+  if (!confirm('¿Activar Face ID en este iPhone para no volver a teclear tu contraseña de Gastos?')) return;
+  try {
+    await passkey.registrar(usuario);
+    candado.guardar('gastos', usuario, { password: pass });
+    toast('Face ID activado ✓');
+  } catch (e) {
+    toast('No se pudo activar Face ID', true);
+  }
 }
 
 function mostrarErrorPassword(msg) {
@@ -1179,6 +1213,7 @@ async function confirmarPassword() {
     E.datos = crearDatosVacios();
     await persistir();
     finalizarConexion(false);
+    ofrecerActivarFaceId(pass);
   } else {
     try {
       const { datos, pendienteDeSincronizar, clave, saltB64 } = await almacen.cargar(getUsuario(), pass);
@@ -1191,6 +1226,7 @@ async function confirmarPassword() {
         await persistir();
       }
       finalizarConexion(pendienteDeSincronizar);
+      ofrecerActivarFaceId(pass);
     } catch (e) {
       mostrarErrorPassword(e.message || 'Contraseña incorrecta');
     }
@@ -1619,6 +1655,39 @@ function renderAjustes() {
     : '<p style="color:var(--texto-suave);font-size:0.82rem;">Sin recurrentes configurados.</p>';
 
   document.getElementById('ajustes-info').textContent = `${E.datos.movimientos.length} movimientos registrados · ${E.datos.categorias.length} categorías.`;
+  actualizarBotonesFaceIdAjustes();
+}
+
+async function actualizarBotonesFaceIdAjustes() {
+  const disponible = await passkey.disponible();
+  const registrado = disponible && passkey.tieneRegistro('gastos', getUsuario());
+  document.getElementById('btn-faceid-activar').classList.toggle('oculto', !disponible || registrado);
+  document.getElementById('btn-faceid-desactivar').classList.toggle('oculto', !registrado);
+}
+
+async function activarFaceIdDesdeAjustes() {
+  const pass = prompt('Escribe tu contraseña de Gastos para activar Face ID:');
+  if (!pass) return;
+  try {
+    await almacen.cargar(getUsuario(), pass); // avienta "Contraseña incorrecta" si no es la correcta
+  } catch (e) {
+    toast(e.message || 'Contraseña incorrecta', true);
+    return;
+  }
+  try {
+    await passkey.registrar(getUsuario());
+    candado.guardar('gastos', getUsuario(), { password: pass });
+    toast('Face ID activado ✓');
+    actualizarBotonesFaceIdAjustes();
+  } catch (e) {
+    toast('No se pudo activar Face ID', true);
+  }
+}
+
+function desactivarFaceIdDesdeAjustes() {
+  passkey.olvidar(getUsuario());
+  candado.borrar('gastos', getUsuario());
+  actualizarBotonesFaceIdAjustes();
 }
 
 function abrirModalCategoria(id) {
@@ -1780,6 +1849,8 @@ function wireAjustes() {
     }
   });
   document.getElementById('btn-cambiar-password').addEventListener('click', abrirModalCambiarPassword);
+  document.getElementById('btn-faceid-activar').addEventListener('click', activarFaceIdDesdeAjustes);
+  document.getElementById('btn-faceid-desactivar').addEventListener('click', desactivarFaceIdDesdeAjustes);
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
     cerrarSesion();
     location.href = '../index.html';
@@ -1816,6 +1887,7 @@ function abrirModalCambiarPassword() {
       E.clave = clave;
       E.saltCifrado = saltB64;
       await persistir();
+      if (passkey.tieneRegistro('gastos', getUsuario())) candado.guardar('gastos', getUsuario(), { password: p1 });
       cerrarModal();
       toast('Contraseña actualizada ✓');
     });
@@ -1826,6 +1898,7 @@ function abrirModalCambiarPassword() {
 
 function wireGlobal() {
   document.getElementById('btn-password-confirmar').addEventListener('click', confirmarPassword);
+  document.getElementById('btn-faceid-password').addEventListener('click', intentarFaceId);
   document.getElementById('password-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') confirmarPassword();
   });

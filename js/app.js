@@ -158,6 +158,77 @@ const leerGastos = api.leerGastos;
 let usuarioTemp = null;
 let rolTemp = null;
 
+function escapeHTML(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function renderFaceIdUsuarios() {
+  const cont = document.getElementById('faceid-usuarios');
+  const registrados = passkey.usuariosRegistrados();
+  if (!registrados.length || !(await passkey.disponible())) {
+    cont.classList.add('oculto');
+    cont.innerHTML = '';
+    return;
+  }
+  cont.innerHTML = registrados
+    .map((u) => `<button class="btn-faceid" data-usuario="${escapeHTML(u)}">🔒 Entrar como ${escapeHTML(u)} con Face ID</button>`)
+    .join('') + '<p class="faceid-separador">— o escribe tu usuario —</p>';
+  cont.classList.remove('oculto');
+}
+
+async function entrarConFaceId(usuario) {
+  const ok = await passkey.verificar(usuario);
+  if (!ok) {
+    mostrarErrorUsuario('No se pudo confirmar con Face ID. Intenta de nuevo o entra con tu usuario.');
+    return;
+  }
+  const datos = candado.leer('launcher', usuario);
+  if (!datos) {
+    mostrarErrorUsuario('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
+    return;
+  }
+  iniciarSesion(usuario, datos.rol);
+  mostrarInicio();
+}
+
+async function actualizarBotonesFaceId() {
+  const disponible = await passkey.disponible();
+  const registrado = disponible && passkey.tieneRegistro(getUsuario());
+  document.getElementById('btn-faceid-activar').classList.toggle('oculto', !disponible || registrado);
+  document.getElementById('btn-faceid-desactivar').classList.toggle('oculto', !registrado);
+}
+
+async function activarFaceId() {
+  const usuario = getUsuario();
+  const pin = prompt('Para activar Face ID, confirma tu PIN actual (vacío si no tienes uno):') || '';
+  try {
+    const r = await api.validarPin(usuario, pin);
+    if (!r.ok) {
+      alert('PIN incorrecto');
+      return;
+    }
+  } catch (e) {
+    alert('No se pudo confirmar: ' + e.message);
+    return;
+  }
+  try {
+    await passkey.registrar(usuario);
+  } catch (e) {
+    alert('No se pudo activar Face ID: ' + e.message);
+    return;
+  }
+  candado.guardar('launcher', usuario, { pin, rol: getRol() });
+  alert('Face ID activado ✓ — la próxima vez que cambies de usuario, podrás entrar como ' + usuario + ' con Face ID.');
+  actualizarBotonesFaceId();
+}
+
+function desactivarFaceId() {
+  const usuario = getUsuario();
+  passkey.olvidar(usuario);
+  candado.borrar('launcher', usuario);
+  actualizarBotonesFaceId();
+}
+
 function mostrarPantalla(id) {
   document.querySelectorAll('.pantalla').forEach((p) => p.classList.add('oculto'));
   document.getElementById(id).classList.remove('oculto');
@@ -167,6 +238,7 @@ function mostrarInicio() {
   document.getElementById('saludo').textContent = `Hola, ${getUsuario()}`;
   document.getElementById('btn-agregar-usuario').classList.toggle('oculto', !esAdmin());
   mostrarPantalla('pantalla-inicio');
+  actualizarBotonesFaceId();
 }
 
 async function agregarUsuario() {
@@ -281,9 +353,16 @@ function wireEventos() {
     cerrarSesion();
     document.getElementById('usuario-input').value = '';
     mostrarPantalla('pantalla-usuario');
+    renderFaceIdUsuarios();
   });
 
   document.getElementById('btn-agregar-usuario').addEventListener('click', agregarUsuario);
+  document.getElementById('btn-faceid-activar').addEventListener('click', activarFaceId);
+  document.getElementById('btn-faceid-desactivar').addEventListener('click', desactivarFaceId);
+  document.getElementById('faceid-usuarios').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-faceid[data-usuario]');
+    if (btn) entrarConFaceId(btn.dataset.usuario);
+  });
 }
 
 function init() {
@@ -297,6 +376,7 @@ function init() {
     return;
   }
   mostrarPantalla('pantalla-usuario');
+  renderFaceIdUsuarios();
 }
 
 document.addEventListener('DOMContentLoaded', init);

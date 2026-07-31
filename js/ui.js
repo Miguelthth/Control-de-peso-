@@ -57,11 +57,40 @@ async function intentarCandado(usuario) {
   }
 }
 
+// El passkey (registro biométrico) es UNO por usuario y sirve para las dos
+// apps -- lo que decide si el launcher lo usa es si hay un PIN cacheado
+// aquí (candado 'launcher'), no si el passkey existe (pudo haberse creado
+// desde Gastos sin que el launcher lo sepa).
 async function actualizarBotonesFaceId() {
   const disponible = await passkey.disponible();
-  const registrado = disponible && passkey.tieneRegistro(getUsuario());
-  document.getElementById('btn-faceid-activar').classList.toggle('oculto', !disponible || registrado);
-  document.getElementById('btn-faceid-desactivar').classList.toggle('oculto', !registrado);
+  const activado = disponible && !!candado.leer('launcher', getUsuario());
+  document.getElementById('btn-faceid-activar').classList.toggle('oculto', !disponible || activado);
+  document.getElementById('btn-faceid-desactivar').classList.toggle('oculto', !activado);
+}
+
+async function activarFaceIdConPin(usuario, rol, pin) {
+  try {
+    if (!passkey.tieneRegistro(usuario)) await passkey.registrar(usuario); // reusa el de Gastos si ya existe
+    candado.guardar('launcher', usuario, { pin, rol });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Se ofrece solo justo después de entrar con PIN por primera vez (no como
+// botón escondido en Ajustes) -- así no hay que ir a buscarlo.
+async function ofrecerFaceId(usuario, rol, pin) {
+  if (candado.leer('launcher', usuario)) return; // ya activado -- no volver a preguntar
+  if (!(await passkey.disponible())) return;
+  if (!confirm('¿Activar Face ID en este iPhone para no volver a teclear tu PIN?')) return;
+  const ok = await activarFaceIdConPin(usuario, rol, pin);
+  if (ok) {
+    alert('Face ID activado ✓');
+    actualizarBotonesFaceId();
+  } else {
+    alert('No se pudo activar Face ID.');
+  }
 }
 
 async function activarFaceId() {
@@ -77,21 +106,19 @@ async function activarFaceId() {
     alert('No se pudo confirmar: ' + e.message);
     return;
   }
-  try {
-    await passkey.registrar(usuario);
-  } catch (e) {
-    alert('No se pudo activar Face ID: ' + e.message);
-    return;
+  const ok = await activarFaceIdConPin(usuario, getRol(), pin);
+  if (ok) {
+    alert('Face ID activado ✓');
+    actualizarBotonesFaceId();
+  } else {
+    alert('No se pudo activar Face ID.');
   }
-  candado.guardar('launcher', usuario, { pin, rol: getRol() });
-  alert('Face ID activado ✓ — la próxima vez que cambies de usuario, podrás entrar como ' + usuario + ' con Face ID.');
-  actualizarBotonesFaceId();
 }
 
 function desactivarFaceId() {
-  const usuario = getUsuario();
-  passkey.olvidar(usuario);
-  candado.borrar('launcher', usuario);
+  // Solo borra el PIN cacheado del launcher -- el passkey en sí se queda
+  // (lo puede seguir usando Gastos para su contraseña).
+  candado.borrar('launcher', getUsuario());
   actualizarBotonesFaceId();
 }
 
@@ -168,6 +195,7 @@ async function continuarPin() {
     }
     iniciarSesion(usuarioTemp, rolTemp);
     mostrarInicio();
+    ofrecerFaceId(usuarioTemp, rolTemp, pin);
   } catch (e) {
     mostrarErrorPin('No se pudo validar: ' + e.message);
   }
@@ -182,11 +210,13 @@ async function guardarPinNuevo() {
   await api.crearPin(usuarioTemp, pin);
   iniciarSesion(usuarioTemp, rolTemp);
   mostrarInicio();
+  ofrecerFaceId(usuarioTemp, rolTemp, pin);
 }
 
 function entrarSinPin() {
   iniciarSesion(usuarioTemp, rolTemp);
   mostrarInicio();
+  ofrecerFaceId(usuarioTemp, rolTemp, '');
 }
 
 function wireEventos() {

@@ -29,6 +29,16 @@ export function leerDatos() {
   return _get({ accion: 'datos' });
 }
 
+// Consulta barata (no toca Hojas) para saber si algo cambió en Peso antes
+// de pedir 'datos' completo -- se puede llamar seguido sin gastar cuota.
+export function leerVersion() {
+  return _get({ accion: 'version' });
+}
+
+export function guardarFechasReto(usuario, inicio, fin) {
+  return _post({ accion: 'guardarFechasReto', usuario, inicio, fin });
+}
+
 export function validarUsuario(usuario) {
   return _post({ accion: 'validarUsuario', usuario });
 }

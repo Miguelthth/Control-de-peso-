@@ -32,7 +32,7 @@ export function encolarPeso(usuario, fecha, pesoKg) {
 }
 
 export function leerCache() {
-  return leerJSON(CLAVE_CACHE, { usuarios: [], pesos: [] });
+  return leerJSON(CLAVE_CACHE, { usuarios: [], pesos: [], version: '0', retoInicio: null, retoFin: null });
 }
 
 function guardarCache(datos) {
@@ -56,12 +56,27 @@ export async function refrescarDatos() {
   try {
     const datos = await api.leerDatos();
     if (datos.ok) {
-      guardarCache({ usuarios: datos.usuarios, pesos: datos.pesos });
-      return { datos: conColaEncima({ usuarios: datos.usuarios, pesos: datos.pesos }), sinConexion: false };
+      const plano = { usuarios: datos.usuarios, pesos: datos.pesos, version: datos.version, retoInicio: datos.retoInicio, retoFin: datos.retoFin };
+      guardarCache(plano);
+      return { datos: conColaEncima(plano), sinConexion: false };
     }
     throw new Error(datos.error || 'Error del servidor');
   } catch {
     return { datos: conColaEncima(leerCache()), sinConexion: true };
+  }
+}
+
+// Chequeo barato: compara el número de versión del servidor contra el que
+// se guardó en el último refrescarDatos(). Si no cambió, no vale la pena
+// pedir 'datos' completo -- así se puede preguntar cada pocos segundos sin
+// gastar cuota.
+export async function hayCambiosRemotos() {
+  try {
+    const r = await api.leerVersion();
+    if (!r.ok) return false;
+    return String(r.version) !== String(leerCache().version || '0');
+  } catch {
+    return false;
   }
 }
 

@@ -93,6 +93,16 @@ function leerDatos() {
   return _get({ accion: 'datos' });
 }
 
+// Consulta barata (no toca Hojas) para saber si algo cambió en Peso antes
+// de pedir 'datos' completo -- se puede llamar seguido sin gastar cuota.
+function leerVersion() {
+  return _get({ accion: 'version' });
+}
+
+function guardarFechasReto(usuario, inicio, fin) {
+  return _post({ accion: 'guardarFechasReto', usuario, inicio, fin });
+}
+
 function validarUsuario(usuario) {
   return _post({ accion: 'validarUsuario', usuario });
 }
@@ -137,9 +147,11 @@ function leerGastos(usuario) {
   return _get({ accion: 'leerGastos', usuario });
 }
 
-  return { leerDatos, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, crearUsuario, guardarGastos, leerGastos };
+  return { leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, crearUsuario, guardarGastos, leerGastos };
 })();
 const leerDatos = api.leerDatos;
+const leerVersion = api.leerVersion;
+const guardarFechasReto = api.guardarFechasReto;
 const validarUsuario = api.validarUsuario;
 const validarPin = api.validarPin;
 const crearPin = api.crearPin;
@@ -500,7 +512,7 @@ function encolarPeso(usuario, fecha, pesoKg) {
 }
 
 function leerCache() {
-  return leerJSON(CLAVE_CACHE, { usuarios: [], pesos: [] });
+  return leerJSON(CLAVE_CACHE, { usuarios: [], pesos: [], version: '0', retoInicio: null, retoFin: null });
 }
 
 function guardarCache(datos) {
@@ -524,12 +536,27 @@ async function refrescarDatos() {
   try {
     const datos = await api.leerDatos();
     if (datos.ok) {
-      guardarCache({ usuarios: datos.usuarios, pesos: datos.pesos });
-      return { datos: conColaEncima({ usuarios: datos.usuarios, pesos: datos.pesos }), sinConexion: false };
+      const plano = { usuarios: datos.usuarios, pesos: datos.pesos, version: datos.version, retoInicio: datos.retoInicio, retoFin: datos.retoFin };
+      guardarCache(plano);
+      return { datos: conColaEncima(plano), sinConexion: false };
     }
     throw new Error(datos.error || 'Error del servidor');
   } catch {
     return { datos: conColaEncima(leerCache()), sinConexion: true };
+  }
+}
+
+// Chequeo barato: compara el número de versión del servidor contra el que
+// se guardó en el último refrescarDatos(). Si no cambió, no vale la pena
+// pedir 'datos' completo -- así se puede preguntar cada pocos segundos sin
+// gastar cuota.
+async function hayCambiosRemotos() {
+  try {
+    const r = await api.leerVersion();
+    if (!r.ok) return false;
+    return String(r.version) !== String(leerCache().version || '0');
+  } catch {
+    return false;
   }
 }
 
@@ -564,12 +591,13 @@ function iniciarSincronizacionAutomatica(alSincronizar) {
   intentar();
 }
 
-  return { leerCola, encolarPeso, leerCache, refrescarDatos, sincronizar, iniciarSincronizacionAutomatica };
+  return { leerCola, encolarPeso, leerCache, refrescarDatos, hayCambiosRemotos, sincronizar, iniciarSincronizacionAutomatica };
 })();
 const leerCola = cola.leerCola;
 const encolarPeso = cola.encolarPeso;
 const leerCache = cola.leerCache;
 const refrescarDatos = cola.refrescarDatos;
+const hayCambiosRemotos = cola.hayCambiosRemotos;
 const sincronizar = cola.sincronizar;
 const iniciarSincronizacionAutomatica = cola.iniciarSincronizacionAutomatica;
 
@@ -581,7 +609,7 @@ const iniciarSincronizacionAutomatica = cola.iniciarSincronizacionAutomatica;
 
 const E = {
   vista: 'capturar',
-  datos: { usuarios: [], pesos: [] },
+  datos: { usuarios: [], pesos: [], retoInicio: null, retoFin: null },
   sinConexion: false,
   captura: { fecha: hoyISO(), pesoStr: '' },
   graficaActiva: 'diaria',
@@ -637,15 +665,17 @@ async function iniciarApp() {
   await cargarYRenderizar();
   cola.iniciarSincronizacionAutomatica(() => cargarYRenderizar());
   // Para que el peso que capture Cindy/Miguel le llegue rápido al otro sin
-  // tener que recargar la página a mano: refresco periódico + al volver a
-  // primer plano (typear, cambiar de app y regresar, etc.).
-  const refrescoSiAplica = () => {
-    // No en Ajustes: ahí puede haber un campo a medio editar (meta, PIN) y
-    // pisarlo con el refresco sería peor que no refrescar.
-    if (!document.hidden && E.vista !== 'ajustes') cargarYRenderizar();
+  // recargar a mano: cada 8s se pregunta solo el número de versión (barato,
+  // sin tocar Hojas) y nomás si cambió se jala 'datos' completo. Al volver
+  // a primer plano (abrir la app, regresar de otra app) se refresca directo.
+  const revisarVersion = async () => {
+    if (document.hidden || E.vista === 'ajustes') return; // no pisar un campo a medio editar
+    if (await cola.hayCambiosRemotos()) cargarYRenderizar();
   };
-  setInterval(refrescoSiAplica, 20000);
-  document.addEventListener('visibilitychange', refrescoSiAplica);
+  setInterval(revisarVersion, 8000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && E.vista !== 'ajustes') cargarYRenderizar();
+  });
 }
 
 async function cargarYRenderizar() {
@@ -793,11 +823,26 @@ function avatarMeta(pctAvance) {
   return `assets/meta${idx}.png`;
 }
 
+function textoFechasReto() {
+  const { retoInicio, retoFin } = E.datos;
+  if (!retoInicio && !retoFin) return '';
+  const hoy = hoyISO();
+  if (retoFin) {
+    const dias = Math.ceil((new Date(`${retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
+    const rango = retoInicio ? `${retoInicio} → ${retoFin}` : `hasta ${retoFin}`;
+    if (dias > 0) return `${rango} · faltan ${dias} día(s)`;
+    if (dias === 0) return `${rango} · ¡hoy termina!`;
+    return `${rango} · terminó hace ${Math.abs(dias)} día(s)`;
+  }
+  return `Empezó ${retoInicio}`;
+}
+
 function renderReto() {
   const otro = otroUsuario();
   const serieYo = pesosDeUsuario(E.datos.pesos, getUsuario());
   const serieOtro = otro ? pesosDeUsuario(E.datos.pesos, otro) : [];
 
+  document.getElementById('reto-fechas').textContent = textoFechasReto();
   document.getElementById('reto-nombres').textContent = otro ? `${getUsuario()} vs. ${otro}` : getUsuario();
   document.getElementById('leyenda-yo').textContent = getUsuario();
   document.getElementById('leyenda-otro').textContent = otro || '—';
@@ -818,16 +863,18 @@ function renderReto() {
 
   document.getElementById('reto-tarjetas').innerHTML = filas.map((f) => `
     <div class="tarjeta-persona">
+      ${f.avance ? `<img class="avatar-marca-agua" src="${avatarMeta(f.avance.pctAvance)}" alt="">` : ''}
+      <div class="tarjeta-persona-contenido">
       <h3>${f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre}</h3>
       <div class="dato-grande valor-dual">${formatoPesoDual(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
-        <img class="avatar-meta" src="${avatarMeta(f.avance.pctAvance)}" alt="">
         <div class="fila-avance small">
           <span>${formatoPesoDual(f.avance.kgPerdidos)} perdidos</span>
         </div>
         <div class="texto-suave">${Math.round(f.avance.pctAvance * 100)}% de tu meta</div>
       ` : '<div class="texto-suave">Sin meta definida</div>'}
+      </div>
     </div>
   `).join('');
 }
@@ -844,6 +891,22 @@ function renderAjustes() {
   document.getElementById('ajustes-inicial').value = u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '';
   document.querySelectorAll('#unidad-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.unidad === unidad));
   document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
+  document.getElementById('reto-fecha-inicio').value = E.datos.retoInicio || '';
+  document.getElementById('reto-fecha-fin').value = E.datos.retoFin || '';
+}
+
+async function guardarFechasRetoAjustes() {
+  const inicio = document.getElementById('reto-fecha-inicio').value;
+  const fin = document.getElementById('reto-fecha-fin').value;
+  try {
+    const r = await api.guardarFechasReto(getUsuario(), inicio, fin);
+    if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el guardado');
+    E.datos.retoInicio = inicio || null;
+    E.datos.retoFin = fin || null;
+    toast('Fechas guardadas ✓');
+  } catch (e) {
+    toast('No se pudo guardar (¿sin conexión?): ' + e.message, true);
+  }
 }
 
 async function guardarMetaAjustes() {
@@ -896,6 +959,7 @@ async function cambiarPinAjustes() {
 
 function wireAjustes() {
   document.getElementById('btn-guardar-meta').addEventListener('click', guardarMetaAjustes);
+  document.getElementById('btn-guardar-fechas-reto').addEventListener('click', guardarFechasRetoAjustes);
   document.getElementById('btn-cambiar-pin').addEventListener('click', cambiarPinAjustes);
   document.getElementById('unidad-grupo').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-unidad]');

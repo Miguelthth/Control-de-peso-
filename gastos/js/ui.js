@@ -145,27 +145,30 @@ function mostrarPantallaPassword(modo) {
 // evita volver a teclear la contraseña de cifrado cada vez que abres Gastos
 // -- se intenta solo, y además queda el botón por si el navegador bloqueó
 // el intento automático (WebAuthn a veces pide un toque previo del usuario).
+// El registro de Face ID (passkey.registrar) es UNO solo por usuario y sirve
+// para las dos apps -- lo que decide si Gastos lo usa es si hay una
+// contraseña cacheada aquí (candado 'gastos'), no si el passkey existe (ese
+// puede haberse creado desde el launcher, para el PIN, sin que Gastos sepa).
 async function intentarFaceId() {
   const usuario = getUsuario();
   const disponible = await passkey.disponible();
-  const mostrar = disponible && passkey.tieneRegistro('gastos', usuario);
+  const datosCache = candado.leer('gastos', usuario);
+  const mostrar = disponible && !!datosCache;
   document.getElementById('btn-faceid-password').classList.toggle('oculto', !mostrar);
   if (!mostrar) return;
   const ok = await passkey.verificar(usuario);
   if (!ok) return;
-  const datos = candado.leer('gastos', usuario);
-  if (!datos || !datos.password) return;
-  document.getElementById('password-input').value = datos.password;
+  document.getElementById('password-input').value = datosCache.password;
   await confirmarPassword();
 }
 
 async function ofrecerActivarFaceId(pass) {
   const usuario = getUsuario();
-  if (passkey.tieneRegistro('gastos', usuario)) return; // ya activado -- no volver a preguntar
+  if (candado.leer('gastos', usuario)) return; // ya activado para Gastos -- no volver a preguntar
   if (!(await passkey.disponible())) return;
   if (!confirm('¿Activar Face ID en este iPhone para no volver a teclear tu contraseña de Gastos?')) return;
   try {
-    await passkey.registrar(usuario);
+    if (!passkey.tieneRegistro(usuario)) await passkey.registrar(usuario); // reusa el de Peso/launcher si ya existe
     candado.guardar('gastos', usuario, { password: pass });
     toast('Face ID activado ✓');
   } catch (e) {
@@ -644,7 +647,7 @@ function renderAjustes() {
 
 async function actualizarBotonesFaceIdAjustes() {
   const disponible = await passkey.disponible();
-  const registrado = disponible && passkey.tieneRegistro('gastos', getUsuario());
+  const registrado = disponible && !!candado.leer('gastos', getUsuario());
   document.getElementById('btn-faceid-activar').classList.toggle('oculto', !disponible || registrado);
   document.getElementById('btn-faceid-desactivar').classList.toggle('oculto', !registrado);
 }
@@ -659,7 +662,7 @@ async function activarFaceIdDesdeAjustes() {
     return;
   }
   try {
-    await passkey.registrar(getUsuario());
+    if (!passkey.tieneRegistro(getUsuario())) await passkey.registrar(getUsuario()); // reusa el de Peso/launcher si ya existe
     candado.guardar('gastos', getUsuario(), { password: pass });
     toast('Face ID activado ✓');
     actualizarBotonesFaceIdAjustes();
@@ -669,7 +672,8 @@ async function activarFaceIdDesdeAjustes() {
 }
 
 function desactivarFaceIdDesdeAjustes() {
-  passkey.olvidar(getUsuario());
+  // Solo borra la contraseña cacheada de Gastos -- el passkey en sí se
+  // queda (lo puede seguir usando el launcher para el PIN).
   candado.borrar('gastos', getUsuario());
   actualizarBotonesFaceIdAjustes();
 }
@@ -868,7 +872,7 @@ function abrirModalCambiarPassword() {
       E.clave = clave;
       E.saltCifrado = saltB64;
       await persistir();
-      if (passkey.tieneRegistro('gastos', getUsuario())) candado.guardar('gastos', getUsuario(), { password: p1 });
+      if (candado.leer('gastos', getUsuario())) candado.guardar('gastos', getUsuario(), { password: p1 });
       cerrarModal();
       toast('Contraseña actualizada ✓');
     });

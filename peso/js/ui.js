@@ -14,7 +14,7 @@ import { getUsuario, esAdmin, exigirSesion, cerrarSesion } from '../../shared/se
 
 const E = {
   vista: 'capturar',
-  datos: { usuarios: [], pesos: [] },
+  datos: { usuarios: [], pesos: [], retoInicio: null, retoFin: null },
   sinConexion: false,
   captura: { fecha: hoyISO(), pesoStr: '' },
   graficaActiva: 'diaria',
@@ -70,15 +70,17 @@ async function iniciarApp() {
   await cargarYRenderizar();
   cola.iniciarSincronizacionAutomatica(() => cargarYRenderizar());
   // Para que el peso que capture Cindy/Miguel le llegue rápido al otro sin
-  // tener que recargar la página a mano: refresco periódico + al volver a
-  // primer plano (typear, cambiar de app y regresar, etc.).
-  const refrescoSiAplica = () => {
-    // No en Ajustes: ahí puede haber un campo a medio editar (meta, PIN) y
-    // pisarlo con el refresco sería peor que no refrescar.
-    if (!document.hidden && E.vista !== 'ajustes') cargarYRenderizar();
+  // recargar a mano: cada 8s se pregunta solo el número de versión (barato,
+  // sin tocar Hojas) y nomás si cambió se jala 'datos' completo. Al volver
+  // a primer plano (abrir la app, regresar de otra app) se refresca directo.
+  const revisarVersion = async () => {
+    if (document.hidden || E.vista === 'ajustes') return; // no pisar un campo a medio editar
+    if (await cola.hayCambiosRemotos()) cargarYRenderizar();
   };
-  setInterval(refrescoSiAplica, 20000);
-  document.addEventListener('visibilitychange', refrescoSiAplica);
+  setInterval(revisarVersion, 8000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && E.vista !== 'ajustes') cargarYRenderizar();
+  });
 }
 
 async function cargarYRenderizar() {
@@ -226,11 +228,26 @@ function avatarMeta(pctAvance) {
   return `assets/meta${idx}.png`;
 }
 
+function textoFechasReto() {
+  const { retoInicio, retoFin } = E.datos;
+  if (!retoInicio && !retoFin) return '';
+  const hoy = hoyISO();
+  if (retoFin) {
+    const dias = Math.ceil((new Date(`${retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
+    const rango = retoInicio ? `${retoInicio} → ${retoFin}` : `hasta ${retoFin}`;
+    if (dias > 0) return `${rango} · faltan ${dias} día(s)`;
+    if (dias === 0) return `${rango} · ¡hoy termina!`;
+    return `${rango} · terminó hace ${Math.abs(dias)} día(s)`;
+  }
+  return `Empezó ${retoInicio}`;
+}
+
 function renderReto() {
   const otro = otroUsuario();
   const serieYo = pesosDeUsuario(E.datos.pesos, getUsuario());
   const serieOtro = otro ? pesosDeUsuario(E.datos.pesos, otro) : [];
 
+  document.getElementById('reto-fechas').textContent = textoFechasReto();
   document.getElementById('reto-nombres').textContent = otro ? `${getUsuario()} vs. ${otro}` : getUsuario();
   document.getElementById('leyenda-yo').textContent = getUsuario();
   document.getElementById('leyenda-otro').textContent = otro || '—';
@@ -251,16 +268,18 @@ function renderReto() {
 
   document.getElementById('reto-tarjetas').innerHTML = filas.map((f) => `
     <div class="tarjeta-persona">
+      ${f.avance ? `<img class="avatar-marca-agua" src="${avatarMeta(f.avance.pctAvance)}" alt="">` : ''}
+      <div class="tarjeta-persona-contenido">
       <h3>${f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre}</h3>
       <div class="dato-grande valor-dual">${formatoPesoDual(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
-        <img class="avatar-meta" src="${avatarMeta(f.avance.pctAvance)}" alt="">
         <div class="fila-avance small">
           <span>${formatoPesoDual(f.avance.kgPerdidos)} perdidos</span>
         </div>
         <div class="texto-suave">${Math.round(f.avance.pctAvance * 100)}% de tu meta</div>
       ` : '<div class="texto-suave">Sin meta definida</div>'}
+      </div>
     </div>
   `).join('');
 }
@@ -277,6 +296,22 @@ function renderAjustes() {
   document.getElementById('ajustes-inicial').value = u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '';
   document.querySelectorAll('#unidad-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.unidad === unidad));
   document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
+  document.getElementById('reto-fecha-inicio').value = E.datos.retoInicio || '';
+  document.getElementById('reto-fecha-fin').value = E.datos.retoFin || '';
+}
+
+async function guardarFechasRetoAjustes() {
+  const inicio = document.getElementById('reto-fecha-inicio').value;
+  const fin = document.getElementById('reto-fecha-fin').value;
+  try {
+    const r = await api.guardarFechasReto(getUsuario(), inicio, fin);
+    if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el guardado');
+    E.datos.retoInicio = inicio || null;
+    E.datos.retoFin = fin || null;
+    toast('Fechas guardadas ✓');
+  } catch (e) {
+    toast('No se pudo guardar (¿sin conexión?): ' + e.message, true);
+  }
 }
 
 async function guardarMetaAjustes() {
@@ -329,6 +364,7 @@ async function cambiarPinAjustes() {
 
 function wireAjustes() {
   document.getElementById('btn-guardar-meta').addEventListener('click', guardarMetaAjustes);
+  document.getElementById('btn-guardar-fechas-reto').addEventListener('click', guardarFechasRetoAjustes);
   document.getElementById('btn-cambiar-pin').addEventListener('click', cambiarPinAjustes);
   document.getElementById('unidad-grupo').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-unidad]');

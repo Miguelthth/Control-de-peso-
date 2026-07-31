@@ -163,7 +163,7 @@ button, input, select, textarea { font-family: inherit; }
 .campo label { display: block; font-size: 0.75rem; color: var(--texto-suave); margin-bottom: 4px; }
 .campo input, .campo select, .campo textarea {
   width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--borde);
-  background: var(--superficie); color: var(--texto); font-size: 0.9rem;
+  background: var(--superficie); color: var(--texto); font-size: 16px; /* <16px hace zoom automático en iOS */
 }
 .metodo-grupo { display: flex; gap: 6px; flex-wrap: wrap; }
 .metodo-grupo button {
@@ -278,6 +278,7 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
 
 /* ---- Pantalla de conexión ---- */
 .pantalla-conexion {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: 100vh; text-align: center; padding: 32px;
 }

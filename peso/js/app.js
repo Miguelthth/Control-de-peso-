@@ -436,15 +436,28 @@ function svgLineaComparativa(serieA, serieB, { height = 240, colorA = '#4c5fd5',
   return envolver(svg, width, height);
 }
 
-function svgBarraAvance(pct, { width = 260, height = 22, color = '#22a06b' } = {}) {
+// El avance hacia la meta, como un Rasengan: el video real de la esfera
+// (peso/assets/rasengan.mp4, mudo y en loop) recortado en círculo, con un
+// anillo delgado encima que se llena según el % -- el anillo es el único
+// SVG que se dibuja, el resto lo hace el propio <video>.
+function svgBarraAvance(pct, { width = 140 } = {}) {
   const clamped = Math.max(0, Math.min(1, pct));
-  const w = width * clamped;
-  return `<svg viewBox="0 0 ${width} ${height}" xmlns="${NS}">
-    <rect x="0" y="0" width="${width}" height="${height}" rx="${height / 2}" fill="var(--borde)"/>
-    <rect x="0" y="0" width="${Math.max(w, clamped > 0 ? height : 0)}" height="${height}" rx="${height / 2}" fill="${color}"/>
-    <text x="${width / 2}" y="${height / 2 + 4}" text-anchor="middle" font-size="11" font-weight="700"
-      fill="${clamped > 0.5 ? '#fff' : 'var(--texto)'}">${Math.round(pct * 100)}%</text>
-  </svg>`;
+  const cx = width / 2;
+  const cy = width / 2;
+  const r = width / 2 - 3;
+  const circunferencia = 2 * Math.PI * r;
+  return `<div style="position:relative; width:${width}px; height:${width}px; margin:0 auto;">
+    <video src="assets/rasengan.mp4" autoplay muted loop playsinline
+      style="width:100%; height:100%; border-radius:50%; object-fit:cover; display:block; background:#04050c;"></video>
+    <svg viewBox="0 0 ${width} ${width}" width="${width}" height="${width}" xmlns="${NS}"
+      style="position:absolute; inset:0;">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--borde)" stroke-width="3"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#57c9ff" stroke-width="3" stroke-linecap="round"
+        stroke-dasharray="${circunferencia * clamped} ${circunferencia}" transform="rotate(-90 ${cx} ${cy})"/>
+      <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="${width * 0.12}" font-weight="800" fill="#fff"
+        style="paint-order:stroke; stroke:#0d2b6b; stroke-width:3px; stroke-linejoin:round;">${Math.round(pct * 100)}%</text>
+    </svg>
+  </div>`;
 }
 
   return { svgLineaPeso, svgLineaComparativa, svgBarraAvance };
@@ -771,6 +784,15 @@ function mostrarGraficaActiva() {
 
 // ---------- nuestro reto ----------
 
+// Las 4 figuras que mandó Miguel (de gordo a delgado) para marcar cada 25%
+// de avance hacia la meta -- viven en Reto (donde ya se comparan las dos
+// personas) y dejan el Rasengan solo para Mi progreso.
+function avatarMeta(pctAvance) {
+  const pct = Math.max(0, Math.min(1, pctAvance));
+  const idx = pct >= 0.75 ? 4 : pct >= 0.5 ? 3 : pct >= 0.25 ? 2 : 1;
+  return `assets/meta${idx}.png`;
+}
+
 function renderReto() {
   const otro = otroUsuario();
   const serieYo = pesosDeUsuario(E.datos.pesos, getUsuario());
@@ -800,10 +822,11 @@ function renderReto() {
       <div class="dato-grande valor-dual">${formatoPesoDual(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
+        <img class="avatar-meta" src="${avatarMeta(f.avance.pctAvance)}" alt="">
         <div class="fila-avance small">
           <span>${formatoPesoDual(f.avance.kgPerdidos)} perdidos</span>
         </div>
-        ${graficas.svgBarraAvance(f.avance.pctAvance, { width: 220 })}
+        <div class="texto-suave">${Math.round(f.avance.pctAvance * 100)}% de tu meta</div>
       ` : '<div class="texto-suave">Sin meta definida</div>'}
     </div>
   `).join('');

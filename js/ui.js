@@ -41,6 +41,22 @@ async function entrarConFaceId(usuario) {
   mostrarInicio();
 }
 
+async function mostrarPantallaCandado(usuario) {
+  mostrarPantalla('pantalla-candado');
+  document.getElementById('candado-texto').textContent = `Confirmando con Face ID como ${usuario}…`;
+  await intentarCandado(usuario);
+}
+
+async function intentarCandado(usuario) {
+  document.getElementById('candado-texto').textContent = `Confirmando con Face ID como ${usuario}…`;
+  const ok = await passkey.verificar(usuario);
+  if (ok) {
+    mostrarInicio();
+  } else {
+    document.getElementById('candado-texto').textContent = 'No se pudo confirmar. Intenta de nuevo o usa tu PIN.';
+  }
+}
+
 async function actualizarBotonesFaceId() {
   const disponible = await passkey.disponible();
   const registrado = disponible && passkey.tieneRegistro(getUsuario());
@@ -207,6 +223,14 @@ function wireEventos() {
   });
 
   document.getElementById('btn-agregar-usuario').addEventListener('click', agregarUsuario);
+  document.getElementById('btn-candado-reintentar').addEventListener('click', () => intentarCandado(getUsuario()));
+  document.getElementById('btn-candado-pin').addEventListener('click', () => {
+    const usuario = getUsuario();
+    cerrarSesion();
+    document.getElementById('usuario-input').value = usuario;
+    mostrarPantalla('pantalla-usuario');
+    renderFaceIdUsuarios();
+  });
   document.getElementById('btn-faceid-activar').addEventListener('click', activarFaceId);
   document.getElementById('btn-faceid-desactivar').addEventListener('click', desactivarFaceId);
   document.getElementById('faceid-usuarios').addEventListener('click', (e) => {
@@ -215,14 +239,22 @@ function wireEventos() {
   });
 }
 
-function init() {
+async function init() {
   wireEventos();
   if (!getUrl()) {
     mostrarPantalla('pantalla-url');
     return;
   }
   if (getUsuario()) {
-    mostrarInicio();
+    // Sesión ya guardada -- si hay Face ID activado para este usuario, hay
+    // que re-confirmar cada vez que se abre la app (no basta con haber
+    // entrado una vez); si no hay Face ID, entra directo como siempre.
+    const usuario = getUsuario();
+    if (await passkey.disponible() && passkey.tieneRegistro(usuario)) {
+      mostrarPantallaCandado(usuario);
+    } else {
+      mostrarInicio();
+    }
     return;
   }
   mostrarPantalla('pantalla-usuario');

@@ -73,7 +73,7 @@
       <button data-tecla=".">.</button><button data-tecla="0">0</button><button data-tecla="borrar" class="borrar">⌫</button>
     </div>
 
-    <div class="campo">
+    <div class="campo" id="campo-metodo">
       <label>Método</label>
       <div class="metodo-grupo" id="metodo-grupo">
         <button data-metodo="efectivo">Efectivo</button>
@@ -169,9 +169,16 @@
     </div>
 
     <div class="tarjeta">
-      <h2>Métodos de pago</h2>
-      <p class="texto-suave" style="margin-top:0;">Cuáles aparecen al capturar un movimiento.</p>
-      <div id="lista-metodos"></div>
+      <div class="lista-item" style="border-bottom:none; padding:0;">
+        <div>
+          <h2 style="margin:0 0 2px;">Método de pago</h2>
+          <span class="texto-suave">Mostrarlo al capturar y en tus movimientos.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="chk-mostrar-metodo" checked>
+          <span class="switch-riel"></span>
+        </label>
+      </div>
     </div>
 
     <div class="tarjeta">

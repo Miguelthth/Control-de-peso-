@@ -16,8 +16,6 @@ export const CATEGORIAS_DEFECTO = [
 
 export const METODOS = ['efectivo', 'debito', 'credito', 'transferencia'];
 
-export const METODOS_ACTIVOS_DEFECTO = { efectivo: true, debito: true, credito: true, transferencia: true };
-
 export function generarId(prefijo) {
   return `${prefijo}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -25,7 +23,7 @@ export function generarId(prefijo) {
 export function crearDatosVacios() {
   return {
     version: 1,
-    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, metodosActivos: { ...METODOS_ACTIVOS_DEFECTO } },
+    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, mostrarMetodo: true },
     movimientos: [],
     categorias: CATEGORIAS_DEFECTO.map((c) => ({ ...c })),
     presupuestos: {},
@@ -78,11 +76,7 @@ export function normalizarDatos(datos) {
   if (!datos || typeof datos !== 'object') return base;
   return {
     version: datos.version || 1,
-    config: {
-      ...base.config,
-      ...(datos.config || {}),
-      metodosActivos: { ...METODOS_ACTIVOS_DEFECTO, ...((datos.config || {}).metodosActivos || {}) },
-    },
+    config: { ...base.config, ...(datos.config || {}) },
     movimientos: Array.isArray(datos.movimientos) ? datos.movimientos : [],
     categorias: Array.isArray(datos.categorias) && datos.categorias.length ? datos.categorias : base.categorias,
     presupuestos: datos.presupuestos && typeof datos.presupuestos === 'object' ? datos.presupuestos : {},

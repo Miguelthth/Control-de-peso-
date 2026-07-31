@@ -217,6 +217,15 @@ function mostrarGraficaActiva() {
 
 // ---------- nuestro reto ----------
 
+// Las 4 figuras que mandó Miguel (de gordo a delgado) para marcar cada 25%
+// de avance hacia la meta -- viven en Reto (donde ya se comparan las dos
+// personas) y dejan el Rasengan solo para Mi progreso.
+function avatarMeta(pctAvance) {
+  const pct = Math.max(0, Math.min(1, pctAvance));
+  const idx = pct >= 0.75 ? 4 : pct >= 0.5 ? 3 : pct >= 0.25 ? 2 : 1;
+  return `assets/meta${idx}.png`;
+}
+
 function renderReto() {
   const otro = otroUsuario();
   const serieYo = pesosDeUsuario(E.datos.pesos, getUsuario());
@@ -246,10 +255,11 @@ function renderReto() {
       <div class="dato-grande valor-dual">${formatoPesoDual(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
+        <img class="avatar-meta" src="${avatarMeta(f.avance.pctAvance)}" alt="">
         <div class="fila-avance small">
           <span>${formatoPesoDual(f.avance.kgPerdidos)} perdidos</span>
         </div>
-        ${graficas.svgBarraAvance(f.avance.pctAvance, { width: 220 })}
+        <div class="texto-suave">${Math.round(f.avance.pctAvance * 100)}% de tu meta</div>
       ` : '<div class="texto-suave">Sin meta definida</div>'}
     </div>
   `).join('');

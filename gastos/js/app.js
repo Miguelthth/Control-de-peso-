@@ -286,8 +286,6 @@ const CATEGORIAS_DEFECTO = [
 
 const METODOS = ['efectivo', 'debito', 'credito', 'transferencia'];
 
-const METODOS_ACTIVOS_DEFECTO = { efectivo: true, debito: true, credito: true, transferencia: true };
-
 function generarId(prefijo) {
   return `${prefijo}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -295,7 +293,7 @@ function generarId(prefijo) {
 function crearDatosVacios() {
   return {
     version: 1,
-    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, metodosActivos: { ...METODOS_ACTIVOS_DEFECTO } },
+    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, mostrarMetodo: true },
     movimientos: [],
     categorias: CATEGORIAS_DEFECTO.map((c) => ({ ...c })),
     presupuestos: {},
@@ -348,11 +346,7 @@ function normalizarDatos(datos) {
   if (!datos || typeof datos !== 'object') return base;
   return {
     version: datos.version || 1,
-    config: {
-      ...base.config,
-      ...(datos.config || {}),
-      metodosActivos: { ...METODOS_ACTIVOS_DEFECTO, ...((datos.config || {}).metodosActivos || {}) },
-    },
+    config: { ...base.config, ...(datos.config || {}) },
     movimientos: Array.isArray(datos.movimientos) ? datos.movimientos : [],
     categorias: Array.isArray(datos.categorias) && datos.categorias.length ? datos.categorias : base.categorias,
     presupuestos: datos.presupuestos && typeof datos.presupuestos === 'object' ? datos.presupuestos : {},
@@ -360,11 +354,10 @@ function normalizarDatos(datos) {
   };
 }
 
-  return { CATEGORIAS_DEFECTO, METODOS, METODOS_ACTIVOS_DEFECTO, generarId, crearDatosVacios, mesDeFecha, hoyISO, mesActualStr, validarMovimiento, normalizarDatos };
+  return { CATEGORIAS_DEFECTO, METODOS, generarId, crearDatosVacios, mesDeFecha, hoyISO, mesActualStr, validarMovimiento, normalizarDatos };
 })();
 const CATEGORIAS_DEFECTO = modelo.CATEGORIAS_DEFECTO;
 const METODOS = modelo.METODOS;
-const METODOS_ACTIVOS_DEFECTO = modelo.METODOS_ACTIVOS_DEFECTO;
 const generarId = modelo.generarId;
 const crearDatosVacios = modelo.crearDatosVacios;
 const mesDeFecha = modelo.mesDeFecha;
@@ -1300,11 +1293,10 @@ function renderCapturar() {
     </button>`)
     .join('');
 
-  const metodosActivos = E.datos.config.metodosActivos || {};
-  const metodosVisibles = METODOS.filter((m) => metodosActivos[m] !== false);
-  if (!metodosVisibles.includes(E.captura.metodo)) E.captura.metodo = metodosVisibles[0] || METODOS[0];
+  const mostrarMetodo = E.datos.config.mostrarMetodo !== false;
+  document.getElementById('campo-metodo').classList.toggle('oculto', !mostrarMetodo);
+  if (!mostrarMetodo) E.captura.metodo = METODOS[0]; // no se pregunta -- valor fijo, sin rastro en pantalla
   document.querySelectorAll('#metodo-grupo button[data-metodo]').forEach((b) => {
-    b.classList.toggle('oculto', metodosActivos[b.dataset.metodo] === false);
     b.classList.toggle('activo', b.dataset.metodo === E.captura.metodo);
   });
   document.getElementById('captura-fecha').value = E.captura.fecha;
@@ -1382,11 +1374,12 @@ function movimientosFiltrados() {
 
 function filaMovimientoHTML(m) {
   const cat = categoriaObj(m.categoria);
+  const mostrarMetodo = E.datos.config.mostrarMetodo !== false;
   return `<div class="movimiento-fila" data-id="${m.id}">
     <div class="emoji-cat" style="background:${(cat?.color || '#999999')}22;">${cat?.icono || '❓'}</div>
     <div class="detalle">
       <div class="nombre">${escapeHTML(cat?.nombre || m.categoria)}${m.nota ? ' · ' + escapeHTML(m.nota) : ''}</div>
-      <div class="sub">${metodoLabel(m.metodo)}</div>
+      ${mostrarMetodo ? `<div class="sub">${metodoLabel(m.metodo)}</div>` : ''}
     </div>
     <div class="monto ${m.tipo}">${m.tipo === 'gasto' ? '-' : '+'}$${fmt(m.monto)}</div>
   </div>`;
@@ -1445,11 +1438,12 @@ function abrirEditarMovimiento(id) {
   const m = E.datos.movimientos.find((x) => x.id === id);
   if (!m) return;
   const cats = E.datos.categorias.filter((c) => c.tipo === m.tipo);
+  const mostrarMetodo = E.datos.config.mostrarMetodo !== false;
   const html = `
     <h2>Editar movimiento</h2>
     <div class="campo"><label>Monto</label><input type="number" step="0.01" min="0.01" id="edit-monto" value="${m.monto}"></div>
     <div class="campo"><label>Categoría</label><select id="edit-categoria">${cats.map((c) => `<option value="${c.id}" ${c.id === m.categoria ? 'selected' : ''}>${c.icono} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
-    <div class="campo"><label>Método</label><select id="edit-metodo">${METODOS.map((mm) => `<option value="${mm}" ${mm === m.metodo ? 'selected' : ''}>${metodoLabel(mm)}</option>`).join('')}</select></div>
+    ${mostrarMetodo ? `<div class="campo"><label>Método</label><select id="edit-metodo">${METODOS.map((mm) => `<option value="${mm}" ${mm === m.metodo ? 'selected' : ''}>${metodoLabel(mm)}</option>`).join('')}</select></div>` : ''}
     <div class="campo"><label>Fecha</label><input type="date" id="edit-fecha" value="${m.fecha}"></div>
     <div class="campo"><label>Nota</label><input type="text" id="edit-nota" value="${escapeHTML(m.nota)}"></div>
     <button class="btn-primario" id="btn-guardar-edicion">Guardar cambios</button>
@@ -1462,7 +1456,7 @@ function abrirEditarMovimiento(id) {
           ...m,
           monto: parseFloat(document.getElementById('edit-monto').value),
           categoria: document.getElementById('edit-categoria').value,
-          metodo: document.getElementById('edit-metodo').value,
+          metodo: document.getElementById('edit-metodo')?.value || m.metodo,
           fecha: document.getElementById('edit-fecha').value,
           nota: document.getElementById('edit-nota').value,
         });
@@ -1621,16 +1615,7 @@ function renderAjustes() {
     )
     .join('');
 
-  const metodosActivos = E.datos.config.metodosActivos || {};
-  document.getElementById('lista-metodos').innerHTML = METODOS.map(
-    (m) => `<div class="lista-item">
-      <span>${metodoLabel(m)}</span>
-      <label class="switch" title="${metodosActivos[m] === false ? 'Desactivado' : 'Activo'}">
-        <input type="checkbox" data-activar-metodo="${m}" ${metodosActivos[m] === false ? '' : 'checked'}>
-        <span class="switch-riel"></span>
-      </label>
-    </div>`
-  ).join('');
+  document.getElementById('chk-mostrar-metodo').checked = E.datos.config.mostrarMetodo !== false;
 
   const catsGasto = E.datos.categorias.filter((c) => c.tipo === 'gasto');
   const topes = E.datos.presupuestos[E.mes] || {};
@@ -1794,11 +1779,8 @@ function wireAjustes() {
     if (cat) cat.activo = chk.checked;
     await guardarYRefrescar();
   });
-  document.getElementById('lista-metodos').addEventListener('change', async (e) => {
-    const chk = e.target.closest('[data-activar-metodo]');
-    if (!chk) return;
-    if (!E.datos.config.metodosActivos) E.datos.config.metodosActivos = {};
-    E.datos.config.metodosActivos[chk.dataset.activarMetodo] = chk.checked;
+  document.getElementById('chk-mostrar-metodo').addEventListener('change', async (e) => {
+    E.datos.config.mostrarMetodo = e.target.checked;
     await guardarYRefrescar();
   });
   document.getElementById('ajustes-presupuestos').addEventListener('change', async (e) => {

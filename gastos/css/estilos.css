@@ -147,14 +147,14 @@ button, input, select, textarea { font-family: inherit; }
 .teclado button.borrar { color: var(--peligro); font-size: 1rem; }
 
 .categorias-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin-bottom: 14px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); gap: 6px; margin-bottom: 14px;
 }
 .categoria-btn {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 10px 4px; border-radius: 12px; border: 2px solid var(--borde);
-  background: var(--superficie); cursor: pointer; color: var(--texto); font-size: 0.72rem;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 3px; border-radius: 10px; border: 2px solid var(--borde);
+  background: var(--superficie); cursor: pointer; color: var(--texto); font-size: 0.64rem;
 }
-.categoria-btn .emoji { font-size: 1.4rem; }
+.categoria-btn .emoji { font-size: 1.15rem; }
 .categoria-btn.activa { border-color: var(--primario); background: var(--superficie-alt); font-weight: 700; }
 
 .fila { display: flex; gap: 8px; }

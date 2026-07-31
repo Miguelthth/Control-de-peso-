@@ -3,7 +3,7 @@
 // App de Apps Script vía shared/api.js) -- esto es solo para que la PÁGINA
 // cargue sin señal.
 
-const CACHE = 'mis-apps-v7';
+const CACHE = 'mis-apps-v8';
 const ARCHIVOS = [
   './index.html',
   './css/estilos.css',

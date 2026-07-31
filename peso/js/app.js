@@ -10,8 +10,14 @@ const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
 
+// Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
+// -- si el iPhone borra localStorage entre usos (pasa en algunos ajustes de
+// privacidad de Safari), al menos ese paso no se repite cada vez. Si algún
+// día se redespliega Apps Script con OTRA liga, hay que actualizarla aquí.
+const URL_RESPALDO = 'https://script.google.com/macros/s/AKfycbw3v_9rf4lrf5x910CXedDcyJPIkAic-Dx1VF8Hiucf0RQWj3Pg77SXibvjT8TXKWu9/exec';
+
 function getUrl() {
-  return localStorage.getItem(CLAVE_URL) || '';
+  return localStorage.getItem(CLAVE_URL) || URL_RESPALDO;
 }
 
 function setUrl(url) {
@@ -793,6 +799,9 @@ function renderProgreso() {
   const ultimo = serie.length ? serie[serie.length - 1].pesoKg : null;
 
   document.getElementById('progreso-racha').textContent = `🔥 ${racha(E.datos.pesos, getUsuario())}`;
+  const diasFaltan = diasFaltanReto();
+  document.getElementById('progreso-dias-faltan').textContent =
+    diasFaltan == null ? '—' : diasFaltan >= 0 ? diasFaltan : '¡ya!';
   document.getElementById('progreso-ultimo').innerHTML = formatoPesoDualColor(ultimo);
 
   const avance = avanceMeta(u, ultimo);
@@ -840,12 +849,19 @@ function avatarMeta(pctAvance) {
   return `assets/meta${idx}.png`;
 }
 
+// null si no hay fecha de fin guardada; si no, los días que faltan (negativo
+// si ya pasó). Compartida entre "Mi progreso" (kpi) y "Nuestro reto" (texto).
+function diasFaltanReto() {
+  if (!E.datos.retoFin) return null;
+  const hoy = hoyISO();
+  return Math.ceil((new Date(`${E.datos.retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
+}
+
 function textoFechasReto() {
   const { retoInicio, retoFin } = E.datos;
   if (!retoInicio && !retoFin) return '';
-  const hoy = hoyISO();
+  const dias = diasFaltanReto();
   if (retoFin) {
-    const dias = Math.ceil((new Date(`${retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
     const rango = retoInicio ? `${retoInicio} → ${retoFin}` : `hasta ${retoFin}`;
     if (dias > 0) return `${rango} · faltan ${dias} día(s)`;
     if (dias === 0) return `${rango} · ¡hoy termina!`;
@@ -908,6 +924,7 @@ function renderAjustes() {
   document.getElementById('ajustes-inicial').value = u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '';
   document.querySelectorAll('#unidad-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.unidad === unidad));
   document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
+  document.getElementById('tarjeta-fechas-reto').classList.toggle('oculto', !esAdmin());
   document.getElementById('reto-fecha-inicio').value = E.datos.retoInicio || '';
   document.getElementById('reto-fecha-fin').value = E.datos.retoFin || '';
 }

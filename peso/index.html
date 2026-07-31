@@ -55,7 +55,16 @@
       <button class="btn-ajustes" data-vista="ajustes" title="Ajustes">⚙️</button>
     </header>
     <div class="kpis">
-      <div class="kpi"><div class="label">Racha</div><div class="valor" id="progreso-racha">0</div></div>
+      <div class="kpi kpi-racha">
+        <div class="kpi-racha-col">
+          <div class="label">Racha</div>
+          <div class="valor" id="progreso-racha">🔥 0</div>
+        </div>
+        <div class="kpi-racha-col der">
+          <div class="label">Días que faltan</div>
+          <div class="valor" id="progreso-dias-faltan">—</div>
+        </div>
+      </div>
       <div class="kpi"><div class="label">Último peso</div><div class="valor valor-dual" id="progreso-ultimo">—</div></div>
     </div>
     <div class="tarjeta">
@@ -118,9 +127,9 @@
       <div class="campo"><label>Peso meta (<span id="ajustes-meta-unidad">kg</span>)</label><input type="number" step="0.1" id="ajustes-meta"></div>
       <button class="btn-primario" id="btn-guardar-meta">Guardar meta</button>
     </div>
-    <div class="tarjeta">
+    <div class="tarjeta oculto" id="tarjeta-fechas-reto">
       <h2>Fechas del reto</h2>
-      <p class="texto-suave" style="margin-top:0;">Las puede cambiar cualquiera de los dos — le aparece al otro.</p>
+      <p class="texto-suave" style="margin-top:0;">Le aparecen a Cindy — ella no las puede cambiar.</p>
       <div class="campo"><label>Inicio</label><input type="date" id="reto-fecha-inicio"></div>
       <div class="campo"><label>Fin</label><input type="date" id="reto-fecha-fin"></div>
       <button class="btn-primario" id="btn-guardar-fechas-reto">Guardar fechas</button>

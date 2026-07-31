@@ -205,6 +205,9 @@ function renderProgreso() {
   const ultimo = serie.length ? serie[serie.length - 1].pesoKg : null;
 
   document.getElementById('progreso-racha').textContent = `🔥 ${racha(E.datos.pesos, getUsuario())}`;
+  const diasFaltan = diasFaltanReto();
+  document.getElementById('progreso-dias-faltan').textContent =
+    diasFaltan == null ? '—' : diasFaltan >= 0 ? diasFaltan : '¡ya!';
   document.getElementById('progreso-ultimo').innerHTML = formatoPesoDualColor(ultimo);
 
   const avance = avanceMeta(u, ultimo);
@@ -252,12 +255,19 @@ function avatarMeta(pctAvance) {
   return `assets/meta${idx}.png`;
 }
 
+// null si no hay fecha de fin guardada; si no, los días que faltan (negativo
+// si ya pasó). Compartida entre "Mi progreso" (kpi) y "Nuestro reto" (texto).
+function diasFaltanReto() {
+  if (!E.datos.retoFin) return null;
+  const hoy = hoyISO();
+  return Math.ceil((new Date(`${E.datos.retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
+}
+
 function textoFechasReto() {
   const { retoInicio, retoFin } = E.datos;
   if (!retoInicio && !retoFin) return '';
-  const hoy = hoyISO();
+  const dias = diasFaltanReto();
   if (retoFin) {
-    const dias = Math.ceil((new Date(`${retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
     const rango = retoInicio ? `${retoInicio} → ${retoFin}` : `hasta ${retoFin}`;
     if (dias > 0) return `${rango} · faltan ${dias} día(s)`;
     if (dias === 0) return `${rango} · ¡hoy termina!`;
@@ -320,6 +330,7 @@ function renderAjustes() {
   document.getElementById('ajustes-inicial').value = u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '';
   document.querySelectorAll('#unidad-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.unidad === unidad));
   document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
+  document.getElementById('tarjeta-fechas-reto').classList.toggle('oculto', !esAdmin());
   document.getElementById('reto-fecha-inicio').value = E.datos.retoInicio || '';
   document.getElementById('reto-fecha-fin').value = E.datos.retoFin || '';
 }

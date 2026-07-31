@@ -137,11 +137,15 @@ button, input { font-family: inherit; }
 .tarjeta h2 { font-size: 0.95rem; margin: 0 0 10px; letter-spacing: .01em; }
 
 .captura-tarjeta { position: relative; text-align: center; }
+/* El video queda DETRÁS del contenido de la tarjeta (z-index 1) -- el resto
+   de los hijos directos sube a z-index 2 para que el texto/botones siempre
+   se lean encima, sin importar el orden en el HTML. */
 .registro-overlay {
-  position: absolute; inset: 0; border-radius: 17px; overflow: hidden; z-index: 10;
-  background: var(--superficie);
+  position: absolute; inset: 0; border-radius: 17px; overflow: hidden; z-index: 1;
+  opacity: 0.45; pointer-events: none;
 }
 .registro-overlay video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.captura-tarjeta > *:not(.registro-overlay) { position: relative; z-index: 2; }
 .input-fecha {
   padding: 8px 12px; border-radius: 10px; border: 1px solid var(--borde);
   background: var(--superficie-alt); color: var(--texto); margin-bottom: 16px;
@@ -165,6 +169,11 @@ button, input { font-family: inherit; }
 }
 .kpi .label { font-size: 0.68rem; color: var(--texto-suave); text-transform: uppercase; letter-spacing: .04em; }
 .kpi .valor { font-size: 1.35rem; font-weight: 800; margin-top: 3px; }
+
+.kpi-racha { display: flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; }
+.kpi-racha-col { min-width: 0; }
+.kpi-racha-col.der { text-align: right; }
+.kpi-racha-col .valor { font-size: 1.1rem; }
 .kpi .valor-dual { font-size: 1.02rem; }
 
 .valor-dual { font-weight: 700; }
@@ -259,11 +268,14 @@ button, input { font-family: inherit; }
 }
 .rasengan-barra-bola {
   position: absolute; top: 50%; width: 46px; height: 46px; transform: translate(-50%, -50%);
-  pointer-events: none; transition: left .3s ease;
+  pointer-events: none; transition: left .3s ease; isolation: isolate;
 }
+/* El video trae fondo negro -- mix-blend-mode:screen lo vuelve invisible
+   (negro = "no hace nada" en screen) y deja solo el rayo/brillo encima del
+   fondo real de la tarjeta, sin aro de color ni círculo negro. */
 .rasengan-barra-bola video {
   width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;
-  background: #04050c; box-shadow: 0 0 0 3px var(--fondo), 0 0 0 4px var(--acento), 0 2px 6px rgba(0,0,0,.35);
+  mix-blend-mode: screen;
 }
 
 .grafica-tabs { display: flex; gap: 6px; margin-bottom: 12px; }

@@ -23,7 +23,7 @@ export function generarId(prefijo) {
 export function crearDatosVacios() {
   return {
     version: 1,
-    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, mostrarMetodo: true },
+    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, mostrarMetodo: false },
     movimientos: [],
     categorias: CATEGORIAS_DEFECTO.map((c) => ({ ...c })),
     presupuestos: {},

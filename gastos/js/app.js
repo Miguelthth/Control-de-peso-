@@ -10,8 +10,14 @@ const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
 
+// Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
+// -- si el iPhone borra localStorage entre usos (pasa en algunos ajustes de
+// privacidad de Safari), al menos ese paso no se repite cada vez. Si algún
+// día se redespliega Apps Script con OTRA liga, hay que actualizarla aquí.
+const URL_RESPALDO = 'https://script.google.com/macros/s/AKfycbw3v_9rf4lrf5x910CXedDcyJPIkAic-Dx1VF8Hiucf0RQWj3Pg77SXibvjT8TXKWu9/exec';
+
 function getUrl() {
-  return localStorage.getItem(CLAVE_URL) || '';
+  return localStorage.getItem(CLAVE_URL) || URL_RESPALDO;
 }
 
 function setUrl(url) {
@@ -305,7 +311,7 @@ function generarId(prefijo) {
 function crearDatosVacios() {
   return {
     version: 1,
-    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, mostrarMetodo: true },
+    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, mostrarMetodo: false },
     movimientos: [],
     categorias: CATEGORIAS_DEFECTO.map((c) => ({ ...c })),
     presupuestos: {},

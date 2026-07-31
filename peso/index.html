@@ -27,6 +27,9 @@
       <button class="btn-ajustes" data-vista="ajustes" title="Ajustes">⚙️</button>
     </header>
     <div class="tarjeta captura-tarjeta">
+      <div class="registro-overlay oculto" id="registro-overlay">
+        <video id="registro-video" muted playsinline src="assets/registro.mp4"></video>
+      </div>
       <div class="fecha-pill">
         <span id="captura-fecha-texto">Hoy</span>
         <input type="date" id="captura-fecha">
@@ -97,7 +100,7 @@
     <header class="encabezado">
       <div class="nav-apps">
         <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
-        <a href="../gastos/index.html" class="icono" title="Ir a Gastos">💰</a>
+        <a href="../gastos/index.html" class="icono" data-confirmar-salida title="Ir a Gastos">💰</a>
       </div>
       <h1>Ajustes — <span id="ajustes-usuario"></span></h1>
     </header>
@@ -139,9 +142,20 @@
       <button data-vista="capturar" class="activo"><span class="emoji">⚖️</span>Capturar</button>
       <button data-vista="progreso"><span class="emoji">📈</span>Progreso</button>
       <button data-vista="reto"><span class="emoji">🏆</span>Reto</button>
-      <a href="../gastos/index.html" class="nav-inferior-link"><span class="emoji">💰</span>Gastos</a>
+      <a href="../gastos/index.html" class="nav-inferior-link" data-confirmar-salida><span class="emoji">💰</span>Gastos</a>
     </div>
   </nav>
+
+  <div id="popup-confirmar" class="popup-fondo oculto">
+    <div class="popup-caja">
+      <p id="popup-mensaje"></p>
+      <div class="popup-botones">
+        <button class="btn-secundario" id="popup-cancelar">Cancelar</button>
+        <button class="btn-primario" id="popup-aceptar">Sí, ir</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- js/app.js es generado (python build.py, en la raíz de MIS APPS) --

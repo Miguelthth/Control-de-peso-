@@ -6,7 +6,7 @@
 import * as cola from './cola.js';
 import * as api from '../../shared/api.js';
 import * as graficas from './graficas.js';
-import { hoyISO, validarPeso, kgALb, lbAKg, aKg, formatoPesoDual } from './modelo.js';
+import { hoyISO, validarPeso, kgALb, lbAKg, aKg } from './modelo.js';
 import {
   pesosDeUsuario, ultimoPeso, racha, promedioMovil, avanceMeta, promedioSemanal,
 } from './calculos.js';
@@ -30,6 +30,16 @@ function formatoFechaCorta(fechaISO) {
 
 function fmt1(n) {
   return Number(n).toFixed(1);
+}
+
+// Igual que formatoPesoDual (modelo.js) pero con kg/lb en colores distintos
+// -- vive aquí (no en modelo.js) porque modelo.js es puro/sin DOM y esto
+// regresa HTML para innerHTML, no texto plano.
+function formatoPesoDualColor(pesoKg) {
+  if (pesoKg == null || !Number.isFinite(pesoKg)) return '—';
+  const kgTxt = fmt1(pesoKg);
+  const lbTxt = fmt1(kgALb(pesoKg));
+  return `<span class="unidad-kg">${kgTxt} kg</span> · <span class="unidad-lb">${lbTxt} lb</span>`;
 }
 
 function toast(msg, esError = false) {
@@ -129,8 +139,8 @@ function renderCapturar() {
   document.getElementById('captura-fecha').value = E.captura.fecha;
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
-  document.getElementById('captura-ultimo').textContent = ultimo
-    ? `Última captura: ${ultimo.fecha} — ${formatoPesoDual(ultimo.pesoKg)}`
+  document.getElementById('captura-ultimo').innerHTML = ultimo
+    ? `Última captura: ${ultimo.fecha} — ${formatoPesoDualColor(ultimo.pesoKg)}`
     : 'Todavía no capturas nada.';
   const r = racha(E.datos.pesos, getUsuario());
   document.getElementById('captura-racha').textContent = r > 0 ? `🔥 Racha: ${r} día(s)` : '';
@@ -155,10 +165,24 @@ async function guardarCaptura() {
     document.getElementById('captura-peso-input').value = '';
     actualizarBadgeConexion();
     render();
+    mostrarRegistroOverlay();
     cola.sincronizar().then(() => { actualizarBadgeConexion(); });
   } catch (e) {
     toast(e.message, true);
   }
+}
+
+// El video de "premio" al guardar -- cubre la tarjeta de captura un rato y
+// se quita solo, sin que el usuario tenga que hacer nada.
+function mostrarRegistroOverlay() {
+  const overlay = document.getElementById('registro-overlay');
+  const video = document.getElementById('registro-video');
+  overlay.classList.remove('oculto');
+  video.currentTime = 0;
+  video.play().catch(() => {});
+  const ocultar = () => overlay.classList.add('oculto');
+  video.onended = ocultar;
+  setTimeout(ocultar, 9000); // respaldo por si 'ended' no dispara (iOS a veces no lo hace en loops cortos)
 }
 
 function wireCapturar() {
@@ -180,16 +204,16 @@ function renderProgreso() {
   const u = usuarioObj(getUsuario());
   const ultimo = serie.length ? serie[serie.length - 1].pesoKg : null;
 
-  document.getElementById('progreso-racha').textContent = racha(E.datos.pesos, getUsuario());
-  document.getElementById('progreso-ultimo').textContent = formatoPesoDual(ultimo);
+  document.getElementById('progreso-racha').textContent = `🔥 ${racha(E.datos.pesos, getUsuario())}`;
+  document.getElementById('progreso-ultimo').innerHTML = formatoPesoDualColor(ultimo);
 
   const avance = avanceMeta(u, ultimo);
   const elAvance = document.getElementById('progreso-avance');
   if (avance) {
     elAvance.innerHTML = `
       <div class="fila-avance">
-        <span>${formatoPesoDual(avance.kgPerdidos)} perdidos</span>
-        <span>${formatoPesoDual(avance.kgRestantes)} para tu meta</span>
+        <span>${formatoPesoDualColor(avance.kgPerdidos)} perdidos</span>
+        <span>${formatoPesoDualColor(avance.kgRestantes)} para tu meta</span>
       </div>
       ${graficas.svgBarraAvance(avance.pctAvance)}
     `;
@@ -271,11 +295,11 @@ function renderReto() {
       ${f.avance ? `<img class="avatar-marca-agua" src="${avatarMeta(f.avance.pctAvance)}" alt="">` : ''}
       <div class="tarjeta-persona-contenido">
       <h3>${f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre}</h3>
-      <div class="dato-grande valor-dual">${formatoPesoDual(f.ultimo)}</div>
+      <div class="dato-grande valor-dual">${formatoPesoDualColor(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
         <div class="fila-avance small">
-          <span>${formatoPesoDual(f.avance.kgPerdidos)} perdidos</span>
+          <span>${formatoPesoDualColor(f.avance.kgPerdidos)} perdidos</span>
         </div>
         <div class="texto-suave">${Math.round(f.avance.pctAvance * 100)}% de tu meta</div>
       ` : '<div class="texto-suave">Sin meta definida</div>'}
@@ -389,6 +413,28 @@ function wireAjustes() {
   });
 }
 
+// ---------- popup de confirmación (reemplaza confirm() nativo) ----------
+
+function confirmarPopup(mensaje) {
+  return new Promise((resolve) => {
+    const fondo = document.getElementById('popup-confirmar');
+    document.getElementById('popup-mensaje').textContent = mensaje;
+    fondo.classList.remove('oculto');
+    const btnSi = document.getElementById('popup-aceptar');
+    const btnNo = document.getElementById('popup-cancelar');
+    const limpiar = (valor) => {
+      fondo.classList.add('oculto');
+      btnSi.removeEventListener('click', onSi);
+      btnNo.removeEventListener('click', onNo);
+      resolve(valor);
+    };
+    const onSi = () => limpiar(true);
+    const onNo = () => limpiar(false);
+    btnSi.addEventListener('click', onSi);
+    btnNo.addEventListener('click', onNo);
+  });
+}
+
 // ---------- arranque ----------
 
 function wireGlobal() {
@@ -400,6 +446,12 @@ function wireGlobal() {
     if (!btn) return;
     E.graficaActiva = btn.dataset.grafica;
     mostrarGraficaActiva();
+  });
+  document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      confirmarPopup('¿Seguro que quieres ir a Gastos?').then((ok) => { if (ok) location.href = a.href; });
+    });
   });
 }
 

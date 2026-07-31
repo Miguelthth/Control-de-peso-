@@ -879,6 +879,28 @@ function abrirModalCambiarPassword() {
   });
 }
 
+// ---------- popup de confirmación (reemplaza confirm() nativo) ----------
+
+function confirmarPopup(mensaje) {
+  return new Promise((resolve) => {
+    const fondo = document.getElementById('popup-confirmar');
+    document.getElementById('popup-mensaje').textContent = mensaje;
+    fondo.classList.remove('oculto');
+    const btnSi = document.getElementById('popup-aceptar');
+    const btnNo = document.getElementById('popup-cancelar');
+    const limpiar = (valor) => {
+      fondo.classList.add('oculto');
+      btnSi.removeEventListener('click', onSi);
+      btnNo.removeEventListener('click', onNo);
+      resolve(valor);
+    };
+    const onSi = () => limpiar(true);
+    const onNo = () => limpiar(false);
+    btnSi.addEventListener('click', onSi);
+    btnNo.addEventListener('click', onNo);
+  });
+}
+
 // ---------- arranque ----------
 
 function wireGlobal() {
@@ -900,6 +922,12 @@ function wireGlobal() {
   });
   document.querySelectorAll('[data-vista]').forEach((b) => {
     b.addEventListener('click', () => cambiarVista(b.dataset.vista));
+  });
+  document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      confirmarPopup('¿Seguro que quieres ir a Control de Peso?').then((ok) => { if (ok) location.href = a.href; });
+    });
   });
 }
 

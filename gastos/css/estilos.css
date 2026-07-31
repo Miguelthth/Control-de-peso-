@@ -277,6 +277,14 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
 .switch input:checked + .switch-riel::before { transform: translateX(16px); }
 
 /* ---- Pantalla de conexión ---- */
+.btn-volver {
+  position: absolute; top: max(14px, env(safe-area-inset-top)); left: 14px;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; text-decoration: none; font-size: 1.2rem; font-weight: 700;
+  color: var(--texto); background: var(--superficie); border: 1px solid var(--borde);
+  box-shadow: var(--sombra); z-index: 5;
+}
+
 .pantalla-conexion {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -288,6 +296,18 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
 .pantalla-conexion button { max-width: 280px; }
 
 .oculto { display: none !important; }
+
+.popup-fondo {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex;
+  align-items: center; justify-content: center; z-index: 60; padding: 24px;
+}
+.popup-caja {
+  background: var(--superficie); border-radius: 16px; padding: 20px; max-width: 300px;
+  width: 100%; text-align: center; box-shadow: var(--sombra);
+}
+.popup-caja p { margin: 0 0 16px; font-size: 0.92rem; }
+.popup-botones { display: flex; gap: 8px; }
+.popup-botones button { flex: 1; margin-top: 0; }
 
 /* Modal simple */
 .modal-fondo {

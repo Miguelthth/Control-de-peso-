@@ -15,7 +15,7 @@
 <body>
 
 <div id="pantalla-password" class="pantalla-conexion">
-  <a href="../index.html" class="icono" title="Volver a Mis Apps" style="position:absolute; top:max(14px,env(safe-area-inset-top)); left:14px; text-decoration:none; font-size:1.3rem;">←</a>
+  <a href="../index.html" class="btn-volver" title="Volver a Mis Apps">←</a>
   <div class="emoji-grande" id="password-emoji">🔒</div>
   <h1 id="password-titulo">Ingresa tu contraseña</h1>
   <p id="password-texto">Tus datos están cifrados. Escribe tu contraseña para abrirlos.</p>
@@ -232,12 +232,22 @@
       <button data-vista="capturar" class="activo"><span class="emoji">➕</span>Capturar</button>
       <button data-vista="movimientos"><span class="emoji">📋</span>Movs</button>
       <button data-vista="tablero"><span class="emoji">📊</span>Tablero</button>
-      <a href="../peso/index.html" class="nav-inferior-link"><span class="emoji">⚖️</span>Peso</a>
+      <a href="../peso/index.html" class="nav-inferior-link" data-confirmar-salida><span class="emoji">⚖️</span>Peso</a>
     </div>
   </nav>
 </div>
 
 <div id="modal-root"></div>
+
+<div id="popup-confirmar" class="popup-fondo oculto">
+  <div class="popup-caja">
+    <p id="popup-mensaje"></p>
+    <div class="popup-botones">
+      <button class="btn-secundario" id="popup-cancelar">Cancelar</button>
+      <button class="btn-primario" id="popup-aceptar">Sí, ir</button>
+    </div>
+  </div>
+</div>
 
 <!-- js/app.js es generado (python build.py, en la raíz de MIS APPS) --
      un <script> normal, sin type="module", para que funcione con doble

@@ -146,26 +146,19 @@ export function svgLineaComparativa(serieA, serieB, { height = 240, colorA = '#4
   return envolver(svg, width, height);
 }
 
-// El avance hacia la meta, como un Rasengan: el video real de la esfera
-// (peso/assets/rasengan.mp4, mudo y en loop) recortado en círculo, con un
-// anillo delgado encima que se llena según el % -- el anillo es el único
-// SVG que se dibuja, el resto lo hace el propio <video>.
-export function svgBarraAvance(pct, { width = 140 } = {}) {
+// El avance hacia la meta, como una barra horizontal (índigo → coral, la
+// paleta de la app) con el Rasengan real (peso/assets/rasengan.mp4) montado
+// en la punta, como si la esfera fuera la que va empujando el avance.
+export function svgBarraAvance(pct, { width = 260 } = {}) {
   const clamped = Math.max(0, Math.min(1, pct));
-  const cx = width / 2;
-  const cy = width / 2;
-  const r = width / 2 - 3;
-  const circunferencia = 2 * Math.PI * r;
-  return `<div style="position:relative; width:${width}px; height:${width}px; margin:0 auto;">
-    <video src="assets/rasengan.mp4" autoplay muted loop playsinline
-      style="width:100%; height:100%; border-radius:50%; object-fit:cover; display:block; background:#04050c;"></video>
-    <svg viewBox="0 0 ${width} ${width}" width="${width}" height="${width}" xmlns="${NS}"
-      style="position:absolute; inset:0;">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--borde)" stroke-width="3"/>
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#57c9ff" stroke-width="3" stroke-linecap="round"
-        stroke-dasharray="${circunferencia * clamped} ${circunferencia}" transform="rotate(-90 ${cx} ${cy})"/>
-      <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="${width * 0.12}" font-weight="800" fill="#fff"
-        style="paint-order:stroke; stroke:#0d2b6b; stroke-width:3px; stroke-linejoin:round;">${Math.round(pct * 100)}%</text>
-    </svg>
+  const pctTexto = Math.round(pct * 100);
+  return `<div class="rasengan-barra" style="max-width:${width}px;">
+    <div class="rasengan-barra-track">
+      <div class="rasengan-barra-fill" style="width:${clamped * 100}%"></div>
+      <span class="rasengan-barra-pct">${pctTexto}%</span>
+    </div>
+    <div class="rasengan-barra-bola" style="left:${clamped * 100}%">
+      <video src="assets/rasengan.mp4" autoplay muted loop playsinline></video>
+    </div>
   </div>`;
 }

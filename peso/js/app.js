@@ -448,27 +448,20 @@ function svgLineaComparativa(serieA, serieB, { height = 240, colorA = '#4c5fd5',
   return envolver(svg, width, height);
 }
 
-// El avance hacia la meta, como un Rasengan: el video real de la esfera
-// (peso/assets/rasengan.mp4, mudo y en loop) recortado en círculo, con un
-// anillo delgado encima que se llena según el % -- el anillo es el único
-// SVG que se dibuja, el resto lo hace el propio <video>.
-function svgBarraAvance(pct, { width = 140 } = {}) {
+// El avance hacia la meta, como una barra horizontal (índigo → coral, la
+// paleta de la app) con el Rasengan real (peso/assets/rasengan.mp4) montado
+// en la punta, como si la esfera fuera la que va empujando el avance.
+function svgBarraAvance(pct, { width = 260 } = {}) {
   const clamped = Math.max(0, Math.min(1, pct));
-  const cx = width / 2;
-  const cy = width / 2;
-  const r = width / 2 - 3;
-  const circunferencia = 2 * Math.PI * r;
-  return `<div style="position:relative; width:${width}px; height:${width}px; margin:0 auto;">
-    <video src="assets/rasengan.mp4" autoplay muted loop playsinline
-      style="width:100%; height:100%; border-radius:50%; object-fit:cover; display:block; background:#04050c;"></video>
-    <svg viewBox="0 0 ${width} ${width}" width="${width}" height="${width}" xmlns="${NS}"
-      style="position:absolute; inset:0;">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--borde)" stroke-width="3"/>
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#57c9ff" stroke-width="3" stroke-linecap="round"
-        stroke-dasharray="${circunferencia * clamped} ${circunferencia}" transform="rotate(-90 ${cx} ${cy})"/>
-      <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="${width * 0.12}" font-weight="800" fill="#fff"
-        style="paint-order:stroke; stroke:#0d2b6b; stroke-width:3px; stroke-linejoin:round;">${Math.round(pct * 100)}%</text>
-    </svg>
+  const pctTexto = Math.round(pct * 100);
+  return `<div class="rasengan-barra" style="max-width:${width}px;">
+    <div class="rasengan-barra-track">
+      <div class="rasengan-barra-fill" style="width:${clamped * 100}%"></div>
+      <span class="rasengan-barra-pct">${pctTexto}%</span>
+    </div>
+    <div class="rasengan-barra-bola" style="left:${clamped * 100}%">
+      <video src="assets/rasengan.mp4" autoplay muted loop playsinline></video>
+    </div>
   </div>`;
 }
 
@@ -627,6 +620,16 @@ function fmt1(n) {
   return Number(n).toFixed(1);
 }
 
+// Igual que formatoPesoDual (modelo.js) pero con kg/lb en colores distintos
+// -- vive aquí (no en modelo.js) porque modelo.js es puro/sin DOM y esto
+// regresa HTML para innerHTML, no texto plano.
+function formatoPesoDualColor(pesoKg) {
+  if (pesoKg == null || !Number.isFinite(pesoKg)) return '—';
+  const kgTxt = fmt1(pesoKg);
+  const lbTxt = fmt1(kgALb(pesoKg));
+  return `<span class="unidad-kg">${kgTxt} kg</span> · <span class="unidad-lb">${lbTxt} lb</span>`;
+}
+
 function toast(msg, esError = false) {
   let el = document.getElementById('toast-simple');
   if (!el) {
@@ -724,8 +727,8 @@ function renderCapturar() {
   document.getElementById('captura-fecha').value = E.captura.fecha;
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
-  document.getElementById('captura-ultimo').textContent = ultimo
-    ? `Última captura: ${ultimo.fecha} — ${formatoPesoDual(ultimo.pesoKg)}`
+  document.getElementById('captura-ultimo').innerHTML = ultimo
+    ? `Última captura: ${ultimo.fecha} — ${formatoPesoDualColor(ultimo.pesoKg)}`
     : 'Todavía no capturas nada.';
   const r = racha(E.datos.pesos, getUsuario());
   document.getElementById('captura-racha').textContent = r > 0 ? `🔥 Racha: ${r} día(s)` : '';
@@ -750,10 +753,24 @@ async function guardarCaptura() {
     document.getElementById('captura-peso-input').value = '';
     actualizarBadgeConexion();
     render();
+    mostrarRegistroOverlay();
     cola.sincronizar().then(() => { actualizarBadgeConexion(); });
   } catch (e) {
     toast(e.message, true);
   }
+}
+
+// El video de "premio" al guardar -- cubre la tarjeta de captura un rato y
+// se quita solo, sin que el usuario tenga que hacer nada.
+function mostrarRegistroOverlay() {
+  const overlay = document.getElementById('registro-overlay');
+  const video = document.getElementById('registro-video');
+  overlay.classList.remove('oculto');
+  video.currentTime = 0;
+  video.play().catch(() => {});
+  const ocultar = () => overlay.classList.add('oculto');
+  video.onended = ocultar;
+  setTimeout(ocultar, 9000); // respaldo por si 'ended' no dispara (iOS a veces no lo hace en loops cortos)
 }
 
 function wireCapturar() {
@@ -775,16 +792,16 @@ function renderProgreso() {
   const u = usuarioObj(getUsuario());
   const ultimo = serie.length ? serie[serie.length - 1].pesoKg : null;
 
-  document.getElementById('progreso-racha').textContent = racha(E.datos.pesos, getUsuario());
-  document.getElementById('progreso-ultimo').textContent = formatoPesoDual(ultimo);
+  document.getElementById('progreso-racha').textContent = `🔥 ${racha(E.datos.pesos, getUsuario())}`;
+  document.getElementById('progreso-ultimo').innerHTML = formatoPesoDualColor(ultimo);
 
   const avance = avanceMeta(u, ultimo);
   const elAvance = document.getElementById('progreso-avance');
   if (avance) {
     elAvance.innerHTML = `
       <div class="fila-avance">
-        <span>${formatoPesoDual(avance.kgPerdidos)} perdidos</span>
-        <span>${formatoPesoDual(avance.kgRestantes)} para tu meta</span>
+        <span>${formatoPesoDualColor(avance.kgPerdidos)} perdidos</span>
+        <span>${formatoPesoDualColor(avance.kgRestantes)} para tu meta</span>
       </div>
       ${graficas.svgBarraAvance(avance.pctAvance)}
     `;
@@ -866,11 +883,11 @@ function renderReto() {
       ${f.avance ? `<img class="avatar-marca-agua" src="${avatarMeta(f.avance.pctAvance)}" alt="">` : ''}
       <div class="tarjeta-persona-contenido">
       <h3>${f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre}</h3>
-      <div class="dato-grande valor-dual">${formatoPesoDual(f.ultimo)}</div>
+      <div class="dato-grande valor-dual">${formatoPesoDualColor(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
         <div class="fila-avance small">
-          <span>${formatoPesoDual(f.avance.kgPerdidos)} perdidos</span>
+          <span>${formatoPesoDualColor(f.avance.kgPerdidos)} perdidos</span>
         </div>
         <div class="texto-suave">${Math.round(f.avance.pctAvance * 100)}% de tu meta</div>
       ` : '<div class="texto-suave">Sin meta definida</div>'}
@@ -984,6 +1001,28 @@ function wireAjustes() {
   });
 }
 
+// ---------- popup de confirmación (reemplaza confirm() nativo) ----------
+
+function confirmarPopup(mensaje) {
+  return new Promise((resolve) => {
+    const fondo = document.getElementById('popup-confirmar');
+    document.getElementById('popup-mensaje').textContent = mensaje;
+    fondo.classList.remove('oculto');
+    const btnSi = document.getElementById('popup-aceptar');
+    const btnNo = document.getElementById('popup-cancelar');
+    const limpiar = (valor) => {
+      fondo.classList.add('oculto');
+      btnSi.removeEventListener('click', onSi);
+      btnNo.removeEventListener('click', onNo);
+      resolve(valor);
+    };
+    const onSi = () => limpiar(true);
+    const onNo = () => limpiar(false);
+    btnSi.addEventListener('click', onSi);
+    btnNo.addEventListener('click', onNo);
+  });
+}
+
 // ---------- arranque ----------
 
 function wireGlobal() {
@@ -995,6 +1034,12 @@ function wireGlobal() {
     if (!btn) return;
     E.graficaActiva = btn.dataset.grafica;
     mostrarGraficaActiva();
+  });
+  document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      confirmarPopup('¿Seguro que quieres ir a Gastos?').then((ok) => { if (ok) location.href = a.href; });
+    });
   });
 }
 

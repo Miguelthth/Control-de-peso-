@@ -3,7 +3,7 @@
 // App de Apps Script vía shared/api.js) -- esto es solo para que la PÁGINA
 // cargue sin señal.
 
-const CACHE = 'mis-apps-v1';
+const CACHE = 'mis-apps-v3';
 const ARCHIVOS = [
   './index.html',
   './css/estilos.css',
@@ -16,6 +16,11 @@ const ARCHIVOS = [
   './peso/index.html',
   './peso/css/estilos.css',
   './peso/js/app.js',
+  './peso/assets/rasengan.mp4',
+  './peso/assets/meta1.png',
+  './peso/assets/meta2.png',
+  './peso/assets/meta3.png',
+  './peso/assets/meta4.png',
 ];
 
 self.addEventListener('install', (e) => {

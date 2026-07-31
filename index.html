@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mis Apps</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4c5fd5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mis Apps">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+
+<div id="pantalla-url" class="pantalla pantalla-centrada">
+  <div class="emoji-grande">🔗</div>
+  <div style="width:100%; max-width:340px;">
+    <input type="text" id="url-input" placeholder="Link del servidor" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--borde); margin-bottom:10px;">
+  </div>
+  <button class="btn-primario" id="btn-url-continuar">Continuar</button>
+</div>
+
+<div id="pantalla-usuario" class="pantalla pantalla-centrada oculto">
+  <div style="width:100%; max-width:340px;">
+    <input type="text" id="usuario-input" placeholder="Usuario" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--borde); margin-bottom:10px;">
+  </div>
+  <button class="btn-primario" id="btn-usuario-continuar">Continuar</button>
+  <p id="usuario-error" class="oculto texto-error"></p>
+</div>
+
+<div id="pantalla-pin" class="pantalla pantalla-centrada oculto">
+  <input type="password" inputmode="numeric" maxlength="4" id="pin-input" class="input-pin" placeholder="••••">
+  <button class="btn-primario" id="btn-pin-continuar">Entrar</button>
+  <p id="pin-error" class="oculto texto-error"></p>
+</div>
+
+<div id="pantalla-pin-nuevo" class="pantalla pantalla-centrada oculto">
+  <p class="texto-suave">¿Poner PIN a tu cuenta? (opcional)</p>
+  <input type="password" inputmode="numeric" maxlength="4" id="pin-nuevo-input" class="input-pin oculto" placeholder="••••">
+  <button class="btn-secundario" id="btn-pin-nuevo-mostrar">Sí, crear PIN</button>
+  <button class="btn-primario oculto" id="btn-pin-nuevo-guardar" style="margin-top:8px;">Guardar PIN</button>
+  <button class="btn-secundario" id="btn-sin-pin">Entrar sin PIN</button>
+</div>
+
+<div id="pantalla-inicio" class="pantalla pantalla-centrada oculto">
+  <div class="emoji-grande">✨</div>
+  <h1 id="saludo"></h1>
+  <div class="botones-launcher">
+    <a href="gastos/index.html" class="btn-launcher">
+      <span class="emoji">💰</span>Gastos
+    </a>
+    <a href="peso/index.html" class="btn-launcher">
+      <span class="emoji">⚖️</span>Control de Peso
+    </a>
+  </div>
+  <button class="btn-secundario" id="btn-cerrar-sesion" style="max-width:200px; margin-top:24px;">Cambiar de usuario</button>
+  <button class="btn-secundario oculto" id="btn-agregar-usuario" style="max-width:200px; margin-top:8px;">+ Agregar usuario</button>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

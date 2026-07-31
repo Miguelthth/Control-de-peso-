@@ -6,7 +6,7 @@
 // localStorage y se reintenta solo -- mismo espíritu que Control de Peso.
 
 import { leerGastos, guardarGastos } from '../../shared/api.js';
-import { cifrar, descifrar } from '../../shared/cifrado.js';
+import { crearClaveSesion, cifrarConClave, descifrarConClave } from '../../shared/cifrado.js';
 import { normalizarDatos, crearDatosVacios } from './modelo.js';
 
 function clavePendiente(usuario) {
@@ -31,26 +31,38 @@ export async function existeGastos(usuario) {
   return !!(r.ok && r.blob);
 }
 
+// Regresa también {clave, saltB64}: la CryptoKey ya derivada, para que las
+// escrituras subsecuentes (cada "Guardar") no repitan PBKDF2 (250k
+// iteraciones, cientos de ms) -- solo el primer descifrado de la sesión paga
+// ese costo.
 export async function cargar(usuario, password) {
   const pendiente = leerPendiente(usuario);
   if (pendiente) {
     // Hay un guardado que no llegó al servidor todavía -- es más reciente
     // que lo que haya en la Hoja, así que se usa este.
-    const datos = await descifrar(JSON.parse(pendiente), password); // avienta si password mal
-    return { datos: normalizarDatos(datos), pendienteDeSincronizar: true };
+    const paquete = JSON.parse(pendiente);
+    const { clave, saltB64 } = await crearClaveSesion(password, paquete.salt);
+    const datos = await descifrarConClave(paquete, clave); // avienta si password mal
+    return { datos: normalizarDatos(datos), pendienteDeSincronizar: true, clave, saltB64 };
   }
   const r = await leerGastos(usuario);
   if (!r.ok) throw new Error(r.error || 'No se pudo leer');
-  if (!r.blob) return { datos: crearDatosVacios(), pendienteDeSincronizar: false };
+  if (!r.blob) {
+    const { clave, saltB64 } = await crearClaveSesion(password);
+    return { datos: crearDatosVacios(), pendienteDeSincronizar: false, clave, saltB64 };
+  }
   const paquete = JSON.parse(r.blob);
-  const datos = await descifrar(paquete, password); // avienta si password mal
-  return { datos: normalizarDatos(datos), pendienteDeSincronizar: false };
+  const { clave, saltB64 } = await crearClaveSesion(password, paquete.salt);
+  const datos = await descifrarConClave(paquete, clave); // avienta si password mal
+  return { datos: normalizarDatos(datos), pendienteDeSincronizar: false, clave, saltB64 };
 }
 
 // Regresa {sincronizado}: true si ya llegó al servidor, false si quedó en
 // cola local (sin señal) -- en ambos casos el dato ya está a salvo.
-export async function guardar(usuario, datos, password) {
-  const paquete = await cifrar(datos, password);
+// `clave`/`saltB64` vienen de cargar() o crearClaveSesion() -- ya no se
+// vuelve a pedir la contraseña ni a rederivarla en cada guardado.
+export async function guardar(usuario, datos, clave, saltB64) {
+  const paquete = await cifrarConClave(datos, clave, saltB64);
   const blobStr = JSON.stringify(paquete);
   try {
     const r = await guardarGastos(usuario, blobStr);

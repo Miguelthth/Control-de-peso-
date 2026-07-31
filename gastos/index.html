@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gastos — Mis Apps</title>
 <meta name="theme-color" content="#4c5fd5">
+<link rel="manifest" href="../manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mis Apps">
+<link rel="apple-touch-icon" href="../icon-512.png">
 <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body>
@@ -32,7 +37,6 @@
   <header class="encabezado">
     <div class="nav-apps">
       <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
-      <a href="../peso/index.html" class="icono" title="Ir a Control de Peso">⚖️</a>
     </div>
     <div class="mes-selector">
       <button class="icono" id="mes-prev">‹</button>
@@ -40,14 +44,25 @@
       <button class="icono" id="mes-next">›</button>
     </div>
     <button class="icono" id="btn-tema" title="Cambiar tema">🌗</button>
+    <button class="icono" data-vista="ajustes" title="Ajustes">⚙️</button>
   </header>
 
   <!-- ===== CAPTURAR ===== -->
   <section id="vista-capturar" class="vista activa">
-    <div class="captura-tipo">
-      <button data-tipo="gasto" class="activo gasto">Gasto</button>
-      <button data-tipo="ingreso">Ingreso</button>
+    <div class="fila-superior">
+      <div class="captura-tipo">
+        <button data-tipo="gasto" class="activo gasto">Gasto</button>
+        <button data-tipo="ingreso">Ingreso</button>
+      </div>
+      <div class="fecha-pill">
+        <span id="captura-fecha-texto">Hoy</span>
+        <input type="date" id="captura-fecha">
+      </div>
     </div>
+
+    <h3>Categoría</h3>
+    <div class="categorias-grid" id="categorias-grid"></div>
+
     <div class="captura-monto" id="captura-monto">$0</div>
 
     <div class="teclado" id="teclado">
@@ -56,9 +71,6 @@
       <button data-tecla="7">7</button><button data-tecla="8">8</button><button data-tecla="9">9</button>
       <button data-tecla=".">.</button><button data-tecla="0">0</button><button data-tecla="borrar" class="borrar">⌫</button>
     </div>
-
-    <h3>Categoría</h3>
-    <div class="categorias-grid" id="categorias-grid"></div>
 
     <div class="campo">
       <label>Método</label>
@@ -70,15 +82,9 @@
       </div>
     </div>
 
-    <div class="fila">
-      <div class="campo">
-        <label>Fecha</label>
-        <input type="date" id="captura-fecha">
-      </div>
-      <div class="campo">
-        <label>Nota (opcional)</label>
-        <input type="text" id="captura-nota" placeholder="Ej. OXXO">
-      </div>
+    <div class="campo">
+      <label>Nota (opcional)</label>
+      <input type="text" id="captura-nota" placeholder="Ej. OXXO">
     </div>
 
     <button class="btn-primario" id="btn-guardar-movimiento">Guardar</button>
@@ -156,8 +162,15 @@
   <section id="vista-ajustes" class="vista">
     <div class="tarjeta">
       <h2>Categorías</h2>
+      <p class="texto-suave" style="margin-top:0;">Desactiva las que no uses — no hace falta borrarlas.</p>
       <div id="lista-categorias"></div>
       <button class="btn-secundario" id="btn-nueva-categoria" style="margin-top:10px;">+ Nueva categoría</button>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Métodos de pago</h2>
+      <p class="texto-suave" style="margin-top:0;">Cuáles aparecen al capturar un movimiento.</p>
+      <div id="lista-metodos"></div>
     </div>
 
     <div class="tarjeta">
@@ -208,7 +221,7 @@
       <button data-vista="capturar" class="activo"><span class="emoji">➕</span>Capturar</button>
       <button data-vista="movimientos"><span class="emoji">📋</span>Movs</button>
       <button data-vista="tablero"><span class="emoji">📊</span>Tablero</button>
-      <button data-vista="ajustes"><span class="emoji">⚙️</span>Ajustes</button>
+      <a href="../peso/index.html" class="nav-inferior-link"><span class="emoji">⚖️</span>Peso</a>
     </div>
   </nav>
 </div>

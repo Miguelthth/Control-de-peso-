@@ -121,6 +121,10 @@ function guardarUnidad(usuario, unidad) {
   return _post({ accion: 'guardarUnidad', usuario, unidad });
 }
 
+function borrarPesos(usuario) {
+  return _post({ accion: 'borrarPesos', usuario });
+}
+
 function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
   return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
 }
@@ -133,7 +137,7 @@ function leerGastos(usuario) {
   return _get({ accion: 'leerGastos', usuario });
 }
 
-  return { leerDatos, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, crearUsuario, guardarGastos, leerGastos };
+  return { leerDatos, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, crearUsuario, guardarGastos, leerGastos };
 })();
 const leerDatos = api.leerDatos;
 const validarUsuario = api.validarUsuario;
@@ -143,6 +147,7 @@ const cambiarPin = api.cambiarPin;
 const guardarPeso = api.guardarPeso;
 const guardarMeta = api.guardarMeta;
 const guardarUnidad = api.guardarUnidad;
+const borrarPesos = api.borrarPesos;
 const crearUsuario = api.crearUsuario;
 const guardarGastos = api.guardarGastos;
 const leerGastos = api.leerGastos;
@@ -566,7 +571,16 @@ const E = {
   datos: { usuarios: [], pesos: [] },
   sinConexion: false,
   captura: { fecha: hoyISO(), pesoStr: '' },
+  graficaActiva: 'diaria',
 };
+
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+function formatoFechaCorta(fechaISO) {
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  const texto = `${d}-${MESES_CORTOS[m - 1].charAt(0).toUpperCase()}${MESES_CORTOS[m - 1].slice(1)}`;
+  return fechaISO === hoyISO() ? `Hoy · ${texto}` : texto;
+}
 
 function fmt1(n) {
   return Number(n).toFixed(1);
@@ -609,6 +623,16 @@ async function iniciarApp() {
   document.getElementById('app').classList.remove('oculto');
   await cargarYRenderizar();
   cola.iniciarSincronizacionAutomatica(() => cargarYRenderizar());
+  // Para que el peso que capture Cindy/Miguel le llegue rápido al otro sin
+  // tener que recargar la página a mano: refresco periódico + al volver a
+  // primer plano (typear, cambiar de app y regresar, etc.).
+  const refrescoSiAplica = () => {
+    // No en Ajustes: ahí puede haber un campo a medio editar (meta, PIN) y
+    // pisarlo con el refresco sería peor que no refrescar.
+    if (!document.hidden && E.vista !== 'ajustes') cargarYRenderizar();
+  };
+  setInterval(refrescoSiAplica, 20000);
+  document.addEventListener('visibilitychange', refrescoSiAplica);
 }
 
 async function cargarYRenderizar() {
@@ -655,6 +679,7 @@ function renderCapturar() {
   document.getElementById('captura-usuario').textContent = getUsuario();
   document.getElementById('captura-unidad').textContent = unidad;
   document.getElementById('captura-fecha').value = E.captura.fecha;
+  document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
   document.getElementById('captura-ultimo').textContent = ultimo
     ? `Última captura: ${ultimo.fecha} — ${formatoPesoDual(ultimo.pesoKg)}`
@@ -695,6 +720,7 @@ function wireCapturar() {
   });
   document.getElementById('captura-fecha').addEventListener('change', (e) => {
     E.captura.fecha = e.target.value;
+    renderCapturar();
   });
   document.getElementById('btn-guardar-captura').addEventListener('click', guardarCaptura);
 }
@@ -730,6 +756,17 @@ function renderProgreso() {
 
   const semanal = promedioSemanal(serie, 12);
   document.getElementById('grafica-semanal').innerHTML = graficas.svgLineaPeso(semanal.map((s) => ({ fecha: s.semana, pesoKg: s.pesoKg })));
+
+  mostrarGraficaActiva();
+}
+
+const IDS_GRAFICA = { diaria: 'grafica-diaria', tendencia: 'grafica-progreso', semanal: 'grafica-semanal' };
+
+function mostrarGraficaActiva() {
+  document.querySelectorAll('#grafica-tabs button').forEach((b) => b.classList.toggle('activo', b.dataset.grafica === E.graficaActiva));
+  Object.entries(IDS_GRAFICA).forEach(([clave, id]) => {
+    document.getElementById(id).classList.toggle('oculto', clave !== E.graficaActiva);
+  });
 }
 
 // ---------- nuestro reto ----------
@@ -783,6 +820,7 @@ function renderAjustes() {
   document.getElementById('ajustes-meta').value = u.metaKg != null ? fmt1(unidad === 'kg' ? u.metaKg : kgALb(u.metaKg)) : '';
   document.getElementById('ajustes-inicial').value = u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '';
   document.querySelectorAll('#unidad-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.unidad === unidad));
+  document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
 }
 
 async function guardarMetaAjustes() {
@@ -845,13 +883,31 @@ function wireAjustes() {
     cerrarSesion();
     location.href = '../index.html';
   });
+  document.getElementById('btn-borrar-mis-datos').addEventListener('click', async () => {
+    const confirmacion = prompt('Esto borra TODOS tus pesos registrados (los de la otra persona no se tocan). Escribe BORRAR para confirmar:');
+    if (confirmacion !== 'BORRAR') return;
+    try {
+      const r = await api.borrarPesos(getUsuario());
+      if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el borrado');
+      toast('Tus datos fueron borrados');
+      await cargarYRenderizar();
+    } catch (e) {
+      toast('No se pudo borrar (¿sin conexión?): ' + e.message, true);
+    }
+  });
 }
 
 // ---------- arranque ----------
 
 function wireGlobal() {
-  document.querySelectorAll('.nav-inferior button').forEach((b) => {
+  document.querySelectorAll('.nav-inferior button, .btn-ajustes').forEach((b) => {
     b.addEventListener('click', () => cambiarVista(b.dataset.vista));
+  });
+  document.getElementById('grafica-tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-grafica]');
+    if (!btn) return;
+    E.graficaActiva = btn.dataset.grafica;
+    mostrarGraficaActiva();
   });
 }
 

@@ -39,7 +39,7 @@ button, input { font-family: inherit; }
 .texto-suave { color: var(--texto-suave); font-size: 0.82rem; }
 .texto-error { color: var(--peligro); font-size: 0.82rem; margin-top: 10px; }
 
-#app { max-width: 640px; margin: 0 auto; min-height: 100vh; padding-bottom: 76px; }
+#app { max-width: 480px; margin: 0 auto; min-height: 100vh; padding-bottom: 76px; }
 
 .nav-apps { display: flex; gap: 4px; }
 .nav-apps .icono {
@@ -49,6 +49,13 @@ button, input { font-family: inherit; }
 }
 .nav-apps .icono:active { transform: scale(0.94); }
 .nav-apps .icono:hover { border-color: var(--primario); }
+
+.btn-ajustes {
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; font-size: 1.05rem; background: var(--superficie-alt);
+  border: 1px solid var(--borde); cursor: pointer; margin-left: auto;
+}
+.btn-ajustes:active { transform: scale(0.94); }
 
 .pantalla-centrada {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -91,8 +98,23 @@ button, input { font-family: inherit; }
   font-size: 0.72rem; font-weight: 600; box-shadow: var(--sombra);
 }
 
-.encabezado { padding: 14px 16px 8px; display: flex; align-items: center; gap: 10px; }
+.encabezado {
+  padding: max(14px, env(safe-area-inset-top)) 16px 8px;
+  display: flex; align-items: center; gap: 10px;
+}
 .encabezado h1 { font-size: 1.02rem; margin: 0; font-weight: 700; }
+
+#vista-capturar.vista.activa { display: flex; flex-direction: column; min-height: 78vh; }
+#vista-capturar .captura-tarjeta { margin-top: auto; margin-bottom: 18px; }
+
+.fecha-pill {
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 999px; background: var(--superficie-alt);
+  border: 1px solid var(--borde); font-weight: 700; font-size: 0.85rem; margin: 0 auto 16px;
+}
+.fecha-pill input[type="date"] {
+  position: absolute; inset: 0; opacity: 0; border: none; width: 100%; height: 100%; cursor: pointer;
+}
 
 .metodo-grupo { display: flex; gap: 6px; flex-wrap: wrap; }
 .metodo-grupo button {
@@ -180,10 +202,28 @@ button, input { font-family: inherit; }
 }
 .nav-inferior button .emoji { font-size: 1.25rem; }
 .nav-inferior button.activo { color: var(--primario); }
+.nav-inferior-link {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  color: var(--texto-suave); font-size: 0.68rem; text-decoration: none;
+  padding: 8px 4px; border-radius: 10px; font-weight: 600;
+}
+.nav-inferior-link .emoji { font-size: 1.25rem; }
+
+.btn-peligro { color: var(--peligro); border-color: var(--peligro); }
 
 .toast-simple {
   position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%);
   padding: 10px 16px; border-radius: 12px; font-size: 0.85rem; z-index: 30; box-shadow: var(--sombra);
+}
+
+.grafica-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.grafica-tabs button {
+  flex: 1; border: 1px solid var(--borde); background: var(--superficie-alt); color: var(--texto-suave);
+  padding: 9px 4px; border-radius: 10px; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+}
+.grafica-tabs button.activo {
+  border-color: transparent; color: #fff;
+  background: linear-gradient(135deg, var(--primario), var(--primario-2));
 }
 
 /* Gráficas: el contenedor hace scroll horizontal, el SVG adentro tiene su

@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Control de Peso — Mis Apps</title>
 <meta name="theme-color" content="#4c5fd5">
+<link rel="manifest" href="../manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mis Apps">
+<link rel="apple-touch-icon" href="../icon-512.png">
 <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body>
@@ -17,12 +22,15 @@
     <header class="encabezado">
       <div class="nav-apps">
         <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
-        <a href="../gastos/index.html" class="icono" title="Ir a Gastos">💰</a>
       </div>
       <h1>Capturar — <span id="captura-usuario"></span></h1>
+      <button class="btn-ajustes" data-vista="ajustes" title="Ajustes">⚙️</button>
     </header>
     <div class="tarjeta captura-tarjeta">
-      <input type="date" id="captura-fecha" class="input-fecha">
+      <div class="fecha-pill">
+        <span id="captura-fecha-texto">Hoy</span>
+        <input type="date" id="captura-fecha">
+      </div>
       <div class="captura-peso">
         <input type="number" step="0.1" inputmode="decimal" id="captura-peso-input" placeholder="0.0" class="input-peso-grande">
         <span class="unidad" id="captura-unidad">kg</span>
@@ -39,9 +47,9 @@
     <header class="encabezado">
       <div class="nav-apps">
         <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
-        <a href="../gastos/index.html" class="icono" title="Ir a Gastos">💰</a>
       </div>
       <h1>Mi progreso</h1>
+      <button class="btn-ajustes" data-vista="ajustes" title="Ajustes">⚙️</button>
     </header>
     <div class="kpis">
       <div class="kpi"><div class="label">Racha</div><div class="valor" id="progreso-racha">0</div></div>
@@ -52,16 +60,14 @@
       <div id="progreso-avance"></div>
     </div>
     <div class="tarjeta">
-      <h2>Todos tus pesos</h2>
+      <div class="grafica-tabs" id="grafica-tabs">
+        <button data-grafica="diaria" class="activo">Todos tus pesos</button>
+        <button data-grafica="tendencia">Tendencia</button>
+        <button data-grafica="semanal">Semanal</button>
+      </div>
       <div class="grafica-scroll" id="grafica-diaria"></div>
-    </div>
-    <div class="tarjeta">
-      <h2>Tendencia (promedio de 7 días)</h2>
-      <div class="grafica-scroll" id="grafica-progreso"></div>
-    </div>
-    <div class="tarjeta">
-      <h2>Promedio semanal</h2>
-      <div class="grafica-scroll" id="grafica-semanal"></div>
+      <div class="grafica-scroll oculto" id="grafica-progreso"></div>
+      <div class="grafica-scroll oculto" id="grafica-semanal"></div>
     </div>
   </section>
 
@@ -70,9 +76,9 @@
     <header class="encabezado">
       <div class="nav-apps">
         <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
-        <a href="../gastos/index.html" class="icono" title="Ir a Gastos">💰</a>
       </div>
       <h1 id="reto-nombres">Nuestro reto</h1>
+      <button class="btn-ajustes" data-vista="ajustes" title="Ajustes">⚙️</button>
     </header>
     <div class="tarjeta">
       <h2>Tendencias comparadas</h2>
@@ -113,6 +119,11 @@
       <button class="btn-secundario" id="btn-cambiar-pin">Cambiar PIN</button>
       <button class="btn-secundario" id="btn-cambiar-usuario">Cambiar de usuario</button>
     </div>
+    <div class="tarjeta oculto" id="tarjeta-borrar-datos">
+      <h2>Datos</h2>
+      <p class="texto-suave" style="margin-top:0;">Borra solo tus propios pesos — no toca los de la otra persona.</p>
+      <button class="btn-secundario btn-peligro" id="btn-borrar-mis-datos">Borrar mis datos</button>
+    </div>
   </section>
 
   <nav class="nav-inferior">
@@ -120,7 +131,7 @@
       <button data-vista="capturar" class="activo"><span class="emoji">⚖️</span>Capturar</button>
       <button data-vista="progreso"><span class="emoji">📈</span>Progreso</button>
       <button data-vista="reto"><span class="emoji">🏆</span>Reto</button>
-      <button data-vista="ajustes"><span class="emoji">⚙️</span>Ajustes</button>
+      <a href="../gastos/index.html" class="nav-inferior-link"><span class="emoji">💰</span>Gastos</a>
     </div>
   </nav>
 </div>

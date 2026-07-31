@@ -57,6 +57,10 @@ export function guardarUnidad(usuario, unidad) {
   return _post({ accion: 'guardarUnidad', usuario, unidad });
 }
 
+export function borrarPesos(usuario) {
+  return _post({ accion: 'borrarPesos', usuario });
+}
+
 export function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
   return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
 }

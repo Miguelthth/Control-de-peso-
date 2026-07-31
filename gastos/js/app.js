@@ -121,6 +121,10 @@ function guardarUnidad(usuario, unidad) {
   return _post({ accion: 'guardarUnidad', usuario, unidad });
 }
 
+function borrarPesos(usuario) {
+  return _post({ accion: 'borrarPesos', usuario });
+}
+
 function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
   return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
 }
@@ -133,7 +137,7 @@ function leerGastos(usuario) {
   return _get({ accion: 'leerGastos', usuario });
 }
 
-  return { leerDatos, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, crearUsuario, guardarGastos, leerGastos };
+  return { leerDatos, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, crearUsuario, guardarGastos, leerGastos };
 })();
 const leerDatos = api.leerDatos;
 const validarUsuario = api.validarUsuario;
@@ -143,6 +147,7 @@ const cambiarPin = api.cambiarPin;
 const guardarPeso = api.guardarPeso;
 const guardarMeta = api.guardarMeta;
 const guardarUnidad = api.guardarUnidad;
+const borrarPesos = api.borrarPesos;
 const crearUsuario = api.crearUsuario;
 const guardarGastos = api.guardarGastos;
 const leerGastos = api.leerGastos;
@@ -202,14 +207,63 @@ async function descifrar(paquete, password) {
   }
 }
 
+// ---------- clave de sesión (evita repetir PBKDF2 en cada guardado) ----------
+//
+// derivarClave() con 250,000 iteraciones tarda cientos de ms en un celular --
+// aceptable una vez al conectarte, pero notorio si se repite en cada "Guardar".
+// Reusar la misma CryptoKey durante la sesión es seguro: lo que protege cada
+// cifrado individual es el IV (siempre aleatorio, ver cifrarConClave), no que
+// la clave cambie: la sal solo hace falta cambiarla para volver a derivar de
+// la contraseña (login, cambio de contraseña), no en cada guardado.
+
+async function derivarClaveAmbosUsos(password, salt) {
+  const claveBase = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: ITERACIONES, hash: 'SHA-256' },
+    claveBase,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+// saltB64 opcional: si ya existe un paquete guardado, se reusa su sal (para
+// poder descifrarlo); si no, se genera una nueva (cuenta nueva / contraseña nueva).
+async function crearClaveSesion(password, saltB64) {
+  const salt = saltB64 ? base64ABuffer(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+  const clave = await derivarClaveAmbosUsos(password, salt);
+  return { clave, saltB64: bufferABase64(salt) };
+}
+
+async function cifrarConClave(objeto, clave, saltB64) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const bytes = new TextEncoder().encode(JSON.stringify(objeto));
+  const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, clave, bytes);
+  return { cifrado: true, v: 1, salt: saltB64, iv: bufferABase64(iv), datos: bufferABase64(cifrado) };
+}
+
+async function descifrarConClave(paquete, clave) {
+  const iv = base64ABuffer(paquete.iv);
+  const bytesCifrados = base64ABuffer(paquete.datos);
+  try {
+    const plano = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, clave, bytesCifrados);
+    return JSON.parse(new TextDecoder().decode(plano));
+  } catch {
+    throw new Error('Contraseña incorrecta');
+  }
+}
+
 function esPaqueteCifrado(obj) {
   return !!obj && typeof obj === 'object' && obj.cifrado === true && typeof obj.salt === 'string' && typeof obj.iv === 'string' && typeof obj.datos === 'string';
 }
 
-  return { cifrar, descifrar, esPaqueteCifrado };
+  return { cifrar, descifrar, crearClaveSesion, cifrarConClave, descifrarConClave, esPaqueteCifrado };
 })();
 const cifrar = cifrado.cifrar;
 const descifrar = cifrado.descifrar;
+const crearClaveSesion = cifrado.crearClaveSesion;
+const cifrarConClave = cifrado.cifrarConClave;
+const descifrarConClave = cifrado.descifrarConClave;
 const esPaqueteCifrado = cifrado.esPaqueteCifrado;
 
 // ── gastos/js/modelo.js ──────────────────────────────────────────
@@ -224,9 +278,6 @@ const CATEGORIAS_DEFECTO = [
   { id: 'salud', nombre: 'Salud', icono: '💊', color: '#22a06b', tipo: 'gasto' },
   { id: 'suscripciones', nombre: 'Suscripciones', icono: '📺', color: '#9333ea', tipo: 'gasto' },
   { id: 'ropa', nombre: 'Ropa', icono: '👕', color: '#0891b2', tipo: 'gasto' },
-  { id: 'gustos', nombre: 'Gustos', icono: '🎉', color: '#db2777', tipo: 'gasto' },
-  { id: 'educacion', nombre: 'Educación', icono: '📚', color: '#2563eb', tipo: 'gasto' },
-  { id: 'imprevistos', nombre: 'Imprevistos', icono: '⚠️', color: '#b45309', tipo: 'gasto' },
   { id: 'otros_gasto', nombre: 'Otros', icono: '📦', color: '#6b7280', tipo: 'gasto' },
   { id: 'sueldo', nombre: 'Sueldo', icono: '💼', color: '#22a06b', tipo: 'ingreso' },
   { id: 'retiro_negocio', nombre: 'Retiro del negocio', icono: '🏪', color: '#16a34a', tipo: 'ingreso' },
@@ -235,6 +286,8 @@ const CATEGORIAS_DEFECTO = [
 
 const METODOS = ['efectivo', 'debito', 'credito', 'transferencia'];
 
+const METODOS_ACTIVOS_DEFECTO = { efectivo: true, debito: true, credito: true, transferencia: true };
+
 function generarId(prefijo) {
   return `${prefijo}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -242,7 +295,7 @@ function generarId(prefijo) {
 function crearDatosVacios() {
   return {
     version: 1,
-    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1 },
+    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, metodosActivos: { ...METODOS_ACTIVOS_DEFECTO } },
     movimientos: [],
     categorias: CATEGORIAS_DEFECTO.map((c) => ({ ...c })),
     presupuestos: {},
@@ -295,7 +348,11 @@ function normalizarDatos(datos) {
   if (!datos || typeof datos !== 'object') return base;
   return {
     version: datos.version || 1,
-    config: { ...base.config, ...(datos.config || {}) },
+    config: {
+      ...base.config,
+      ...(datos.config || {}),
+      metodosActivos: { ...METODOS_ACTIVOS_DEFECTO, ...((datos.config || {}).metodosActivos || {}) },
+    },
     movimientos: Array.isArray(datos.movimientos) ? datos.movimientos : [],
     categorias: Array.isArray(datos.categorias) && datos.categorias.length ? datos.categorias : base.categorias,
     presupuestos: datos.presupuestos && typeof datos.presupuestos === 'object' ? datos.presupuestos : {},
@@ -303,10 +360,11 @@ function normalizarDatos(datos) {
   };
 }
 
-  return { CATEGORIAS_DEFECTO, METODOS, generarId, crearDatosVacios, mesDeFecha, hoyISO, mesActualStr, validarMovimiento, normalizarDatos };
+  return { CATEGORIAS_DEFECTO, METODOS, METODOS_ACTIVOS_DEFECTO, generarId, crearDatosVacios, mesDeFecha, hoyISO, mesActualStr, validarMovimiento, normalizarDatos };
 })();
 const CATEGORIAS_DEFECTO = modelo.CATEGORIAS_DEFECTO;
 const METODOS = modelo.METODOS;
+const METODOS_ACTIVOS_DEFECTO = modelo.METODOS_ACTIVOS_DEFECTO;
 const generarId = modelo.generarId;
 const crearDatosVacios = modelo.crearDatosVacios;
 const mesDeFecha = modelo.mesDeFecha;
@@ -845,26 +903,38 @@ async function existeGastos(usuario) {
   return !!(r.ok && r.blob);
 }
 
+// Regresa también {clave, saltB64}: la CryptoKey ya derivada, para que las
+// escrituras subsecuentes (cada "Guardar") no repitan PBKDF2 (250k
+// iteraciones, cientos de ms) -- solo el primer descifrado de la sesión paga
+// ese costo.
 async function cargar(usuario, password) {
   const pendiente = leerPendiente(usuario);
   if (pendiente) {
     // Hay un guardado que no llegó al servidor todavía -- es más reciente
     // que lo que haya en la Hoja, así que se usa este.
-    const datos = await descifrar(JSON.parse(pendiente), password); // avienta si password mal
-    return { datos: normalizarDatos(datos), pendienteDeSincronizar: true };
+    const paquete = JSON.parse(pendiente);
+    const { clave, saltB64 } = await crearClaveSesion(password, paquete.salt);
+    const datos = await descifrarConClave(paquete, clave); // avienta si password mal
+    return { datos: normalizarDatos(datos), pendienteDeSincronizar: true, clave, saltB64 };
   }
   const r = await leerGastos(usuario);
   if (!r.ok) throw new Error(r.error || 'No se pudo leer');
-  if (!r.blob) return { datos: crearDatosVacios(), pendienteDeSincronizar: false };
+  if (!r.blob) {
+    const { clave, saltB64 } = await crearClaveSesion(password);
+    return { datos: crearDatosVacios(), pendienteDeSincronizar: false, clave, saltB64 };
+  }
   const paquete = JSON.parse(r.blob);
-  const datos = await descifrar(paquete, password); // avienta si password mal
-  return { datos: normalizarDatos(datos), pendienteDeSincronizar: false };
+  const { clave, saltB64 } = await crearClaveSesion(password, paquete.salt);
+  const datos = await descifrarConClave(paquete, clave); // avienta si password mal
+  return { datos: normalizarDatos(datos), pendienteDeSincronizar: false, clave, saltB64 };
 }
 
 // Regresa {sincronizado}: true si ya llegó al servidor, false si quedó en
 // cola local (sin señal) -- en ambos casos el dato ya está a salvo.
-async function guardar(usuario, datos, password) {
-  const paquete = await cifrar(datos, password);
+// `clave`/`saltB64` vienen de cargar() o crearClaveSesion() -- ya no se
+// vuelve a pedir la contraseña ni a rederivarla en cada guardado.
+async function guardar(usuario, datos, clave, saltB64) {
+  const paquete = await cifrarConClave(datos, clave, saltB64);
   const blobStr = JSON.stringify(paquete);
   try {
     const r = await guardarGastos(usuario, blobStr);
@@ -949,7 +1019,8 @@ const leerArchivoSubido = almacen.leerArchivoSubido;
 // Estado, render y eventos. El único archivo que toca el DOM.
 
 const E = {
-  password: null,
+  clave: null, // CryptoKey de la sesión (evita rederivar PBKDF2 en cada guardado)
+  saltCifrado: null,
   passwordModo: 'entrar',
   datos: null,
   mes: mesActualStr(),
@@ -996,6 +1067,13 @@ function formatoFechaLarga(fecha) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+function formatoFechaCorta(fecha) {
+  const d = new Date(`${fecha}T00:00:00`);
+  const texto = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(d);
+  const capitalizada = texto.charAt(0).toUpperCase() + texto.slice(1);
+  return fecha === hoyISO() ? `Hoy · ${capitalizada}` : capitalizada;
+}
+
 let toastTimeout;
 function toast(msg, esError = false) {
   clearTimeout(toastTimeout);
@@ -1032,12 +1110,18 @@ function cerrarModal() {
 
 async function persistir() {
   try {
-    const r = await almacen.guardar(getUsuario(), E.datos, E.password);
+    const r = await almacen.guardar(getUsuario(), E.datos, E.clave, E.saltCifrado);
     if (!r.sincronizado) toast('Guardado en este dispositivo — sincronizando...', true);
   } catch (e) {
     console.error(e);
     toast('No se pudo guardar.', true);
   }
+}
+
+// No espera a persistir() -- guardar cifra + sube al servidor y eso tarda;
+// la UI ya reflejó el cambio antes de llamar esto (ver guardarMovimientoCaptura).
+function persistirEnSegundoPlano() {
+  persistir();
 }
 
 async function guardarYRefrescar() {
@@ -1089,14 +1173,17 @@ async function confirmarPassword() {
       mostrarErrorPassword('Las contraseñas no coinciden.');
       return;
     }
-    E.password = pass;
+    const { clave, saltB64 } = await crearClaveSesion(pass);
+    E.clave = clave;
+    E.saltCifrado = saltB64;
     E.datos = crearDatosVacios();
     await persistir();
     finalizarConexion(false);
   } else {
     try {
-      const { datos, pendienteDeSincronizar } = await almacen.cargar(getUsuario(), pass);
-      E.password = pass;
+      const { datos, pendienteDeSincronizar, clave, saltB64 } = await almacen.cargar(getUsuario(), pass);
+      E.clave = clave;
+      E.saltCifrado = saltB64;
       E.datos = datos;
       const nuevos = calculos.generarMovimientosRecurrentes(E.datos.recurrentes, E.datos.movimientos, mesActualStr(), generarId);
       if (nuevos.length) {
@@ -1169,7 +1256,7 @@ function renderCapturar() {
   document.getElementById('captura-monto').textContent = '$' + (E.captura.montoStr || '0');
   document.querySelectorAll('.captura-tipo button').forEach((b) => b.classList.toggle('activo', b.dataset.tipo === E.captura.tipo));
 
-  const cats = E.datos.categorias.filter((c) => c.tipo === E.captura.tipo);
+  const cats = E.datos.categorias.filter((c) => c.tipo === E.captura.tipo && c.activo !== false);
   if (!cats.some((c) => c.id === E.captura.categoria)) E.captura.categoria = cats[0]?.id || null;
   document.getElementById('categorias-grid').innerHTML = cats
     .map((c) => `<button class="categoria-btn ${c.id === E.captura.categoria ? 'activa' : ''}" data-id="${c.id}">
@@ -1177,8 +1264,15 @@ function renderCapturar() {
     </button>`)
     .join('');
 
-  document.querySelectorAll('#metodo-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.metodo === E.captura.metodo));
+  const metodosActivos = E.datos.config.metodosActivos || {};
+  const metodosVisibles = METODOS.filter((m) => metodosActivos[m] !== false);
+  if (!metodosVisibles.includes(E.captura.metodo)) E.captura.metodo = metodosVisibles[0] || METODOS[0];
+  document.querySelectorAll('#metodo-grupo button[data-metodo]').forEach((b) => {
+    b.classList.toggle('oculto', metodosActivos[b.dataset.metodo] === false);
+    b.classList.toggle('activo', b.dataset.metodo === E.captura.metodo);
+  });
   document.getElementById('captura-fecha').value = E.captura.fecha;
+  document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   document.getElementById('captura-nota').value = E.captura.nota;
 }
 
@@ -1194,11 +1288,11 @@ async function guardarMovimientoCaptura() {
       nota: E.captura.nota,
     });
     E.datos.movimientos.push(mov);
-    await persistir();
     E.captura.montoStr = '';
     E.captura.nota = '';
     toast('Guardado ✓');
     renderCapturar();
+    persistirEnSegundoPlano();
   } catch (e) {
     toast(e.message, true);
   }
@@ -1230,6 +1324,7 @@ function wireCaptura() {
   });
   document.getElementById('captura-fecha').addEventListener('change', (e) => {
     E.captura.fecha = e.target.value;
+    renderCapturar();
   });
   document.getElementById('captura-nota').addEventListener('input', (e) => {
     E.captura.nota = e.target.value;
@@ -1477,12 +1572,29 @@ function renderAjustes() {
   document.getElementById('ajustes-usuario').textContent = getUsuario();
   document.getElementById('lista-categorias').innerHTML = E.datos.categorias
     .map(
-      (c) => `<div class="lista-item">
+      (c) => `<div class="lista-item ${c.activo === false ? 'inactiva' : ''}">
       <span>${c.icono} ${escapeHTML(c.nombre)} <span class="badge">${c.tipo}</span></span>
-      <span><button class="icono" data-editar-cat="${c.id}">✏️</button><button class="icono" data-borrar-cat="${c.id}">🗑️</button></span>
+      <span>
+        <label class="switch" title="${c.activo === false ? 'Desactivada' : 'Activa'}">
+          <input type="checkbox" data-activar-cat="${c.id}" ${c.activo === false ? '' : 'checked'}>
+          <span class="switch-riel"></span>
+        </label>
+        <button class="icono" data-editar-cat="${c.id}">✏️</button><button class="icono" data-borrar-cat="${c.id}">🗑️</button>
+      </span>
     </div>`
     )
     .join('');
+
+  const metodosActivos = E.datos.config.metodosActivos || {};
+  document.getElementById('lista-metodos').innerHTML = METODOS.map(
+    (m) => `<div class="lista-item">
+      <span>${metodoLabel(m)}</span>
+      <label class="switch" title="${metodosActivos[m] === false ? 'Desactivado' : 'Activo'}">
+        <input type="checkbox" data-activar-metodo="${m}" ${metodosActivos[m] === false ? '' : 'checked'}>
+        <span class="switch-riel"></span>
+      </label>
+    </div>`
+  ).join('');
 
   const catsGasto = E.datos.categorias.filter((c) => c.tipo === 'gasto');
   const topes = E.datos.presupuestos[E.mes] || {};
@@ -1606,6 +1718,20 @@ function wireAjustes() {
     if (editar) abrirModalCategoria(editar.dataset.editarCat);
     if (borrar) borrarCategoria(borrar.dataset.borrarCat);
   });
+  document.getElementById('lista-categorias').addEventListener('change', async (e) => {
+    const chk = e.target.closest('[data-activar-cat]');
+    if (!chk) return;
+    const cat = categoriaObj(chk.dataset.activarCat);
+    if (cat) cat.activo = chk.checked;
+    await guardarYRefrescar();
+  });
+  document.getElementById('lista-metodos').addEventListener('change', async (e) => {
+    const chk = e.target.closest('[data-activar-metodo]');
+    if (!chk) return;
+    if (!E.datos.config.metodosActivos) E.datos.config.metodosActivos = {};
+    E.datos.config.metodosActivos[chk.dataset.activarMetodo] = chk.checked;
+    await guardarYRefrescar();
+  });
   document.getElementById('ajustes-presupuestos').addEventListener('change', async (e) => {
     const catId = e.target.dataset.presupuestoCat;
     if (!catId) return;
@@ -1627,7 +1753,7 @@ function wireAjustes() {
     }
   });
   document.getElementById('btn-exportar').addEventListener('click', async () => {
-    const paquete = await cifrar(E.datos, E.password);
+    const paquete = await cifrarConClave(E.datos, E.clave, E.saltCifrado);
     almacen.exportarPaquete(paquete);
   });
   document.getElementById('btn-importar').addEventListener('click', () => document.getElementById('input-importar').click());
@@ -1686,7 +1812,9 @@ function abrirModalCambiarPassword() {
         toast('Las contraseñas no coinciden', true);
         return;
       }
-      E.password = p1;
+      const { clave, saltB64 } = await crearClaveSesion(p1);
+      E.clave = clave;
+      E.saltCifrado = saltB64;
       await persistir();
       cerrarModal();
       toast('Contraseña actualizada ✓');
@@ -1712,7 +1840,7 @@ function wireGlobal() {
     localStorage.setItem('tema', E.tema);
     aplicarTema();
   });
-  document.querySelectorAll('.nav-inferior button').forEach((b) => {
+  document.querySelectorAll('[data-vista]').forEach((b) => {
     b.addEventListener('click', () => cambiarVista(b.dataset.vista));
   });
 }

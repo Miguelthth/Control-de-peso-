@@ -8,9 +8,6 @@ export const CATEGORIAS_DEFECTO = [
   { id: 'salud', nombre: 'Salud', icono: '💊', color: '#22a06b', tipo: 'gasto' },
   { id: 'suscripciones', nombre: 'Suscripciones', icono: '📺', color: '#9333ea', tipo: 'gasto' },
   { id: 'ropa', nombre: 'Ropa', icono: '👕', color: '#0891b2', tipo: 'gasto' },
-  { id: 'gustos', nombre: 'Gustos', icono: '🎉', color: '#db2777', tipo: 'gasto' },
-  { id: 'educacion', nombre: 'Educación', icono: '📚', color: '#2563eb', tipo: 'gasto' },
-  { id: 'imprevistos', nombre: 'Imprevistos', icono: '⚠️', color: '#b45309', tipo: 'gasto' },
   { id: 'otros_gasto', nombre: 'Otros', icono: '📦', color: '#6b7280', tipo: 'gasto' },
   { id: 'sueldo', nombre: 'Sueldo', icono: '💼', color: '#22a06b', tipo: 'ingreso' },
   { id: 'retiro_negocio', nombre: 'Retiro del negocio', icono: '🏪', color: '#16a34a', tipo: 'ingreso' },
@@ -19,6 +16,8 @@ export const CATEGORIAS_DEFECTO = [
 
 export const METODOS = ['efectivo', 'debito', 'credito', 'transferencia'];
 
+export const METODOS_ACTIVOS_DEFECTO = { efectivo: true, debito: true, credito: true, transferencia: true };
+
 export function generarId(prefijo) {
   return `${prefijo}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -26,7 +25,7 @@ export function generarId(prefijo) {
 export function crearDatosVacios() {
   return {
     version: 1,
-    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1 },
+    config: { moneda: 'MXN', tema: 'auto', inicioMes: 1, metodosActivos: { ...METODOS_ACTIVOS_DEFECTO } },
     movimientos: [],
     categorias: CATEGORIAS_DEFECTO.map((c) => ({ ...c })),
     presupuestos: {},
@@ -79,7 +78,11 @@ export function normalizarDatos(datos) {
   if (!datos || typeof datos !== 'object') return base;
   return {
     version: datos.version || 1,
-    config: { ...base.config, ...(datos.config || {}) },
+    config: {
+      ...base.config,
+      ...(datos.config || {}),
+      metodosActivos: { ...METODOS_ACTIVOS_DEFECTO, ...((datos.config || {}).metodosActivos || {}) },
+    },
     movimientos: Array.isArray(datos.movimientos) ? datos.movimientos : [],
     categorias: Array.isArray(datos.categorias) && datos.categorias.length ? datos.categorias : base.categorias,
     presupuestos: datos.presupuestos && typeof datos.presupuestos === 'object' ? datos.presupuestos : {},

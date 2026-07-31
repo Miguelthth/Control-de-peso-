@@ -5,11 +5,12 @@ import * as calculos from './calculos.js';
 import * as graficas from './graficas.js';
 import { generarInsights } from './insights.js';
 import { generarId, validarMovimiento, mesActualStr, hoyISO, mesDeFecha, METODOS, crearDatosVacios, normalizarDatos } from './modelo.js';
-import { cifrar, descifrar, esPaqueteCifrado } from '../../shared/cifrado.js';
+import { descifrar, cifrarConClave, crearClaveSesion, esPaqueteCifrado } from '../../shared/cifrado.js';
 import { getUsuario, cerrarSesion, exigirSesion } from '../../shared/sesion.js';
 
 const E = {
-  password: null,
+  clave: null, // CryptoKey de la sesión (evita rederivar PBKDF2 en cada guardado)
+  saltCifrado: null,
   passwordModo: 'entrar',
   datos: null,
   mes: mesActualStr(),
@@ -56,6 +57,13 @@ function formatoFechaLarga(fecha) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+function formatoFechaCorta(fecha) {
+  const d = new Date(`${fecha}T00:00:00`);
+  const texto = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(d);
+  const capitalizada = texto.charAt(0).toUpperCase() + texto.slice(1);
+  return fecha === hoyISO() ? `Hoy · ${capitalizada}` : capitalizada;
+}
+
 let toastTimeout;
 function toast(msg, esError = false) {
   clearTimeout(toastTimeout);
@@ -92,12 +100,18 @@ function cerrarModal() {
 
 async function persistir() {
   try {
-    const r = await almacen.guardar(getUsuario(), E.datos, E.password);
+    const r = await almacen.guardar(getUsuario(), E.datos, E.clave, E.saltCifrado);
     if (!r.sincronizado) toast('Guardado en este dispositivo — sincronizando...', true);
   } catch (e) {
     console.error(e);
     toast('No se pudo guardar.', true);
   }
+}
+
+// No espera a persistir() -- guardar cifra + sube al servidor y eso tarda;
+// la UI ya reflejó el cambio antes de llamar esto (ver guardarMovimientoCaptura).
+function persistirEnSegundoPlano() {
+  persistir();
 }
 
 async function guardarYRefrescar() {
@@ -149,14 +163,17 @@ async function confirmarPassword() {
       mostrarErrorPassword('Las contraseñas no coinciden.');
       return;
     }
-    E.password = pass;
+    const { clave, saltB64 } = await crearClaveSesion(pass);
+    E.clave = clave;
+    E.saltCifrado = saltB64;
     E.datos = crearDatosVacios();
     await persistir();
     finalizarConexion(false);
   } else {
     try {
-      const { datos, pendienteDeSincronizar } = await almacen.cargar(getUsuario(), pass);
-      E.password = pass;
+      const { datos, pendienteDeSincronizar, clave, saltB64 } = await almacen.cargar(getUsuario(), pass);
+      E.clave = clave;
+      E.saltCifrado = saltB64;
       E.datos = datos;
       const nuevos = calculos.generarMovimientosRecurrentes(E.datos.recurrentes, E.datos.movimientos, mesActualStr(), generarId);
       if (nuevos.length) {
@@ -229,7 +246,7 @@ function renderCapturar() {
   document.getElementById('captura-monto').textContent = '$' + (E.captura.montoStr || '0');
   document.querySelectorAll('.captura-tipo button').forEach((b) => b.classList.toggle('activo', b.dataset.tipo === E.captura.tipo));
 
-  const cats = E.datos.categorias.filter((c) => c.tipo === E.captura.tipo);
+  const cats = E.datos.categorias.filter((c) => c.tipo === E.captura.tipo && c.activo !== false);
   if (!cats.some((c) => c.id === E.captura.categoria)) E.captura.categoria = cats[0]?.id || null;
   document.getElementById('categorias-grid').innerHTML = cats
     .map((c) => `<button class="categoria-btn ${c.id === E.captura.categoria ? 'activa' : ''}" data-id="${c.id}">
@@ -237,8 +254,15 @@ function renderCapturar() {
     </button>`)
     .join('');
 
-  document.querySelectorAll('#metodo-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.metodo === E.captura.metodo));
+  const metodosActivos = E.datos.config.metodosActivos || {};
+  const metodosVisibles = METODOS.filter((m) => metodosActivos[m] !== false);
+  if (!metodosVisibles.includes(E.captura.metodo)) E.captura.metodo = metodosVisibles[0] || METODOS[0];
+  document.querySelectorAll('#metodo-grupo button[data-metodo]').forEach((b) => {
+    b.classList.toggle('oculto', metodosActivos[b.dataset.metodo] === false);
+    b.classList.toggle('activo', b.dataset.metodo === E.captura.metodo);
+  });
   document.getElementById('captura-fecha').value = E.captura.fecha;
+  document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   document.getElementById('captura-nota').value = E.captura.nota;
 }
 
@@ -254,11 +278,11 @@ async function guardarMovimientoCaptura() {
       nota: E.captura.nota,
     });
     E.datos.movimientos.push(mov);
-    await persistir();
     E.captura.montoStr = '';
     E.captura.nota = '';
     toast('Guardado ✓');
     renderCapturar();
+    persistirEnSegundoPlano();
   } catch (e) {
     toast(e.message, true);
   }
@@ -290,6 +314,7 @@ function wireCaptura() {
   });
   document.getElementById('captura-fecha').addEventListener('change', (e) => {
     E.captura.fecha = e.target.value;
+    renderCapturar();
   });
   document.getElementById('captura-nota').addEventListener('input', (e) => {
     E.captura.nota = e.target.value;
@@ -537,12 +562,29 @@ function renderAjustes() {
   document.getElementById('ajustes-usuario').textContent = getUsuario();
   document.getElementById('lista-categorias').innerHTML = E.datos.categorias
     .map(
-      (c) => `<div class="lista-item">
+      (c) => `<div class="lista-item ${c.activo === false ? 'inactiva' : ''}">
       <span>${c.icono} ${escapeHTML(c.nombre)} <span class="badge">${c.tipo}</span></span>
-      <span><button class="icono" data-editar-cat="${c.id}">✏️</button><button class="icono" data-borrar-cat="${c.id}">🗑️</button></span>
+      <span>
+        <label class="switch" title="${c.activo === false ? 'Desactivada' : 'Activa'}">
+          <input type="checkbox" data-activar-cat="${c.id}" ${c.activo === false ? '' : 'checked'}>
+          <span class="switch-riel"></span>
+        </label>
+        <button class="icono" data-editar-cat="${c.id}">✏️</button><button class="icono" data-borrar-cat="${c.id}">🗑️</button>
+      </span>
     </div>`
     )
     .join('');
+
+  const metodosActivos = E.datos.config.metodosActivos || {};
+  document.getElementById('lista-metodos').innerHTML = METODOS.map(
+    (m) => `<div class="lista-item">
+      <span>${metodoLabel(m)}</span>
+      <label class="switch" title="${metodosActivos[m] === false ? 'Desactivado' : 'Activo'}">
+        <input type="checkbox" data-activar-metodo="${m}" ${metodosActivos[m] === false ? '' : 'checked'}>
+        <span class="switch-riel"></span>
+      </label>
+    </div>`
+  ).join('');
 
   const catsGasto = E.datos.categorias.filter((c) => c.tipo === 'gasto');
   const topes = E.datos.presupuestos[E.mes] || {};
@@ -666,6 +708,20 @@ function wireAjustes() {
     if (editar) abrirModalCategoria(editar.dataset.editarCat);
     if (borrar) borrarCategoria(borrar.dataset.borrarCat);
   });
+  document.getElementById('lista-categorias').addEventListener('change', async (e) => {
+    const chk = e.target.closest('[data-activar-cat]');
+    if (!chk) return;
+    const cat = categoriaObj(chk.dataset.activarCat);
+    if (cat) cat.activo = chk.checked;
+    await guardarYRefrescar();
+  });
+  document.getElementById('lista-metodos').addEventListener('change', async (e) => {
+    const chk = e.target.closest('[data-activar-metodo]');
+    if (!chk) return;
+    if (!E.datos.config.metodosActivos) E.datos.config.metodosActivos = {};
+    E.datos.config.metodosActivos[chk.dataset.activarMetodo] = chk.checked;
+    await guardarYRefrescar();
+  });
   document.getElementById('ajustes-presupuestos').addEventListener('change', async (e) => {
     const catId = e.target.dataset.presupuestoCat;
     if (!catId) return;
@@ -687,7 +743,7 @@ function wireAjustes() {
     }
   });
   document.getElementById('btn-exportar').addEventListener('click', async () => {
-    const paquete = await cifrar(E.datos, E.password);
+    const paquete = await cifrarConClave(E.datos, E.clave, E.saltCifrado);
     almacen.exportarPaquete(paquete);
   });
   document.getElementById('btn-importar').addEventListener('click', () => document.getElementById('input-importar').click());
@@ -746,7 +802,9 @@ function abrirModalCambiarPassword() {
         toast('Las contraseñas no coinciden', true);
         return;
       }
-      E.password = p1;
+      const { clave, saltB64 } = await crearClaveSesion(p1);
+      E.clave = clave;
+      E.saltCifrado = saltB64;
       await persistir();
       cerrarModal();
       toast('Contraseña actualizada ✓');
@@ -772,7 +830,7 @@ function wireGlobal() {
     localStorage.setItem('tema', E.tema);
     aplicarTema();
   });
-  document.querySelectorAll('.nav-inferior button').forEach((b) => {
+  document.querySelectorAll('[data-vista]').forEach((b) => {
     b.addEventListener('click', () => cambiarVista(b.dataset.vista));
   });
 }

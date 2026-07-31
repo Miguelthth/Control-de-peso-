@@ -51,6 +51,52 @@ export async function descifrar(paquete, password) {
   }
 }
 
+// ---------- clave de sesión (evita repetir PBKDF2 en cada guardado) ----------
+//
+// derivarClave() con 250,000 iteraciones tarda cientos de ms en un celular --
+// aceptable una vez al conectarte, pero notorio si se repite en cada "Guardar".
+// Reusar la misma CryptoKey durante la sesión es seguro: lo que protege cada
+// cifrado individual es el IV (siempre aleatorio, ver cifrarConClave), no que
+// la clave cambie: la sal solo hace falta cambiarla para volver a derivar de
+// la contraseña (login, cambio de contraseña), no en cada guardado.
+
+async function derivarClaveAmbosUsos(password, salt) {
+  const claveBase = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: ITERACIONES, hash: 'SHA-256' },
+    claveBase,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+// saltB64 opcional: si ya existe un paquete guardado, se reusa su sal (para
+// poder descifrarlo); si no, se genera una nueva (cuenta nueva / contraseña nueva).
+export async function crearClaveSesion(password, saltB64) {
+  const salt = saltB64 ? base64ABuffer(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+  const clave = await derivarClaveAmbosUsos(password, salt);
+  return { clave, saltB64: bufferABase64(salt) };
+}
+
+export async function cifrarConClave(objeto, clave, saltB64) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const bytes = new TextEncoder().encode(JSON.stringify(objeto));
+  const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, clave, bytes);
+  return { cifrado: true, v: 1, salt: saltB64, iv: bufferABase64(iv), datos: bufferABase64(cifrado) };
+}
+
+export async function descifrarConClave(paquete, clave) {
+  const iv = base64ABuffer(paquete.iv);
+  const bytesCifrados = base64ABuffer(paquete.datos);
+  try {
+    const plano = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, clave, bytesCifrados);
+    return JSON.parse(new TextDecoder().decode(plano));
+  } catch {
+    throw new Error('Contraseña incorrecta');
+  }
+}
+
 export function esPaqueteCifrado(obj) {
   return !!obj && typeof obj === 'object' && obj.cifrado === true && typeof obj.salt === 'string' && typeof obj.iv === 'string' && typeof obj.datos === 'string';
 }

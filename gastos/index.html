@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gastos — Mis Apps</title>
+<meta name="theme-color" content="#4c5fd5">
+<link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+
+<div id="pantalla-password" class="pantalla-conexion">
+  <div class="emoji-grande" id="password-emoji">🔒</div>
+  <h1 id="password-titulo">Ingresa tu contraseña</h1>
+  <p id="password-texto">Tus datos están cifrados. Escribe tu contraseña para abrirlos.</p>
+  <div style="width:100%; max-width:280px;">
+    <div class="campo" style="text-align:left;">
+      <input type="password" id="password-input" placeholder="Contraseña" autocomplete="off">
+    </div>
+    <div class="campo oculto" id="password-confirmar-envoltura" style="text-align:left;">
+      <input type="password" id="password-confirmar" placeholder="Confirma tu contraseña" autocomplete="off">
+    </div>
+  </div>
+  <button class="btn-primario" id="btn-password-confirmar">Entrar</button>
+  <p id="password-error" class="oculto" style="color:var(--peligro); font-size:0.8rem; margin-top:14px;"></p>
+  <p id="password-advertencia" class="oculto" style="color:var(--texto-suave); font-size:0.75rem; margin-top:16px;">
+    ⚠️ No hay forma de recuperar tus datos si olvidas esta contraseña. Guárdala en un lugar seguro (por ejemplo, un gestor de contraseñas).
+  </p>
+</div>
+
+<div id="app" class="oculto">
+  <header class="encabezado">
+    <div class="nav-apps">
+      <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
+      <a href="../peso/index.html" class="icono" title="Ir a Control de Peso">⚖️</a>
+    </div>
+    <div class="mes-selector">
+      <button class="icono" id="mes-prev">‹</button>
+      <span id="mes-label">—</span>
+      <button class="icono" id="mes-next">›</button>
+    </div>
+    <button class="icono" id="btn-tema" title="Cambiar tema">🌗</button>
+  </header>
+
+  <!-- ===== CAPTURAR ===== -->
+  <section id="vista-capturar" class="vista activa">
+    <div class="captura-tipo">
+      <button data-tipo="gasto" class="activo gasto">Gasto</button>
+      <button data-tipo="ingreso">Ingreso</button>
+    </div>
+    <div class="captura-monto" id="captura-monto">$0</div>
+
+    <div class="teclado" id="teclado">
+      <button data-tecla="1">1</button><button data-tecla="2">2</button><button data-tecla="3">3</button>
+      <button data-tecla="4">4</button><button data-tecla="5">5</button><button data-tecla="6">6</button>
+      <button data-tecla="7">7</button><button data-tecla="8">8</button><button data-tecla="9">9</button>
+      <button data-tecla=".">.</button><button data-tecla="0">0</button><button data-tecla="borrar" class="borrar">⌫</button>
+    </div>
+
+    <h3>Categoría</h3>
+    <div class="categorias-grid" id="categorias-grid"></div>
+
+    <div class="campo">
+      <label>Método</label>
+      <div class="metodo-grupo" id="metodo-grupo">
+        <button data-metodo="efectivo">Efectivo</button>
+        <button data-metodo="debito" class="activo">Débito</button>
+        <button data-metodo="credito">Crédito</button>
+        <button data-metodo="transferencia">Transferencia</button>
+      </div>
+    </div>
+
+    <div class="fila">
+      <div class="campo">
+        <label>Fecha</label>
+        <input type="date" id="captura-fecha">
+      </div>
+      <div class="campo">
+        <label>Nota (opcional)</label>
+        <input type="text" id="captura-nota" placeholder="Ej. OXXO">
+      </div>
+    </div>
+
+    <button class="btn-primario" id="btn-guardar-movimiento">Guardar</button>
+  </section>
+
+  <!-- ===== MOVIMIENTOS ===== -->
+  <section id="vista-movimientos" class="vista">
+    <div class="tarjeta" style="margin-bottom:10px; padding:10px 12px;">
+      <div class="fila" style="align-items:center;">
+        <div style="flex:2" class="buscador">
+          <input type="text" id="mov-buscar" placeholder="Buscar por nota…">
+        </div>
+        <div style="flex:1">
+          <select id="mov-filtro-categoria"><option value="">Todas</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="tarjeta" id="mov-resumen" style="text-align:center; padding:10px;"></div>
+    <div id="lista-movimientos"></div>
+  </section>
+
+  <!-- ===== TABLERO ===== -->
+  <section id="vista-tablero" class="vista">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="tarjeta">
+      <h2>Por categoría este mes</h2>
+      <div class="dona-contenedor">
+        <div id="grafica-dona"></div>
+        <div class="leyenda" id="leyenda-dona"></div>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Últimos 12 meses</h2>
+      <div id="grafica-barras12"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Acumulado del mes vs mes anterior</h2>
+      <div id="grafica-linea"></div>
+      <div class="leyenda">
+        <div class="leyenda-item"><span class="leyenda-punto" style="background:var(--acento)"></span>Este mes</div>
+        <div class="leyenda-item"><span class="leyenda-punto" style="background:var(--texto-suave)"></span>Mes anterior</div>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Top categorías</h2>
+      <div id="grafica-barrash"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Top 5 gastos del mes</h2>
+      <div id="lista-top-gastos"></div>
+    </div>
+
+    <div class="tarjeta" id="tarjeta-presupuestos">
+      <h2>Presupuestos del mes</h2>
+      <div id="lista-presupuestos"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Datos interesantes</h2>
+      <div id="lista-insights"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Mapa de calor del año</h2>
+      <div id="grafica-calor" style="overflow-x:auto;"></div>
+    </div>
+  </section>
+
+  <!-- ===== AJUSTES ===== -->
+  <section id="vista-ajustes" class="vista">
+    <div class="tarjeta">
+      <h2>Categorías</h2>
+      <div id="lista-categorias"></div>
+      <button class="btn-secundario" id="btn-nueva-categoria" style="margin-top:10px;">+ Nueva categoría</button>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Presupuestos de este mes</h2>
+      <div id="ajustes-presupuestos"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Pagos fijos y suscripciones</h2>
+      <div id="lista-recurrentes"></div>
+      <button class="btn-secundario" id="btn-nuevo-recurrente" style="margin-top:10px;">+ Nuevo recurrente</button>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Seguridad</h2>
+      <p style="font-size:0.8rem; color:var(--texto-suave); margin-top:0;">
+        Conectado como <strong id="ajustes-usuario">—</strong>. Tus datos se guardan cifrados con
+        tu contraseña. Si la cambias, quedas conectado con la nueva a partir de ahora.
+      </p>
+      <div class="fila">
+        <button class="btn-secundario" id="btn-cambiar-password">Cambiar contraseña</button>
+        <button class="btn-secundario" id="btn-cerrar-sesion">Cerrar sesión</button>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Respaldo</h2>
+      <p style="font-size:0.8rem; color:var(--texto-suave); margin-top:0;">
+        Los respaldos automáticos viven en tu Hoja de Gastos (pestaña "Respaldos"), cifrados igual
+        que el dato principal. También puedes exportar o restaurar uno manualmente.
+      </p>
+      <div class="fila">
+        <button class="btn-secundario" id="btn-exportar">Exportar respaldo</button>
+        <button class="btn-secundario" id="btn-importar">Importar respaldo</button>
+      </div>
+      <input type="file" id="input-importar" accept="application/json" class="oculto">
+    </div>
+
+    <div class="tarjeta">
+      <h2>Datos</h2>
+      <p id="ajustes-info" style="font-size:0.78rem; color:var(--texto-suave); margin-top:0;"></p>
+      <button class="btn-secundario btn-peligro" id="btn-borrar-todo">Borrar todo</button>
+    </div>
+  </section>
+
+  <nav class="nav-inferior">
+    <div class="contenedor">
+      <button data-vista="capturar" class="activo"><span class="emoji">➕</span>Capturar</button>
+      <button data-vista="movimientos"><span class="emoji">📋</span>Movs</button>
+      <button data-vista="tablero"><span class="emoji">📊</span>Tablero</button>
+      <button data-vista="ajustes"><span class="emoji">⚙️</span>Ajustes</button>
+    </div>
+  </nav>
+</div>
+
+<div id="modal-root"></div>
+
+<!-- js/app.js es generado (python build.py, en la raíz de MIS APPS) --
+     un <script> normal, sin type="module", para que funcione con doble
+     clic y en Chrome de escritorio (además de servido desde GitHub Pages). -->
+<script src="js/app.js"></script>
+</body>
+</html>

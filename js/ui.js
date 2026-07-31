@@ -90,10 +90,17 @@ function popupFaceId(mensaje, onAceptar) {
 // aquí (candado 'launcher'), no si el passkey existe (pudo haberse creado
 // desde Gastos sin que el launcher lo sepa).
 async function actualizarBotonesFaceId() {
-  const disponible = await passkey.disponible();
+  const motivo = await passkey.porQueNoDisponible();
+  const disponible = motivo === null;
   const activado = disponible && !!candado.leer('launcher', getUsuario());
   document.getElementById('btn-faceid-activar').classList.toggle('oculto', !disponible || activado);
   document.getElementById('btn-faceid-desactivar').classList.toggle('oculto', !activado);
+  // Antes, si `disponible` salía falso, el botón se quedaba oculto sin
+  // explicar por qué -- ahora el motivo (https, navegador, o sin sensor)
+  // queda a la vista en vez de ser una caja negra.
+  const elMotivo = document.getElementById('faceid-motivo');
+  elMotivo.textContent = motivo ? '🔒 Face ID no disponible: ' + motivo : '';
+  elMotivo.classList.toggle('oculto', !motivo);
 }
 
 // Esta función es la que va DENTRO del click del popup: el registro

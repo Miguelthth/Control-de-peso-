@@ -1681,10 +1681,14 @@ function renderAjustes() {
 }
 
 async function actualizarBotonesFaceIdAjustes() {
-  const disponible = await passkey.disponible();
+  const motivo = await passkey.porQueNoDisponible();
+  const disponible = motivo === null;
   const registrado = disponible && !!candado.leer('gastos', getUsuario());
   document.getElementById('btn-faceid-activar').classList.toggle('oculto', !disponible || registrado);
   document.getElementById('btn-faceid-desactivar').classList.toggle('oculto', !registrado);
+  const elMotivo = document.getElementById('faceid-motivo');
+  elMotivo.textContent = motivo ? '🔒 Face ID no disponible: ' + motivo : '';
+  elMotivo.classList.toggle('oculto', !motivo);
 }
 
 async function activarFaceIdDesdeAjustes() {

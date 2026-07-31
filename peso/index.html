@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Control de Peso — Mis Apps</title>
+<meta name="theme-color" content="#4c5fd5">
+<link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+
+<div id="app">
+  <div id="badge-conexion" class="badge-conexion oculto"></div>
+
+  <!-- ===== CAPTURAR ===== -->
+  <section id="vista-capturar" class="vista activa">
+    <header class="encabezado">
+      <div class="nav-apps">
+        <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
+        <a href="../gastos/index.html" class="icono" title="Ir a Gastos">💰</a>
+      </div>
+      <h1>Capturar — <span id="captura-usuario"></span></h1>
+    </header>
+    <div class="tarjeta captura-tarjeta">
+      <input type="date" id="captura-fecha" class="input-fecha">
+      <div class="captura-peso">
+        <input type="number" step="0.1" inputmode="decimal" id="captura-peso-input" placeholder="0.0" class="input-peso-grande">
+        <span class="unidad" id="captura-unidad">kg</span>
+      </div>
+      <div class="texto-suave" id="captura-peso-otro"></div>
+      <button class="btn-primario" id="btn-guardar-captura">Guardar</button>
+      <p class="texto-suave" id="captura-ultimo" style="margin-top:14px;"></p>
+      <p class="texto-suave" id="captura-racha"></p>
+    </div>
+  </section>
+
+  <!-- ===== MI PROGRESO ===== -->
+  <section id="vista-progreso" class="vista">
+    <header class="encabezado">
+      <div class="nav-apps">
+        <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
+        <a href="../gastos/index.html" class="icono" title="Ir a Gastos">💰</a>
+      </div>
+      <h1>Mi progreso</h1>
+    </header>
+    <div class="kpis">
+      <div class="kpi"><div class="label">Racha</div><div class="valor" id="progreso-racha">0</div></div>
+      <div class="kpi"><div class="label">Último peso</div><div class="valor valor-dual" id="progreso-ultimo">—</div></div>
+    </div>
+    <div class="tarjeta">
+      <h2>Avance hacia tu meta</h2>
+      <div id="progreso-avance"></div>
+    </div>
+    <div class="tarjeta">
+      <h2>Todos tus pesos</h2>
+      <div class="grafica-scroll" id="grafica-diaria"></div>
+    </div>
+    <div class="tarjeta">
+      <h2>Tendencia (promedio de 7 días)</h2>
+      <div class="grafica-scroll" id="grafica-progreso"></div>
+    </div>
+    <div class="tarjeta">
+      <h2>Promedio semanal</h2>
+      <div class="grafica-scroll" id="grafica-semanal"></div>
+    </div>
+  </section>
+
+  <!-- ===== NUESTRO RETO ===== -->
+  <section id="vista-reto" class="vista">
+    <header class="encabezado">
+      <div class="nav-apps">
+        <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
+        <a href="../gastos/index.html" class="icono" title="Ir a Gastos">💰</a>
+      </div>
+      <h1 id="reto-nombres">Nuestro reto</h1>
+    </header>
+    <div class="tarjeta">
+      <h2>Tendencias comparadas</h2>
+      <div class="grafica-scroll" id="grafica-reto"></div>
+      <div class="leyenda">
+        <div class="leyenda-item"><span class="leyenda-punto" style="background:#4c5fd5"></span><span id="leyenda-yo"></span></div>
+        <div class="leyenda-item"><span class="leyenda-punto" style="background:#ff6b4a"></span><span id="leyenda-otro"></span></div>
+      </div>
+    </div>
+    <div class="tarjetas-persona" id="reto-tarjetas"></div>
+  </section>
+
+  <!-- ===== AJUSTES ===== -->
+  <section id="vista-ajustes" class="vista">
+    <header class="encabezado">
+      <div class="nav-apps">
+        <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
+        <a href="../gastos/index.html" class="icono" title="Ir a Gastos">💰</a>
+      </div>
+      <h1>Ajustes — <span id="ajustes-usuario"></span></h1>
+    </header>
+    <div class="tarjeta">
+      <h2>Unidad para capturar</h2>
+      <p class="texto-suave" style="margin-top:0;">En pantalla siempre se ven las dos (kg y lb) — esto solo decide en cuál tecleas.</p>
+      <div class="metodo-grupo" id="unidad-grupo">
+        <button data-unidad="kg" class="activo">kg</button>
+        <button data-unidad="lb">lb</button>
+      </div>
+    </div>
+    <div class="tarjeta">
+      <h2>Tu meta</h2>
+      <div class="campo"><label>Peso inicial (<span id="ajustes-inicial-unidad">kg</span>)</label><input type="number" step="0.1" id="ajustes-inicial"></div>
+      <div class="campo"><label>Peso meta (<span id="ajustes-meta-unidad">kg</span>)</label><input type="number" step="0.1" id="ajustes-meta"></div>
+      <button class="btn-primario" id="btn-guardar-meta">Guardar meta</button>
+    </div>
+    <div class="tarjeta">
+      <h2>Seguridad</h2>
+      <button class="btn-secundario" id="btn-cambiar-pin">Cambiar PIN</button>
+      <button class="btn-secundario" id="btn-cambiar-usuario">Cambiar de usuario</button>
+    </div>
+  </section>
+
+  <nav class="nav-inferior">
+    <div class="contenedor">
+      <button data-vista="capturar" class="activo"><span class="emoji">⚖️</span>Capturar</button>
+      <button data-vista="progreso"><span class="emoji">📈</span>Progreso</button>
+      <button data-vista="reto"><span class="emoji">🏆</span>Reto</button>
+      <button data-vista="ajustes"><span class="emoji">⚙️</span>Ajustes</button>
+    </div>
+  </nav>
+</div>
+
+<!-- js/app.js es generado (python build.py, en la raíz de MIS APPS) --
+     un <script> normal, sin type="module". -->
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -9,11 +9,14 @@ function clave(app, usuario) {
   return `ma_candado_${app}_${usuario}`;
 }
 
-export function guardar(app, usuario, valorObjeto) {
+// Nombres con sufijo "Candado" (no "guardar"/"leer" a secas) a propósito:
+// build.py junta todo en un solo archivo por app y expone cada export como
+// global suelta -- "guardar" ya lo usa gastos/js/almacen.js, y chocarían.
+export function guardarCandado(app, usuario, valorObjeto) {
   localStorage.setItem(clave(app, usuario), JSON.stringify(valorObjeto));
 }
 
-export function leer(app, usuario) {
+export function leerCandado(app, usuario) {
   try {
     const crudo = localStorage.getItem(clave(app, usuario));
     return crudo ? JSON.parse(crudo) : null;
@@ -22,6 +25,6 @@ export function leer(app, usuario) {
   }
 }
 
-export function borrar(app, usuario) {
+export function borrarCandado(app, usuario) {
   localStorage.removeItem(clave(app, usuario));
 }

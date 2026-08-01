@@ -16,7 +16,7 @@ async function renderFaceIdUsuarios() {
   const cont = document.getElementById('faceid-usuarios');
   // Solo los que además tienen su PIN cacheado aquí -- si el passkey se creó
   // desde Gastos, el launcher no tiene con qué entrar y el botón sobraría.
-  const registrados = passkey.usuariosRegistrados().filter((u) => candado.leer('launcher', u));
+  const registrados = passkey.usuariosRegistrados().filter((u) => candado.leerCandado('launcher', u));
   if (!registrados.length || !(await passkey.disponible())) {
     cont.classList.add('oculto');
     cont.innerHTML = '';
@@ -39,7 +39,7 @@ async function entrarConFaceId(usuario) {
     mostrarErrorUsuario(e.message);
     return;
   }
-  const datos = candado.leer('launcher', usuario);
+  const datos = candado.leerCandado('launcher', usuario);
   if (!datos) {
     mostrarErrorUsuario('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
     return;
@@ -92,7 +92,7 @@ function popupFaceId(mensaje, onAceptar) {
 async function actualizarBotonesFaceId() {
   const motivo = await passkey.porQueNoDisponible();
   const disponible = motivo === null;
-  const activado = disponible && !!candado.leer('launcher', getUsuario());
+  const activado = disponible && !!candado.leerCandado('launcher', getUsuario());
   document.getElementById('btn-faceid-activar').classList.toggle('oculto', !disponible || activado);
   document.getElementById('btn-faceid-desactivar').classList.toggle('oculto', !activado);
   // Antes, si `disponible` salía falso, el botón se quedaba oculto sin
@@ -108,7 +108,7 @@ async function actualizarBotonesFaceId() {
 async function activarFaceIdConPin(usuario, rol, pin) {
   try {
     if (!passkey.tieneRegistro(usuario)) await passkey.registrar(usuario); // reusa el de Gastos si ya existe
-    candado.guardar('launcher', usuario, { pin, rol });
+    candado.guardarCandado('launcher', usuario, { pin, rol });
     alert('Face ID activado ✓ — la próxima vez que abras la app te lo va a pedir.');
     actualizarBotonesFaceId();
   } catch (e) {
@@ -120,7 +120,7 @@ async function activarFaceIdConPin(usuario, rol, pin) {
 // `await disponible()` va ANTES de mostrar el popup a propósito: lo que no
 // puede llevar awaits en medio es el tramo entre el toque y el registro.
 async function ofrecerFaceId(usuario, rol, pin) {
-  if (candado.leer('launcher', usuario)) return; // ya activado -- no volver a preguntar
+  if (candado.leerCandado('launcher', usuario)) return; // ya activado -- no volver a preguntar
   if (!(await passkey.disponible())) return;
   popupFaceId(
     '¿Activar Face ID en este iPhone para no volver a teclear tu PIN?',
@@ -155,7 +155,7 @@ async function activarFaceId() {
 function desactivarFaceId() {
   // Solo borra el PIN cacheado del launcher -- el passkey en sí se queda
   // (lo puede seguir usando Gastos para su contraseña).
-  candado.borrar('launcher', getUsuario());
+  candado.borrarCandado('launcher', getUsuario());
   actualizarBotonesFaceId();
 }
 
@@ -318,7 +318,7 @@ async function init() {
     // una vez); si no lo activaste, entra directo como siempre. La pantalla
     // solo se MUESTRA aquí: el Face ID en sí espera tu toque en el botón.
     const usuario = getUsuario();
-    if (candado.leer('launcher', usuario) && (await passkey.disponible())) {
+    if (candado.leerCandado('launcher', usuario) && (await passkey.disponible())) {
       mostrarPantallaCandado(usuario);
     } else {
       mostrarInicio();

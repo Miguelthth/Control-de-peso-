@@ -997,9 +997,11 @@ window.addEventListener('unhandledrejection', (e) => {
 document.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) {
-  // Ver comentario igual en js/ui.js (launcher) -- ?ts= evita que el propio
-  // sw.js se quede pegado en la caché HTTP del navegador.
-  window.addEventListener('load', () => navigator.serviceWorker.register(`../sw.js?ts=${Date.now()}`).catch(() => {}));
+  // Ver comentario igual en js/ui.js (launcher) -- update() fuerza la
+  // revisión sin cambiar la URL del service worker en cada carga.
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('../sw.js').then((r) => r.update()).catch(() => {});
+  });
   // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
   // control un service worker nuevo, pero no si hay un campo con texto sin
   // mandar: espera a que la app pase a segundo plano para no borrarlo.

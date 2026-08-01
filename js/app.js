@@ -699,11 +699,14 @@ window.addEventListener('unhandledrejection', (e) => {
 document.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) {
-  // ?ts=... obliga al navegador a pedir sw.js siempre por red (nunca de su
-  // caché HTTP normal, que es distinta al Cache Storage que sw.js controla)
-  // -- así nunca corre una versión vieja del propio service worker sin
-  // enterarse de que hay una nueva.
-  window.addEventListener('load', () => navigator.serviceWorker.register(`sw.js?ts=${Date.now()}`).catch(() => {}));
+  // registration.update() fuerza a revisar si hay un sw.js más nuevo,
+  // saltándose el retraso normal del navegador -- sin cambiar la URL del
+  // service worker en cada carga (eso sí llegó a causar recargas de más:
+  // un ?ts= distinto cada vez podía hacer que el navegador tratara cada
+  // apertura como "service worker nuevo" aunque no hubiera cambiado nada).
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
+  });
   // En cuanto el service worker NUEVO toma control, recarga la página sola
   // -- así nadie tiene que cerrar y volver a abrir la app a mano. PERO si
   // hay un campo de texto con algo escrito, se espera a que la app pase a

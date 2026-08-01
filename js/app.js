@@ -201,11 +201,23 @@ async function disponible() {
   return (await porQueNoDisponible()) === null;
 }
 
+// La consulta al sensor (isUserVerifyingPlatformAuthenticatorAvailable) es
+// la parte lenta -- unos cientos de ms. Su resultado no cambia mientras la
+// página siga abierta, así que se pregunta UNA vez y se reusa -- antes se
+// repetía cada vez que se mostraba una pantalla, y por eso el botón de Face
+// ID tardaba en aparecer cada vez.
+let cachePromesaMotivo = null;
+
 // Regresa null si Face ID se puede usar, o el motivo en texto claro si no --
 // sin esto el usuario solo ve que "no pasa nada" y no hay forma de saber si
 // es el navegador, el dispositivo, o que la app se abrió desde un archivo
 // local en vez de su liga https.
-async function porQueNoDisponible() {
+function porQueNoDisponible() {
+  if (!cachePromesaMotivo) cachePromesaMotivo = _calcularMotivo();
+  return cachePromesaMotivo;
+}
+
+async function _calcularMotivo() {
   if (!window.isSecureContext) {
     return 'Face ID solo funciona con la app abierta desde su liga https, no desde el archivo en la computadora.';
   }
@@ -502,7 +514,14 @@ function desactivarFaceId() {
 
 function mostrarPantalla(id) {
   document.querySelectorAll('.pantalla').forEach((p) => p.classList.add('oculto'));
-  document.getElementById(id).classList.remove('oculto');
+  const pantalla = document.getElementById(id);
+  pantalla.classList.remove('oculto');
+  // Enfoca el primer campo de texto -- ej. usuario-input no lo tenía y por
+  // eso no salía el teclado solo. En iOS esto solo funciona si viene de un
+  // toque (un botón que llamó a mostrarPantalla); al abrir la app por
+  // primera vez, sin gesto, iOS lo ignora -- eso ya no depende del código.
+  const campo = pantalla.querySelector('input[type="text"], input[type="password"]');
+  if (campo) campo.focus();
 }
 
 function mostrarInicio() {
@@ -670,8 +689,29 @@ async function init() {
   renderFaceIdUsuarios();
 }
 
+// Ver comentario igual en gastos/js/ui.js -- aquí con alert() porque el
+// launcher no tiene toast propio (usa alert() para todo su feedback).
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Error sin atrapar:', e.reason);
+  alert('Ocurrió un error: ' + (e.reason?.message || e.reason));
+});
+
 document.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // ?ts=... obliga al navegador a pedir sw.js siempre por red (nunca de su
+  // caché HTTP normal, que es distinta al Cache Storage que sw.js controla)
+  // -- así nunca corre una versión vieja del propio service worker sin
+  // enterarse de que hay una nueva.
+  window.addEventListener('load', () => navigator.serviceWorker.register(`sw.js?ts=${Date.now()}`).catch(() => {}));
+  // En cuanto el service worker NUEVO toma control (ya bajó y activó la
+  // versión que acabas de subir), recarga la página sola una vez -- así
+  // nadie tiene que cerrar y volver a abrir la app a mano para ver lo
+  // último. El "if (recargando)" evita que se dispare más de una vez.
+  let recargando = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (recargando) return;
+    recargando = true;
+    location.reload();
+  });
 }

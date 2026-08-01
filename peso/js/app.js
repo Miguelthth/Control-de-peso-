@@ -991,7 +991,31 @@ async function cambiarPinAjustes() {
   }
 }
 
+// Respaldo manual (Gastos ya tenía el suyo, a Peso le faltaba) -- descarga
+// un .json con tus propios pesos + meta, sin pasar por el servidor (usa lo
+// que ya está cargado en E.datos), funciona hasta sin conexión.
+function exportarMisDatosPeso() {
+  const usuario = getUsuario();
+  const u = usuarioObj(usuario);
+  const paquete = {
+    usuario,
+    unidad: u.unidad,
+    metaKg: u.metaKg,
+    pesoInicialKg: u.pesoInicialKg,
+    pesos: E.datos.pesos.filter((p) => p.usuario === usuario),
+    exportado: new Date().toISOString(),
+  };
+  const blob = new Blob([JSON.stringify(paquete, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `peso-respaldo-${usuario}-${hoyISO()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function wireAjustes() {
+  document.getElementById('btn-exportar-peso').addEventListener('click', exportarMisDatosPeso);
   document.getElementById('btn-guardar-meta').addEventListener('click', guardarMetaAjustes);
   document.getElementById('btn-guardar-fechas-reto').addEventListener('click', guardarFechasRetoAjustes);
   document.getElementById('btn-cambiar-pin').addEventListener('click', cambiarPinAjustes);
@@ -1070,8 +1094,24 @@ async function init() {
   await iniciarApp();
 }
 
+// Ver comentario igual en gastos/js/ui.js.
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Error sin atrapar:', e.reason);
+  toast('Ocurrió un error: ' + (e.reason?.message || e.reason), true);
+});
+
 document.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('../sw.js').catch(() => {}));
+  // Ver comentario igual en js/ui.js (launcher) -- ?ts= evita que el propio
+  // sw.js se quede pegado en la caché HTTP del navegador.
+  window.addEventListener('load', () => navigator.serviceWorker.register(`../sw.js?ts=${Date.now()}`).catch(() => {}));
+  // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
+  // control un service worker nuevo, para no tener que cerrar/abrir a mano.
+  let recargando = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (recargando) return;
+    recargando = true;
+    location.reload();
+  });
 }

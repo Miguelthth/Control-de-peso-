@@ -161,7 +161,14 @@ function desactivarFaceId() {
 
 function mostrarPantalla(id) {
   document.querySelectorAll('.pantalla').forEach((p) => p.classList.add('oculto'));
-  document.getElementById(id).classList.remove('oculto');
+  const pantalla = document.getElementById(id);
+  pantalla.classList.remove('oculto');
+  // Enfoca el primer campo de texto -- ej. usuario-input no lo tenía y por
+  // eso no salía el teclado solo. En iOS esto solo funciona si viene de un
+  // toque (un botón que llamó a mostrarPantalla); al abrir la app por
+  // primera vez, sin gesto, iOS lo ignora -- eso ya no depende del código.
+  const campo = pantalla.querySelector('input[type="text"], input[type="password"]');
+  if (campo) campo.focus();
 }
 
 function mostrarInicio() {
@@ -329,8 +336,29 @@ async function init() {
   renderFaceIdUsuarios();
 }
 
+// Ver comentario igual en gastos/js/ui.js -- aquí con alert() porque el
+// launcher no tiene toast propio (usa alert() para todo su feedback).
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Error sin atrapar:', e.reason);
+  alert('Ocurrió un error: ' + (e.reason?.message || e.reason));
+});
+
 document.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // ?ts=... obliga al navegador a pedir sw.js siempre por red (nunca de su
+  // caché HTTP normal, que es distinta al Cache Storage que sw.js controla)
+  // -- así nunca corre una versión vieja del propio service worker sin
+  // enterarse de que hay una nueva.
+  window.addEventListener('load', () => navigator.serviceWorker.register(`sw.js?ts=${Date.now()}`).catch(() => {}));
+  // En cuanto el service worker NUEVO toma control (ya bajó y activó la
+  // versión que acabas de subir), recarga la página sola una vez -- así
+  // nadie tiene que cerrar y volver a abrir la app a mano para ver lo
+  // último. El "if (recargando)" evita que se dispare más de una vez.
+  let recargando = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (recargando) return;
+    recargando = true;
+    location.reload();
+  });
 }

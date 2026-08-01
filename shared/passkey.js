@@ -27,11 +27,23 @@ export async function disponible() {
   return (await porQueNoDisponible()) === null;
 }
 
+// La consulta al sensor (isUserVerifyingPlatformAuthenticatorAvailable) es
+// la parte lenta -- unos cientos de ms. Su resultado no cambia mientras la
+// página siga abierta, así que se pregunta UNA vez y se reusa -- antes se
+// repetía cada vez que se mostraba una pantalla, y por eso el botón de Face
+// ID tardaba en aparecer cada vez.
+let cachePromesaMotivo = null;
+
 // Regresa null si Face ID se puede usar, o el motivo en texto claro si no --
 // sin esto el usuario solo ve que "no pasa nada" y no hay forma de saber si
 // es el navegador, el dispositivo, o que la app se abrió desde un archivo
 // local en vez de su liga https.
-export async function porQueNoDisponible() {
+export function porQueNoDisponible() {
+  if (!cachePromesaMotivo) cachePromesaMotivo = _calcularMotivo();
+  return cachePromesaMotivo;
+}
+
+async function _calcularMotivo() {
   if (!window.isSecureContext) {
     return 'Face ID solo funciona con la app abierta desde su liga https, no desde el archivo en la computadora.';
   }

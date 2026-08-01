@@ -315,11 +315,23 @@ async function disponible() {
   return (await porQueNoDisponible()) === null;
 }
 
+// La consulta al sensor (isUserVerifyingPlatformAuthenticatorAvailable) es
+// la parte lenta -- unos cientos de ms. Su resultado no cambia mientras la
+// página siga abierta, así que se pregunta UNA vez y se reusa -- antes se
+// repetía cada vez que se mostraba una pantalla, y por eso el botón de Face
+// ID tardaba en aparecer cada vez.
+let cachePromesaMotivo = null;
+
 // Regresa null si Face ID se puede usar, o el motivo en texto claro si no --
 // sin esto el usuario solo ve que "no pasa nada" y no hay forma de saber si
 // es el navegador, el dispositivo, o que la app se abrió desde un archivo
 // local en vez de su liga https.
-async function porQueNoDisponible() {
+function porQueNoDisponible() {
+  if (!cachePromesaMotivo) cachePromesaMotivo = _calcularMotivo();
+  return cachePromesaMotivo;
+}
+
+async function _calcularMotivo() {
   if (!window.isSecureContext) {
     return 'Face ID solo funciona con la app abierta desde su liga https, no desde el archivo en la computadora.';
   }
@@ -1343,6 +1355,7 @@ async function mostrarBotonFaceId() {
   const disponible = await passkey.disponible();
   const mostrar = disponible && !!candado.leerCandado('gastos', getUsuario());
   document.getElementById('btn-faceid-password').classList.toggle('oculto', !mostrar);
+  document.getElementById('password-o-separador').classList.toggle('oculto', !mostrar);
 }
 
 // Colgada del botón, NUNCA automática: Safari rechaza cualquier Face ID que
@@ -2176,8 +2189,27 @@ async function init() {
   mostrarPantallaPassword(yaExiste ? 'entrar' : 'crear');
 }
 
+// Sin esto, un error dentro de una función async sin try/catch (como el bug
+// de Face ID que costó 3 rondas de diagnóstico) se traga en silencio -- "no
+// pasa nada" sin ningún rastro. Con esto al menos se ve un toast y queda en
+// la consola.
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Error sin atrapar:', e.reason);
+  toast('Ocurrió un error: ' + (e.reason?.message || e.reason), true);
+});
+
 document.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('../sw.js').catch(() => {}));
+  // Ver comentario igual en js/ui.js (launcher) -- ?ts= evita que el propio
+  // sw.js se quede pegado en la caché HTTP del navegador.
+  window.addEventListener('load', () => navigator.serviceWorker.register(`../sw.js?ts=${Date.now()}`).catch(() => {}));
+  // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
+  // control un service worker nuevo, para no tener que cerrar/abrir a mano.
+  let recargando = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (recargando) return;
+    recargando = true;
+    location.reload();
+  });
 }

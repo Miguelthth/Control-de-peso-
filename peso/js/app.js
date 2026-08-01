@@ -1107,11 +1107,17 @@ if ('serviceWorker' in navigator) {
   // sw.js se quede pegado en la caché HTTP del navegador.
   window.addEventListener('load', () => navigator.serviceWorker.register(`../sw.js?ts=${Date.now()}`).catch(() => {}));
   // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
-  // control un service worker nuevo, para no tener que cerrar/abrir a mano.
+  // control un service worker nuevo, pero no si hay un campo con texto sin
+  // mandar: espera a que la app pase a segundo plano para no borrarlo.
   let recargando = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
+  function intentarRecargar() {
     if (recargando) return;
+    const activo = document.activeElement;
+    const escribiendo = activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA') && activo.value;
+    if (escribiendo) return;
     recargando = true;
     location.reload();
-  });
+  }
+  navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargar(); });
 }

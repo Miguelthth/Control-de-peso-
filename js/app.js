@@ -704,14 +704,19 @@ if ('serviceWorker' in navigator) {
   // -- así nunca corre una versión vieja del propio service worker sin
   // enterarse de que hay una nueva.
   window.addEventListener('load', () => navigator.serviceWorker.register(`sw.js?ts=${Date.now()}`).catch(() => {}));
-  // En cuanto el service worker NUEVO toma control (ya bajó y activó la
-  // versión que acabas de subir), recarga la página sola una vez -- así
-  // nadie tiene que cerrar y volver a abrir la app a mano para ver lo
-  // último. El "if (recargando)" evita que se dispare más de una vez.
+  // En cuanto el service worker NUEVO toma control, recarga la página sola
+  // -- así nadie tiene que cerrar y volver a abrir la app a mano. PERO si
+  // hay un campo de texto con algo escrito, se espera a que la app pase a
+  // segundo plano (visibilitychange) para no borrar lo que ibas a mandar.
   let recargando = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
+  function intentarRecargar() {
     if (recargando) return;
+    const activo = document.activeElement;
+    const escribiendo = activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA') && activo.value;
+    if (escribiendo) return;
     recargando = true;
     location.reload();
-  });
+  }
+  navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargar(); });
 }

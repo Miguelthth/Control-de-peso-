@@ -343,6 +343,9 @@ async function init() {
     // una vez); si no lo activaste, entra directo como siempre. La pantalla
     // solo se MUESTRA aquí: el Face ID en sí espera tu toque en el botón.
     const usuario = getUsuario();
+    cargarFondoGuardado(); // aquí, no solo en mostrarInicio() -- si no, la
+    // pantalla de candado (Face ID), que es la PRIMERA que ves al reabrir la
+    // app, se quedaba sin fondo hasta que pasabas de esa pantalla.
     if (candado.leerCandado('launcher', usuario) && (await passkey.disponible())) {
       mostrarPantallaCandado(usuario);
     } else {

@@ -149,12 +149,13 @@ export function svgLineaComparativa(serieA, serieB, { height = 240, colorA = '#4
 // El avance hacia la meta, como una barra horizontal (índigo → coral, la
 // paleta de la app) con el Rasengan real (peso/assets/rasengan.mp4) montado
 // en la punta, como si la esfera fuera la que va empujando el avance.
-export function svgBarraAvance(pct, { width = 260 } = {}) {
+export function svgBarraAvance(pct, { width = 260, color = null } = {}) {
   const clamped = Math.max(0, Math.min(1, pct));
   const pctTexto = Math.round(pct * 100);
+  const estiloFill = color ? `width:${clamped * 100}%; background:${color};` : `width:${clamped * 100}%;`;
   return `<div class="rasengan-barra" style="max-width:${width}px;">
     <div class="rasengan-barra-track">
-      <div class="rasengan-barra-fill" style="width:${clamped * 100}%"></div>
+      <div class="rasengan-barra-fill" style="${estiloFill}"></div>
       <span class="rasengan-barra-pct">${pctTexto}%</span>
     </div>
     <div class="rasengan-barra-bola" style="left:${clamped * 100}%">
@@ -165,22 +166,22 @@ export function svgBarraAvance(pct, { width = 260 } = {}) {
 
 // "Carrera al centro": cada quien avanza desde SU lado hacia la mitad según
 // su propio % de avance a SU propia meta -- si los dos llegan al 100%, las
-// dos barras se tocan justo en medio. Vista alterna a la gráfica de líneas
-// en "Nuestro reto" (botón para cambiar entre las dos).
-export function svgBarraVersus(pctA, pctB, nombreA, nombreB, { width = 300 } = {}) {
+// dos barras se tocan justo en medio. Tarjeta fija en "Nuestro reto" (ya no
+// es una pestaña que se cambia -- se ve siempre, junto a las tendencias).
+export function svgBarraVersus(pctA, pctB, nombreA, nombreB, { width = 300, colorA = '#4c5fd5', colorB = '#ff6b4a' } = {}) {
   const claA = Math.max(0, Math.min(1, pctA));
   const claB = Math.max(0, Math.min(1, pctB));
   const mitad = width / 2;
   const anchoA = claA * mitad;
   const anchoB = claB * mitad;
-  const alturaPista = 20;
-  const y = 30;
-  return `<svg viewBox="0 0 ${width} 56" width="100%" xmlns="${NS}" style="display:block; max-width:${width}px; margin:0 auto;">
-    <text x="2" y="14" font-size="12" font-weight="800" fill="var(--primario)">${nombreA} · ${Math.round(claA * 100)}%</text>
-    <text x="${width - 2}" y="14" font-size="12" font-weight="800" fill="var(--acento)" text-anchor="end">${nombreB} · ${Math.round(claB * 100)}%</text>
-    <rect x="0" y="${y}" width="${width}" height="${alturaPista}" rx="10" fill="var(--superficie-alt)" stroke="var(--borde)"/>
-    <rect x="0" y="${y}" width="${Math.max(anchoA, claA > 0 ? 10 : 0)}" height="${alturaPista}" rx="10" fill="var(--primario)"/>
-    <rect x="${width - Math.max(anchoB, claB > 0 ? 10 : 0)}" y="${y}" width="${Math.max(anchoB, claB > 0 ? 10 : 0)}" height="${alturaPista}" rx="10" fill="var(--acento)"/>
+  const alturaPista = 26;
+  const y = 32;
+  return `<svg viewBox="0 0 ${width} 62" width="100%" xmlns="${NS}" style="display:block; max-width:${width}px; margin:0 auto;">
+    <text x="2" y="16" font-size="13" font-weight="800" fill="${colorA}">${nombreA} · ${Math.round(claA * 100)}%</text>
+    <text x="${width - 2}" y="16" font-size="13" font-weight="800" fill="${colorB}" text-anchor="end">${nombreB} · ${Math.round(claB * 100)}%</text>
+    <rect x="0" y="${y}" width="${width}" height="${alturaPista}" rx="13" fill="var(--superficie-alt)" stroke="var(--borde)"/>
+    <rect x="0" y="${y}" width="${Math.max(anchoA, claA > 0 ? 13 : 0)}" height="${alturaPista}" rx="13" fill="${colorA}"/>
+    <rect x="${width - Math.max(anchoB, claB > 0 ? 13 : 0)}" y="${y}" width="${Math.max(anchoB, claB > 0 ? 13 : 0)}" height="${alturaPista}" rx="13" fill="${colorB}"/>
     <line x1="${mitad}" y1="${y - 4}" x2="${mitad}" y2="${y + alturaPista + 4}" stroke="var(--texto-suave)" stroke-width="2" stroke-dasharray="2 3"/>
   </svg>`;
 }

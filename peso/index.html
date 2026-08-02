@@ -14,6 +14,8 @@
 </head>
 <body>
 
+<div id="fondo-personalizado" class="fondo-personalizado oculto"></div>
+
 <div id="app">
   <div id="badge-conexion" class="badge-conexion oculto"></div>
 
@@ -82,9 +84,8 @@
       <div class="grafica-scroll oculto" id="grafica-semanal"></div>
     </div>
     <div class="tarjeta">
-      <h2>Tus últimos registros</h2>
-      <p class="texto-suave" style="margin-top:0;">¿Te equivocaste al capturar? Bórralo aquí.</p>
-      <div id="historial-pesos"></div>
+      <button class="btn-discreto" id="btn-ver-historial">¿Te equivocaste al capturar? Ver tus últimos registros</button>
+      <div id="historial-pesos" class="oculto"></div>
     </div>
   </section>
 
@@ -99,23 +100,19 @@
     </header>
     <p class="texto-suave" id="reto-fechas" style="padding:0 16px; margin-top:-6px;"></p>
     <div class="tarjeta">
-      <div class="grafica-tabs" id="reto-vista-tabs">
-        <button data-vista-reto="tendencia" class="activo">Tendencias</button>
-        <button data-vista-reto="carrera">Carrera al centro</button>
-      </div>
-      <div id="reto-tendencia-contenido">
-        <div class="grafica-scroll" id="grafica-reto"></div>
-        <div class="leyenda">
-          <div class="leyenda-item"><span class="leyenda-punto" style="background:#4c5fd5"></span><span id="leyenda-yo"></span></div>
-          <div class="leyenda-item"><span class="leyenda-punto" style="background:#ff6b4a"></span><span id="leyenda-otro"></span></div>
-        </div>
-      </div>
-      <div id="reto-carrera-contenido" class="oculto">
-        <p class="texto-suave" style="margin-top:0;">Cada quien avanza desde su lado hacia el centro, según qué tan cerca está de SU propia meta.</p>
-        <div id="grafica-versus"></div>
+      <h2>Tendencias comparadas</h2>
+      <div class="grafica-scroll" id="grafica-reto"></div>
+      <div class="leyenda">
+        <div class="leyenda-item"><span class="leyenda-punto" id="leyenda-punto-yo"></span><span id="leyenda-yo"></span></div>
+        <div class="leyenda-item"><span class="leyenda-punto" id="leyenda-punto-otro"></span><span id="leyenda-otro"></span></div>
       </div>
     </div>
     <div class="tarjetas-persona" id="reto-tarjetas"></div>
+    <div class="tarjeta">
+      <h2>Carrera al centro</h2>
+      <p class="texto-suave" style="margin-top:0;">Cada quien avanza desde su lado hacia el centro, según qué tan cerca está de SU propia meta.</p>
+      <div id="grafica-versus"></div>
+    </div>
   </section>
 
   <!-- ===== AJUSTES ===== -->
@@ -152,6 +149,14 @@
       <h2>Seguridad</h2>
       <button class="btn-secundario" id="btn-cambiar-pin">Cambiar PIN</button>
       <button class="btn-secundario" id="btn-cambiar-usuario">Cambiar de usuario</button>
+    </div>
+    <div class="tarjeta">
+      <h2>Fondo de pantalla</h2>
+      <p class="texto-suave" style="margin-top:0;">Tu propia foto, bien tenue, detrás de las tarjetas — nunca tapa la información.</p>
+      <div id="fondo-vista-previa" class="fondo-vista-previa oculto"></div>
+      <input type="file" id="input-fondo" accept="image/*" class="oculto">
+      <button class="btn-secundario" id="btn-elegir-fondo">Elegir foto</button>
+      <button class="btn-secundario btn-peligro oculto" id="btn-quitar-fondo" style="margin-top:8px;">Quitar fondo</button>
     </div>
     <div class="tarjeta">
       <h2>Respaldo</h2>

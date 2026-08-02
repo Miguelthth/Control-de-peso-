@@ -175,6 +175,94 @@ const crearUsuario = api.crearUsuario;
 const guardarGastos = api.guardarGastos;
 const leerGastos = api.leerGastos;
 
+// ── shared/fondo.js ──────────────────────────────────────────
+const fondo = (function () {
+// Fondo de pantalla personalizado (tu propia foto) -- vive en IndexedDB, no
+// en localStorage: una foto pesa más de lo que localStorage aguanta cómodo
+// sin arriesgar llenarlo y afectar lo demás guardado ahí (sesión, Face ID,
+// caché de datos). Por dispositivo -- no se sincroniza entre celulares, cada
+// quien la activa desde su propio Ajustes.
+
+const NOMBRE_DB = 'ma_fondos';
+const NOMBRE_TIENDA = 'fondos';
+
+function abrirDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(NOMBRE_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(NOMBRE_TIENDA);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function clave(app, usuario) {
+  return `${app}_${usuario}`;
+}
+
+async function guardarFondo(app, usuario, blob) {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOMBRE_TIENDA, 'readwrite');
+    tx.objectStore(NOMBRE_TIENDA).put(blob, clave(app, usuario));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function leerFondo(app, usuario) {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOMBRE_TIENDA, 'readonly');
+    const req = tx.objectStore(NOMBRE_TIENDA).get(clave(app, usuario));
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function borrarFondo(app, usuario) {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOMBRE_TIENDA, 'readwrite');
+    tx.objectStore(NOMBRE_TIENDA).delete(clave(app, usuario));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Achica y recomprime la foto ANTES de guardarla -- una foto de celular
+// puede pesar varios MB a full resolución; para un fondo de pantalla nadie
+// necesita eso. 900px de ancho y calidad 0.72 deja algo de ~50-150 KB.
+function comprimirImagen(archivo, maxAncho = 900, calidad = 0.72) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(archivo);
+    img.onload = () => {
+      const ratio = Math.min(1, maxAncho / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(url);
+        if (blob) resolve(blob);
+        else reject(new Error('No se pudo procesar la imagen'));
+      }, 'image/jpeg', calidad);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Imagen inválida'));
+    };
+    img.src = url;
+  });
+}
+
+  return { guardarFondo, leerFondo, borrarFondo, comprimirImagen };
+})();
+const guardarFondo = fondo.guardarFondo;
+const leerFondo = fondo.leerFondo;
+const borrarFondo = fondo.borrarFondo;
+const comprimirImagen = fondo.comprimirImagen;
+
 // ── peso/js/modelo.js ──────────────────────────────────────────
 const modelo = (function () {
 // Forma de los datos y validación. Sin DOM, sin red.
@@ -462,12 +550,13 @@ function svgLineaComparativa(serieA, serieB, { height = 240, colorA = '#4c5fd5',
 // El avance hacia la meta, como una barra horizontal (índigo → coral, la
 // paleta de la app) con el Rasengan real (peso/assets/rasengan.mp4) montado
 // en la punta, como si la esfera fuera la que va empujando el avance.
-function svgBarraAvance(pct, { width = 260 } = {}) {
+function svgBarraAvance(pct, { width = 260, color = null } = {}) {
   const clamped = Math.max(0, Math.min(1, pct));
   const pctTexto = Math.round(pct * 100);
+  const estiloFill = color ? `width:${clamped * 100}%; background:${color};` : `width:${clamped * 100}%;`;
   return `<div class="rasengan-barra" style="max-width:${width}px;">
     <div class="rasengan-barra-track">
-      <div class="rasengan-barra-fill" style="width:${clamped * 100}%"></div>
+      <div class="rasengan-barra-fill" style="${estiloFill}"></div>
       <span class="rasengan-barra-pct">${pctTexto}%</span>
     </div>
     <div class="rasengan-barra-bola" style="left:${clamped * 100}%">
@@ -478,22 +567,22 @@ function svgBarraAvance(pct, { width = 260 } = {}) {
 
 // "Carrera al centro": cada quien avanza desde SU lado hacia la mitad según
 // su propio % de avance a SU propia meta -- si los dos llegan al 100%, las
-// dos barras se tocan justo en medio. Vista alterna a la gráfica de líneas
-// en "Nuestro reto" (botón para cambiar entre las dos).
-function svgBarraVersus(pctA, pctB, nombreA, nombreB, { width = 300 } = {}) {
+// dos barras se tocan justo en medio. Tarjeta fija en "Nuestro reto" (ya no
+// es una pestaña que se cambia -- se ve siempre, junto a las tendencias).
+function svgBarraVersus(pctA, pctB, nombreA, nombreB, { width = 300, colorA = '#4c5fd5', colorB = '#ff6b4a' } = {}) {
   const claA = Math.max(0, Math.min(1, pctA));
   const claB = Math.max(0, Math.min(1, pctB));
   const mitad = width / 2;
   const anchoA = claA * mitad;
   const anchoB = claB * mitad;
-  const alturaPista = 20;
-  const y = 30;
-  return `<svg viewBox="0 0 ${width} 56" width="100%" xmlns="${NS}" style="display:block; max-width:${width}px; margin:0 auto;">
-    <text x="2" y="14" font-size="12" font-weight="800" fill="var(--primario)">${nombreA} · ${Math.round(claA * 100)}%</text>
-    <text x="${width - 2}" y="14" font-size="12" font-weight="800" fill="var(--acento)" text-anchor="end">${nombreB} · ${Math.round(claB * 100)}%</text>
-    <rect x="0" y="${y}" width="${width}" height="${alturaPista}" rx="10" fill="var(--superficie-alt)" stroke="var(--borde)"/>
-    <rect x="0" y="${y}" width="${Math.max(anchoA, claA > 0 ? 10 : 0)}" height="${alturaPista}" rx="10" fill="var(--primario)"/>
-    <rect x="${width - Math.max(anchoB, claB > 0 ? 10 : 0)}" y="${y}" width="${Math.max(anchoB, claB > 0 ? 10 : 0)}" height="${alturaPista}" rx="10" fill="var(--acento)"/>
+  const alturaPista = 26;
+  const y = 32;
+  return `<svg viewBox="0 0 ${width} 62" width="100%" xmlns="${NS}" style="display:block; max-width:${width}px; margin:0 auto;">
+    <text x="2" y="16" font-size="13" font-weight="800" fill="${colorA}">${nombreA} · ${Math.round(claA * 100)}%</text>
+    <text x="${width - 2}" y="16" font-size="13" font-weight="800" fill="${colorB}" text-anchor="end">${nombreB} · ${Math.round(claB * 100)}%</text>
+    <rect x="0" y="${y}" width="${width}" height="${alturaPista}" rx="13" fill="var(--superficie-alt)" stroke="var(--borde)"/>
+    <rect x="0" y="${y}" width="${Math.max(anchoA, claA > 0 ? 13 : 0)}" height="${alturaPista}" rx="13" fill="${colorA}"/>
+    <rect x="${width - Math.max(anchoB, claB > 0 ? 13 : 0)}" y="${y}" width="${Math.max(anchoB, claB > 0 ? 13 : 0)}" height="${alturaPista}" rx="13" fill="${colorB}"/>
     <line x1="${mitad}" y1="${y - 4}" x2="${mitad}" y2="${y + alturaPista + 4}" stroke="var(--texto-suave)" stroke-width="2" stroke-dasharray="2 3"/>
   </svg>`;
 }
@@ -644,6 +733,15 @@ const E = {
 
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
+// Color fijo por persona (no "yo vs. el otro") -- los datos de Cindy siempre
+// se ven morados y los de Miguel siempre rojos, sin importar en qué celular
+// se estén viendo. Un tercer usuario que no sea ninguno de los dos cae en
+// el índigo de la marca, para no romper si algún día se agrega alguien más.
+const COLOR_POR_USUARIO = { Miguel: '#e5484d', Cindy: '#9333ea' };
+function colorDeUsuario(nombre) {
+  return COLOR_POR_USUARIO[nombre] || '#4c5fd5';
+}
+
 function formatoFechaCorta(fechaISO) {
   const [y, m, d] = fechaISO.split('-').map(Number);
   const texto = `${d}-${MESES_CORTOS[m - 1].charAt(0).toUpperCase()}${MESES_CORTOS[m - 1].slice(1)}`;
@@ -699,6 +797,7 @@ function miUnidad() {
 
 async function iniciarApp() {
   document.getElementById('app').classList.remove('oculto');
+  cargarFondoGuardado(); // no bloquea el arranque -- se aplica en cuanto esté lista
   await cargarYRenderizar();
   cola.iniciarSincronizacionAutomatica(() => cargarYRenderizar());
   // Para que el peso que capture Cindy/Miguel le llegue rápido al otro sin
@@ -840,7 +939,7 @@ function renderProgreso() {
         <span>${formatoPesoDualColor(avance.kgPerdidos)} perdidos</span>
         <span>${formatoPesoDualColor(avance.kgRestantes)} para tu meta</span>
       </div>
-      ${graficas.svgBarraAvance(avance.pctAvance)}
+      ${graficas.svgBarraAvance(avance.pctAvance, { color: colorDeUsuario(getUsuario()) })}
     `;
   } else {
     elAvance.innerHTML = '<p class="texto-suave">Define tu meta y tu peso inicial en Ajustes para ver tu avance.</p>';
@@ -941,9 +1040,11 @@ function renderReto() {
   document.getElementById('reto-nombres').textContent = otro ? `${getUsuario()} vs. ${otro}` : getUsuario();
   document.getElementById('leyenda-yo').textContent = getUsuario();
   document.getElementById('leyenda-otro').textContent = otro || '—';
+  document.getElementById('leyenda-punto-yo').style.background = colorDeUsuario(getUsuario());
+  document.getElementById('leyenda-punto-otro').style.background = otro ? colorDeUsuario(otro) : '#999';
   document.getElementById('grafica-reto').innerHTML = graficas.svgLineaComparativa(
     promedioMovil(serieYo, 7), promedioMovil(serieOtro, 7),
-    { colorA: '#4c5fd5', colorB: '#ff6b4a' }
+    { colorA: colorDeUsuario(getUsuario()), colorB: otro ? colorDeUsuario(otro) : '#999' }
   );
 
   const nombres = otro ? [getUsuario(), otro] : [getUsuario()];
@@ -960,14 +1061,15 @@ function renderReto() {
     filas[0]?.avance?.pctAvance || 0,
     filas[1]?.avance?.pctAvance || 0,
     filas[0]?.nombre || getUsuario(),
-    filas[1]?.nombre || '—'
+    filas[1]?.nombre || '—',
+    { width: 340, colorA: colorDeUsuario(filas[0]?.nombre || getUsuario()), colorB: colorDeUsuario(filas[1]?.nombre || '') }
   );
 
   document.getElementById('reto-tarjetas').innerHTML = filas.map((f) => `
-    <div class="tarjeta-persona">
+    <div class="tarjeta-persona" style="border-top:3px solid ${colorDeUsuario(f.nombre)};">
       ${f.avance ? `<img class="avatar-marca-agua" src="${avatarMeta(f.avance.pctAvance)}" alt="">` : ''}
       <div class="tarjeta-persona-contenido">
-      <h3>${f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre}</h3>
+      <h3 style="color:${colorDeUsuario(f.nombre)};">${f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre}</h3>
       <div class="dato-grande valor-dual">${formatoPesoDualColor(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
@@ -996,6 +1098,61 @@ function renderAjustes() {
   document.getElementById('tarjeta-fechas-reto').classList.toggle('oculto', !esAdmin());
   document.getElementById('reto-fecha-inicio').value = E.datos.retoInicio || '';
   document.getElementById('reto-fecha-fin').value = E.datos.retoFin || '';
+}
+
+// ---------- fondo de pantalla personalizado ----------
+//
+// Por dispositivo, no por servidor -- cada quien elige la suya desde su
+// propio Ajustes. Se guarda en IndexedDB (shared/fondo.js), no en
+// localStorage. Va DETRÁS de #app (z-index -1, opacidad baja) -- todo el
+// contenido real vive dentro de tarjetas con fondo sólido, así que por
+// diseño no hay forma de que tape información.
+
+let urlFondoActual = null; // para revocar el Object URL anterior y no acumular
+
+function aplicarFondo(blob) {
+  const el = document.getElementById('fondo-personalizado');
+  if (urlFondoActual) URL.revokeObjectURL(urlFondoActual);
+  urlFondoActual = blob ? URL.createObjectURL(blob) : null;
+  el.style.backgroundImage = urlFondoActual ? `url(${urlFondoActual})` : '';
+  el.classList.toggle('oculto', !urlFondoActual);
+}
+
+function actualizarVistaPreviaFondo() {
+  const previa = document.getElementById('fondo-vista-previa');
+  const btnQuitar = document.getElementById('btn-quitar-fondo');
+  previa.style.backgroundImage = urlFondoActual ? `url(${urlFondoActual})` : '';
+  previa.classList.toggle('oculto', !urlFondoActual);
+  btnQuitar.classList.toggle('oculto', !urlFondoActual);
+}
+
+async function cargarFondoGuardado() {
+  try {
+    const blob = await fondo.leerFondo('peso', getUsuario());
+    aplicarFondo(blob);
+    actualizarVistaPreviaFondo();
+  } catch {
+    // IndexedDB no disponible o falló -- no es crítico, la app sigue sin fondo.
+  }
+}
+
+async function elegirFondo(archivo) {
+  try {
+    const comprimida = await fondo.comprimirImagen(archivo);
+    await fondo.guardarFondo('peso', getUsuario(), comprimida);
+    aplicarFondo(comprimida);
+    actualizarVistaPreviaFondo();
+    toast('Fondo activado ✓');
+  } catch (e) {
+    toast('No se pudo usar esa foto: ' + e.message, true);
+  }
+}
+
+async function quitarFondo() {
+  await fondo.borrarFondo('peso', getUsuario());
+  aplicarFondo(null);
+  actualizarVistaPreviaFondo();
+  toast('Fondo quitado');
 }
 
 async function guardarFechasRetoAjustes() {
@@ -1085,6 +1242,13 @@ function exportarMisDatosPeso() {
 
 function wireAjustes() {
   document.getElementById('btn-exportar-peso').addEventListener('click', exportarMisDatosPeso);
+  document.getElementById('btn-elegir-fondo').addEventListener('click', () => document.getElementById('input-fondo').click());
+  document.getElementById('input-fondo').addEventListener('change', (e) => {
+    const archivo = e.target.files[0];
+    e.target.value = '';
+    if (archivo) elegirFondo(archivo);
+  });
+  document.getElementById('btn-quitar-fondo').addEventListener('click', quitarFondo);
   document.getElementById('btn-guardar-meta').addEventListener('click', guardarMetaAjustes);
   document.getElementById('btn-guardar-fechas-reto').addEventListener('click', guardarFechasRetoAjustes);
   document.getElementById('btn-cambiar-pin').addEventListener('click', cambiarPinAjustes);
@@ -1155,13 +1319,10 @@ function wireGlobal() {
     const btn = e.target.closest('[data-borrar-peso]');
     if (btn) borrarRegistroPeso(btn.dataset.borrarPeso);
   });
-  document.getElementById('reto-vista-tabs').addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-vista-reto]');
-    if (!btn) return;
-    const carrera = btn.dataset.vistaReto === 'carrera';
-    document.querySelectorAll('#reto-vista-tabs button').forEach((b) => b.classList.toggle('activo', b === btn));
-    document.getElementById('reto-tendencia-contenido').classList.toggle('oculto', carrera);
-    document.getElementById('reto-carrera-contenido').classList.toggle('oculto', !carrera);
+  document.getElementById('btn-ver-historial').addEventListener('click', (e) => {
+    const cont = document.getElementById('historial-pesos');
+    const abierto = cont.classList.toggle('oculto') === false;
+    e.target.textContent = abierto ? 'Ocultar tus últimos registros' : '¿Te equivocaste al capturar? Ver tus últimos registros';
   });
 }
 

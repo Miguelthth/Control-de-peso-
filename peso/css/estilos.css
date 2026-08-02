@@ -143,11 +143,7 @@ button, input { font-family: inherit; }
    tarjeta normal, sin este problema). */
 .fondo-personalizado {
   position: fixed; inset: 0; background-size: cover; background-position: center;
-  opacity: 0.16; pointer-events: none;
-}
-:root[data-theme='dark'] .fondo-personalizado { opacity: 0.12; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .fondo-personalizado { opacity: 0.12; }
+  pointer-events: none;
 }
 .fondo-vista-previa {
   width: 100%; height: 90px; border-radius: 12px; background-size: cover; background-position: center;

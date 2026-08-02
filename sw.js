@@ -10,7 +10,7 @@
 // una versión anterior, NO se vuelven a descargar (ver precachearAssets).
 // Antes todo vivía junto en CACHE: cada versión nueva volvía a bajar los
 // videos completos aunque no hubieran cambiado -- eso era la parte lenta.
-const CACHE = 'mis-apps-v20';
+const CACHE = 'mis-apps-v21';
 const CACHE_ASSETS = 'mis-apps-assets';
 
 const ARCHIVOS = [

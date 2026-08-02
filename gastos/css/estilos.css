@@ -302,11 +302,7 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
    IndexedDB es del mismo origen, aquí solo hace falta mostrarla. */
 .fondo-personalizado {
   position: fixed; inset: 0; background-size: cover; background-position: center;
-  opacity: 0.16; pointer-events: none;
-}
-:root[data-theme='dark'] .fondo-personalizado { opacity: 0.12; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .fondo-personalizado { opacity: 0.12; }
+  pointer-events: none;
 }
 
 .popup-fondo {

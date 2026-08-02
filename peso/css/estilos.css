@@ -136,8 +136,13 @@ button, input { font-family: inherit; }
 }
 .tarjeta h2 { font-size: 0.95rem; margin: 0 0 10px; letter-spacing: .01em; }
 
+/* Sin z-index -- así pinta arriba del degradado del body (que sí es opaco)
+   pero abajo de #app (que no tiene fondo propio, deja ver esto en sus
+   huecos): con z-index:-1 quedaba detrás del fondo opaco del body y nunca
+   se veía en ningún lado, solo la miniatura de la vista previa (esa es una
+   tarjeta normal, sin este problema). */
 .fondo-personalizado {
-  position: fixed; inset: 0; z-index: -1; background-size: cover; background-position: center;
+  position: fixed; inset: 0; background-size: cover; background-position: center;
   opacity: 0.16; pointer-events: none;
 }
 :root[data-theme='dark'] .fondo-personalizado { opacity: 0.12; }

@@ -1,8 +1,10 @@
 // Fondo de pantalla personalizado (tu propia foto) -- vive en IndexedDB, no
 // en localStorage: una foto pesa más de lo que localStorage aguanta cómodo
 // sin arriesgar llenarlo y afectar lo demás guardado ahí (sesión, Face ID,
-// caché de datos). Por dispositivo -- no se sincroniza entre celulares, cada
-// quien la activa desde su propio Ajustes.
+// caché de datos). Por dispositivo -- no se sincroniza entre celulares, pero
+// SÍ es una sola clave por usuario (no por app): IndexedDB es del mismo
+// origen para el launcher, Gastos y Peso, así que se elige una vez y se ve
+// en las 3.
 
 const NOMBRE_DB = 'ma_fondos';
 const NOMBRE_TIENDA = 'fondos';
@@ -16,35 +18,31 @@ function abrirDB() {
   });
 }
 
-function clave(app, usuario) {
-  return `${app}_${usuario}`;
-}
-
-export async function guardarFondo(app, usuario, blob) {
+export async function guardarFondo(usuario, blob) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(NOMBRE_TIENDA, 'readwrite');
-    tx.objectStore(NOMBRE_TIENDA).put(blob, clave(app, usuario));
+    tx.objectStore(NOMBRE_TIENDA).put(blob, usuario);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-export async function leerFondo(app, usuario) {
+export async function leerFondo(usuario) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(NOMBRE_TIENDA, 'readonly');
-    const req = tx.objectStore(NOMBRE_TIENDA).get(clave(app, usuario));
+    const req = tx.objectStore(NOMBRE_TIENDA).get(usuario);
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
 }
 
-export async function borrarFondo(app, usuario) {
+export async function borrarFondo(usuario) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(NOMBRE_TIENDA, 'readwrite');
-    tx.objectStore(NOMBRE_TIENDA).delete(clave(app, usuario));
+    tx.objectStore(NOMBRE_TIENDA).delete(usuario);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

@@ -9,6 +9,7 @@ import { descifrar, cifrarConClave, crearClaveSesion, esPaqueteCifrado } from '.
 import { getUsuario, cerrarSesion, exigirSesion } from '../../shared/sesion.js';
 import * as passkey from '../../shared/passkey.js';
 import * as candado from '../../shared/candado.js';
+import * as fondo from '../../shared/fondo.js';
 
 const E = {
   clave: null, // CryptoKey de la sesión (evita rederivar PBKDF2 en cada guardado)
@@ -972,6 +973,22 @@ function wireGlobal() {
   });
 }
 
+// El fondo se ELIGE desde Peso → Ajustes, no aquí -- esto solo lo pinta,
+// leyéndolo de la misma IndexedDB (mismo origen para las 3 apps).
+let urlFondoActual = null;
+async function cargarFondoGuardado() {
+  try {
+    const blob = await fondo.leerFondo(getUsuario());
+    const el = document.getElementById('fondo-personalizado');
+    if (urlFondoActual) URL.revokeObjectURL(urlFondoActual);
+    urlFondoActual = blob ? URL.createObjectURL(blob) : null;
+    el.style.backgroundImage = urlFondoActual ? `url(${urlFondoActual})` : '';
+    el.classList.toggle('oculto', !urlFondoActual);
+  } catch {
+    // IndexedDB no disponible o falló -- no es crítico, la app sigue sin fondo.
+  }
+}
+
 async function init() {
   aplicarTema();
   wireGlobal();
@@ -981,6 +998,7 @@ async function init() {
 
   if (!exigirSesion('../index.html')) return;
 
+  cargarFondoGuardado();
   const yaExiste = await almacen.existeGastos(getUsuario()).catch(() => false);
   mostrarPantallaPassword(yaExiste ? 'entrar' : 'crear');
 }

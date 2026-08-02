@@ -474,6 +474,92 @@ const guardarCandado = candado.guardarCandado;
 const leerCandado = candado.leerCandado;
 const borrarCandado = candado.borrarCandado;
 
+// ── shared/fondo.js ──────────────────────────────────────────
+const fondo = (function () {
+// Fondo de pantalla personalizado (tu propia foto) -- vive en IndexedDB, no
+// en localStorage: una foto pesa más de lo que localStorage aguanta cómodo
+// sin arriesgar llenarlo y afectar lo demás guardado ahí (sesión, Face ID,
+// caché de datos). Por dispositivo -- no se sincroniza entre celulares, pero
+// SÍ es una sola clave por usuario (no por app): IndexedDB es del mismo
+// origen para el launcher, Gastos y Peso, así que se elige una vez y se ve
+// en las 3.
+
+const NOMBRE_DB = 'ma_fondos';
+const NOMBRE_TIENDA = 'fondos';
+
+function abrirDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(NOMBRE_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(NOMBRE_TIENDA);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function guardarFondo(usuario, blob) {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOMBRE_TIENDA, 'readwrite');
+    tx.objectStore(NOMBRE_TIENDA).put(blob, usuario);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function leerFondo(usuario) {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOMBRE_TIENDA, 'readonly');
+    const req = tx.objectStore(NOMBRE_TIENDA).get(usuario);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function borrarFondo(usuario) {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOMBRE_TIENDA, 'readwrite');
+    tx.objectStore(NOMBRE_TIENDA).delete(usuario);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Achica y recomprime la foto ANTES de guardarla -- una foto de celular
+// puede pesar varios MB a full resolución; para un fondo de pantalla nadie
+// necesita eso. 900px de ancho y calidad 0.72 deja algo de ~50-150 KB.
+function comprimirImagen(archivo, maxAncho = 900, calidad = 0.72) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(archivo);
+    img.onload = () => {
+      const ratio = Math.min(1, maxAncho / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(url);
+        if (blob) resolve(blob);
+        else reject(new Error('No se pudo procesar la imagen'));
+      }, 'image/jpeg', calidad);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Imagen inválida'));
+    };
+    img.src = url;
+  });
+}
+
+  return { guardarFondo, leerFondo, borrarFondo, comprimirImagen };
+})();
+const guardarFondo = fondo.guardarFondo;
+const leerFondo = fondo.leerFondo;
+const borrarFondo = fondo.borrarFondo;
+const comprimirImagen = fondo.comprimirImagen;
+
 // ── gastos/js/modelo.js ──────────────────────────────────────────
 const modelo = (function () {
 // Forma de los datos, valores por defecto y validación. Sin DOM, sin storage.
@@ -2181,6 +2267,22 @@ function wireGlobal() {
   });
 }
 
+// El fondo se ELIGE desde Peso → Ajustes, no aquí -- esto solo lo pinta,
+// leyéndolo de la misma IndexedDB (mismo origen para las 3 apps).
+let urlFondoActual = null;
+async function cargarFondoGuardado() {
+  try {
+    const blob = await fondo.leerFondo(getUsuario());
+    const el = document.getElementById('fondo-personalizado');
+    if (urlFondoActual) URL.revokeObjectURL(urlFondoActual);
+    urlFondoActual = blob ? URL.createObjectURL(blob) : null;
+    el.style.backgroundImage = urlFondoActual ? `url(${urlFondoActual})` : '';
+    el.classList.toggle('oculto', !urlFondoActual);
+  } catch {
+    // IndexedDB no disponible o falló -- no es crítico, la app sigue sin fondo.
+  }
+}
+
 async function init() {
   aplicarTema();
   wireGlobal();
@@ -2190,6 +2292,7 @@ async function init() {
 
   if (!exigirSesion('../index.html')) return;
 
+  cargarFondoGuardado();
   const yaExiste = await almacen.existeGastos(getUsuario()).catch(() => false);
   mostrarPantallaPassword(yaExiste ? 'entrar' : 'crear');
 }

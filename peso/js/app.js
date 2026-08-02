@@ -180,8 +180,10 @@ const fondo = (function () {
 // Fondo de pantalla personalizado (tu propia foto) -- vive en IndexedDB, no
 // en localStorage: una foto pesa más de lo que localStorage aguanta cómodo
 // sin arriesgar llenarlo y afectar lo demás guardado ahí (sesión, Face ID,
-// caché de datos). Por dispositivo -- no se sincroniza entre celulares, cada
-// quien la activa desde su propio Ajustes.
+// caché de datos). Por dispositivo -- no se sincroniza entre celulares, pero
+// SÍ es una sola clave por usuario (no por app): IndexedDB es del mismo
+// origen para el launcher, Gastos y Peso, así que se elige una vez y se ve
+// en las 3.
 
 const NOMBRE_DB = 'ma_fondos';
 const NOMBRE_TIENDA = 'fondos';
@@ -195,35 +197,31 @@ function abrirDB() {
   });
 }
 
-function clave(app, usuario) {
-  return `${app}_${usuario}`;
-}
-
-async function guardarFondo(app, usuario, blob) {
+async function guardarFondo(usuario, blob) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(NOMBRE_TIENDA, 'readwrite');
-    tx.objectStore(NOMBRE_TIENDA).put(blob, clave(app, usuario));
+    tx.objectStore(NOMBRE_TIENDA).put(blob, usuario);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-async function leerFondo(app, usuario) {
+async function leerFondo(usuario) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(NOMBRE_TIENDA, 'readonly');
-    const req = tx.objectStore(NOMBRE_TIENDA).get(clave(app, usuario));
+    const req = tx.objectStore(NOMBRE_TIENDA).get(usuario);
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
 }
 
-async function borrarFondo(app, usuario) {
+async function borrarFondo(usuario) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(NOMBRE_TIENDA, 'readwrite');
-    tx.objectStore(NOMBRE_TIENDA).delete(clave(app, usuario));
+    tx.objectStore(NOMBRE_TIENDA).delete(usuario);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -1128,7 +1126,7 @@ function actualizarVistaPreviaFondo() {
 
 async function cargarFondoGuardado() {
   try {
-    const blob = await fondo.leerFondo('peso', getUsuario());
+    const blob = await fondo.leerFondo(getUsuario());
     aplicarFondo(blob);
     actualizarVistaPreviaFondo();
   } catch {
@@ -1139,7 +1137,7 @@ async function cargarFondoGuardado() {
 async function elegirFondo(archivo) {
   try {
     const comprimida = await fondo.comprimirImagen(archivo);
-    await fondo.guardarFondo('peso', getUsuario(), comprimida);
+    await fondo.guardarFondo(getUsuario(), comprimida);
     aplicarFondo(comprimida);
     actualizarVistaPreviaFondo();
     toast('Fondo activado ✓');
@@ -1149,7 +1147,7 @@ async function elegirFondo(archivo) {
 }
 
 async function quitarFondo() {
-  await fondo.borrarFondo('peso', getUsuario());
+  await fondo.borrarFondo(getUsuario());
   aplicarFondo(null);
   actualizarVistaPreviaFondo();
   toast('Fondo quitado');

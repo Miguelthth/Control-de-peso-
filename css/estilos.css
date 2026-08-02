@@ -29,6 +29,17 @@ html, body {
 }
 button, input { font-family: inherit; }
 .oculto { display: none !important; }
+
+/* Se elige desde Peso → Ajustes, esto solo la pinta (misma IndexedDB, mismo
+   origen). Sin z-index -- pinta arriba del fondo del body, abajo de las
+   pantallas (que sí tienen su propio fondo sólido). */
+.fondo-personalizado {
+  position: fixed; inset: 0; background-size: cover; background-position: center;
+  opacity: 0.16; pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  .fondo-personalizado { opacity: 0.12; }
+}
 .texto-suave { color: var(--texto-suave); font-size: 0.85rem; }
 .texto-error { color: var(--peligro); font-size: 0.82rem; margin-top: 10px; }
 

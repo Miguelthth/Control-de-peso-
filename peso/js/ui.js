@@ -418,7 +418,7 @@ function actualizarVistaPreviaFondo() {
 
 async function cargarFondoGuardado() {
   try {
-    const blob = await fondo.leerFondo('peso', getUsuario());
+    const blob = await fondo.leerFondo(getUsuario());
     aplicarFondo(blob);
     actualizarVistaPreviaFondo();
   } catch {
@@ -429,7 +429,7 @@ async function cargarFondoGuardado() {
 async function elegirFondo(archivo) {
   try {
     const comprimida = await fondo.comprimirImagen(archivo);
-    await fondo.guardarFondo('peso', getUsuario(), comprimida);
+    await fondo.guardarFondo(getUsuario(), comprimida);
     aplicarFondo(comprimida);
     actualizarVistaPreviaFondo();
     toast('Fondo activado ✓');
@@ -439,7 +439,7 @@ async function elegirFondo(archivo) {
 }
 
 async function quitarFondo() {
-  await fondo.borrarFondo('peso', getUsuario());
+  await fondo.borrarFondo(getUsuario());
   aplicarFondo(null);
   actualizarVistaPreviaFondo();
   toast('Fondo quitado');

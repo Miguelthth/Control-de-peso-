@@ -4,6 +4,7 @@ import { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesio
 import * as api from '../shared/api.js';
 import * as passkey from '../shared/passkey.js';
 import * as candado from '../shared/candado.js';
+import * as fondo from '../shared/fondo.js';
 
 let usuarioTemp = null;
 let rolTemp = null;
@@ -171,11 +172,28 @@ function mostrarPantalla(id) {
   if (campo) campo.focus();
 }
 
+// El fondo se ELIGE desde Peso → Ajustes, no aquí -- esto solo lo pinta,
+// leyéndolo de la misma IndexedDB (mismo origen para las 3 apps).
+let urlFondoActual = null;
+async function cargarFondoGuardado() {
+  try {
+    const blob = await fondo.leerFondo(getUsuario());
+    const el = document.getElementById('fondo-personalizado');
+    if (urlFondoActual) URL.revokeObjectURL(urlFondoActual);
+    urlFondoActual = blob ? URL.createObjectURL(blob) : null;
+    el.style.backgroundImage = urlFondoActual ? `url(${urlFondoActual})` : '';
+    el.classList.toggle('oculto', !urlFondoActual);
+  } catch {
+    // IndexedDB no disponible o falló -- no es crítico, la app sigue sin fondo.
+  }
+}
+
 function mostrarInicio() {
   document.getElementById('saludo').textContent = `Hola, ${getUsuario()}`;
   document.getElementById('btn-agregar-usuario').classList.toggle('oculto', !esAdmin());
   mostrarPantalla('pantalla-inicio');
   actualizarBotonesFaceId();
+  cargarFondoGuardado();
 }
 
 async function agregarUsuario() {

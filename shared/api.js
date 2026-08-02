@@ -71,6 +71,10 @@ export function borrarPesos(usuario) {
   return _post({ accion: 'borrarPesos', usuario });
 }
 
+export function borrarPesoFecha(usuario, fecha) {
+  return _post({ accion: 'borrarPesoFecha', usuario, fecha });
+}
+
 export function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
   return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
 }

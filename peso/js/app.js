@@ -141,6 +141,10 @@ function borrarPesos(usuario) {
   return _post({ accion: 'borrarPesos', usuario });
 }
 
+function borrarPesoFecha(usuario, fecha) {
+  return _post({ accion: 'borrarPesoFecha', usuario, fecha });
+}
+
 function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
   return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
 }
@@ -153,7 +157,7 @@ function leerGastos(usuario) {
   return _get({ accion: 'leerGastos', usuario });
 }
 
-  return { leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, crearUsuario, guardarGastos, leerGastos };
+  return { leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
 const leerDatos = api.leerDatos;
 const leerVersion = api.leerVersion;
@@ -166,6 +170,7 @@ const guardarPeso = api.guardarPeso;
 const guardarMeta = api.guardarMeta;
 const guardarUnidad = api.guardarUnidad;
 const borrarPesos = api.borrarPesos;
+const borrarPesoFecha = api.borrarPesoFecha;
 const crearUsuario = api.crearUsuario;
 const guardarGastos = api.guardarGastos;
 const leerGastos = api.leerGastos;
@@ -471,11 +476,34 @@ function svgBarraAvance(pct, { width = 260 } = {}) {
   </div>`;
 }
 
-  return { svgLineaPeso, svgLineaComparativa, svgBarraAvance };
+// "Carrera al centro": cada quien avanza desde SU lado hacia la mitad según
+// su propio % de avance a SU propia meta -- si los dos llegan al 100%, las
+// dos barras se tocan justo en medio. Vista alterna a la gráfica de líneas
+// en "Nuestro reto" (botón para cambiar entre las dos).
+function svgBarraVersus(pctA, pctB, nombreA, nombreB, { width = 300 } = {}) {
+  const claA = Math.max(0, Math.min(1, pctA));
+  const claB = Math.max(0, Math.min(1, pctB));
+  const mitad = width / 2;
+  const anchoA = claA * mitad;
+  const anchoB = claB * mitad;
+  const alturaPista = 20;
+  const y = 30;
+  return `<svg viewBox="0 0 ${width} 56" width="100%" xmlns="${NS}" style="display:block; max-width:${width}px; margin:0 auto;">
+    <text x="2" y="14" font-size="12" font-weight="800" fill="var(--primario)">${nombreA} · ${Math.round(claA * 100)}%</text>
+    <text x="${width - 2}" y="14" font-size="12" font-weight="800" fill="var(--acento)" text-anchor="end">${nombreB} · ${Math.round(claB * 100)}%</text>
+    <rect x="0" y="${y}" width="${width}" height="${alturaPista}" rx="10" fill="var(--superficie-alt)" stroke="var(--borde)"/>
+    <rect x="0" y="${y}" width="${Math.max(anchoA, claA > 0 ? 10 : 0)}" height="${alturaPista}" rx="10" fill="var(--primario)"/>
+    <rect x="${width - Math.max(anchoB, claB > 0 ? 10 : 0)}" y="${y}" width="${Math.max(anchoB, claB > 0 ? 10 : 0)}" height="${alturaPista}" rx="10" fill="var(--acento)"/>
+    <line x1="${mitad}" y1="${y - 4}" x2="${mitad}" y2="${y + alturaPista + 4}" stroke="var(--texto-suave)" stroke-width="2" stroke-dasharray="2 3"/>
+  </svg>`;
+}
+
+  return { svgLineaPeso, svgLineaComparativa, svgBarraAvance, svgBarraVersus };
 })();
 const svgLineaPeso = graficas.svgLineaPeso;
 const svgLineaComparativa = graficas.svgLineaComparativa;
 const svgBarraAvance = graficas.svgBarraAvance;
+const svgBarraVersus = graficas.svgBarraVersus;
 
 // ── peso/js/cola.js ──────────────────────────────────────────
 const cola = (function () {
@@ -827,6 +855,40 @@ function renderProgreso() {
   document.getElementById('grafica-semanal').innerHTML = graficas.svgLineaPeso(semanal.map((s) => ({ fecha: s.semana, pesoKg: s.pesoKg })));
 
   mostrarGraficaActiva();
+  renderHistorial(serie);
+}
+
+// Últimos 10, del más reciente al más viejo, con botón de borrar -- para
+// cuando Cindy o Miguel se equivocan al capturar y quieren corregirlo sin
+// tener que borrar TODO su historial (eso ya existía, esto no).
+function renderHistorial(serie) {
+  const ultimos = serie.slice(-10).reverse();
+  const cont = document.getElementById('historial-pesos');
+  if (!ultimos.length) {
+    cont.innerHTML = '<p class="texto-suave">Todavía no capturas nada.</p>';
+    return;
+  }
+  cont.innerHTML = ultimos
+    .map(
+      (p) => `<div class="lista-item">
+      <span>${formatoFechaCorta(p.fecha)} — ${formatoPesoDualColor(p.pesoKg)}</span>
+      <button class="icono" data-borrar-peso="${p.fecha}" title="Borrar este registro">🗑️</button>
+    </div>`
+    )
+    .join('');
+}
+
+async function borrarRegistroPeso(fecha) {
+  const ok = await confirmarPopup(`¿Borrar tu registro del ${formatoFechaCorta(fecha)}? No se puede deshacer.`);
+  if (!ok) return;
+  try {
+    const r = await api.borrarPesoFecha(getUsuario(), fecha);
+    if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el borrado');
+    toast('Registro borrado ✓');
+    await cargarYRenderizar();
+  } catch (e) {
+    toast('No se pudo borrar (¿sin conexión?): ' + e.message, true);
+  }
 }
 
 const IDS_GRAFICA = { diaria: 'grafica-diaria', tendencia: 'grafica-progreso', semanal: 'grafica-semanal' };
@@ -893,6 +955,13 @@ function renderReto() {
     const r = racha(E.datos.pesos, nombre);
     return { nombre, ultimo, avance, racha: r };
   });
+
+  document.getElementById('grafica-versus').innerHTML = graficas.svgBarraVersus(
+    filas[0]?.avance?.pctAvance || 0,
+    filas[1]?.avance?.pctAvance || 0,
+    filas[0]?.nombre || getUsuario(),
+    filas[1]?.nombre || '—'
+  );
 
   document.getElementById('reto-tarjetas').innerHTML = filas.map((f) => `
     <div class="tarjeta-persona">
@@ -1081,6 +1150,18 @@ function wireGlobal() {
       e.preventDefault();
       confirmarPopup('¿Seguro que quieres ir a Gastos?').then((ok) => { if (ok) location.href = a.href; });
     });
+  });
+  document.getElementById('historial-pesos').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-borrar-peso]');
+    if (btn) borrarRegistroPeso(btn.dataset.borrarPeso);
+  });
+  document.getElementById('reto-vista-tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-vista-reto]');
+    if (!btn) return;
+    const carrera = btn.dataset.vistaReto === 'carrera';
+    document.querySelectorAll('#reto-vista-tabs button').forEach((b) => b.classList.toggle('activo', b === btn));
+    document.getElementById('reto-tendencia-contenido').classList.toggle('oculto', carrera);
+    document.getElementById('reto-carrera-contenido').classList.toggle('oculto', !carrera);
   });
 }
 

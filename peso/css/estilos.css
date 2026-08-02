@@ -161,6 +161,13 @@ button, input { font-family: inherit; }
 .captura-peso .unidad { font-size: 1.3rem; color: var(--texto-suave); font-weight: 700; text-transform: uppercase; }
 .captura-tarjeta .btn-primario { margin: 16px auto 0; }
 
+.lista-item {
+  display: flex; align-items: center; justify-content: space-between; padding: 10px 4px;
+  border-bottom: 1px solid var(--borde); font-size: 0.87rem;
+}
+.lista-item:last-child { border-bottom: none; }
+.lista-item .icono { background: none; border: none; font-size: 1.05rem; cursor: pointer; padding: 4px 8px; }
+
 .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
 .kpi {
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 16px;

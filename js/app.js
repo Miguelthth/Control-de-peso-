@@ -141,6 +141,10 @@ function borrarPesos(usuario) {
   return _post({ accion: 'borrarPesos', usuario });
 }
 
+function borrarPesoFecha(usuario, fecha) {
+  return _post({ accion: 'borrarPesoFecha', usuario, fecha });
+}
+
 function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
   return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
 }
@@ -153,7 +157,7 @@ function leerGastos(usuario) {
   return _get({ accion: 'leerGastos', usuario });
 }
 
-  return { leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, crearUsuario, guardarGastos, leerGastos };
+  return { leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
 const leerDatos = api.leerDatos;
 const leerVersion = api.leerVersion;
@@ -166,6 +170,7 @@ const guardarPeso = api.guardarPeso;
 const guardarMeta = api.guardarMeta;
 const guardarUnidad = api.guardarUnidad;
 const borrarPesos = api.borrarPesos;
+const borrarPesoFecha = api.borrarPesoFecha;
 const crearUsuario = api.crearUsuario;
 const guardarGastos = api.guardarGastos;
 const leerGastos = api.leerGastos;

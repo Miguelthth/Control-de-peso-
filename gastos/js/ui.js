@@ -220,6 +220,16 @@ function mostrarErrorPassword(msg) {
   el.classList.remove('oculto');
 }
 
+// Cubre el rato real que tarda bajar + descifrar (nunca es instantáneo, ver
+// comentario en confirmarPassword) -- sin esto la pantalla se quedaba
+// quieta sin avisar que sí estaba pasando algo.
+function mostrarVerificandoPassword(verificando) {
+  document.getElementById('password-emoji').textContent = verificando ? '⏳' : '🔒';
+  document.getElementById('password-titulo').textContent = verificando ? 'Verificando…' : 'Ingresa tu contraseña';
+  document.getElementById('btn-password-confirmar').disabled = verificando;
+  document.getElementById('btn-faceid-password').disabled = verificando;
+}
+
 function finalizarConexion(pendienteDeSincronizar) {
   document.getElementById('pantalla-password').classList.add('oculto');
   document.getElementById('app').classList.remove('oculto');
@@ -248,6 +258,10 @@ async function confirmarPassword() {
     finalizarConexion(false);
     ofrecerActivarFaceId(pass);
   } else {
+    // Este paso SIEMPRE tarda un poco (baja tus datos de Google + descifra
+    // con 250,000 vueltas de PBKDF2, a propósito, por seguridad) -- sin
+    // avisar nada aquí, se sentía como que la app se quedó pasmada.
+    mostrarVerificandoPassword(true);
     try {
       const { datos, pendienteDeSincronizar, clave, saltB64 } = await almacen.cargar(getUsuario(), pass);
       E.clave = clave;
@@ -261,6 +275,7 @@ async function confirmarPassword() {
       finalizarConexion(pendienteDeSincronizar);
       ofrecerActivarFaceId(pass);
     } catch (e) {
+      mostrarVerificandoPassword(false);
       mostrarErrorPassword(e.message || 'Contraseña incorrecta');
     }
   }

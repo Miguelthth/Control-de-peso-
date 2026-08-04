@@ -28,3 +28,19 @@ export function leerCandado(app, usuario) {
 export function borrarCandado(app, usuario) {
   localStorage.removeItem(clave(app, usuario));
 }
+
+// "Ya hiciste Face ID hace un momento" -- así Gastos no lo vuelve a pedir si
+// acabas de confirmarlo en el launcher (o viceversa). Ventana corta a
+// propósito: es para cubrir "abrí la app y de ahí entré a Gastos", no para
+// dejar la sesión abierta indefinidamente sin Face ID.
+const CLAVE_RECIENTE = 'ma_faceid_reciente';
+const VENTANA_RECIENTE_MS = 3 * 60 * 1000; // 3 minutos
+
+export function marcarFaceIdConfirmado() {
+  localStorage.setItem(CLAVE_RECIENTE, String(Date.now()));
+}
+
+export function faceIdConfirmadoReciente() {
+  const ts = Number(localStorage.getItem(CLAVE_RECIENTE) || 0);
+  return Date.now() - ts < VENTANA_RECIENTE_MS;
+}

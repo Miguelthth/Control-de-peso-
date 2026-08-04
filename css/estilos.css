@@ -35,12 +35,14 @@ button, input { font-family: inherit; }
    pantallas (que sí tienen su propio fondo sólido). */
 .fondo-personalizado {
   position: fixed; inset: 0; background-size: cover; background-position: center;
-  pointer-events: none;
+  opacity: 0.4; pointer-events: none;
 }
 .texto-suave { color: var(--texto-suave); font-size: 0.85rem; }
 .texto-error { color: var(--peligro); font-size: 0.82rem; margin-top: 10px; }
 
 .pantalla-centrada {
+  position: relative; background: var(--fondo); /* opaco a propósito: son pantallas de acceso
+    con poco contenido -- sin esto, la foto de fondo tapaba casi toda la pantalla */
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: 100vh; text-align: center; padding: 32px;
 }

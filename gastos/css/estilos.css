@@ -52,6 +52,8 @@ html, body {
 button, input, select, textarea { font-family: inherit; }
 
 #app {
+  position: relative;
+  z-index: 1;
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
@@ -286,7 +288,8 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
 }
 
 .pantalla-conexion {
-  position: relative;
+  position: relative; background: var(--fondo); /* opaco a propósito: pantalla de acceso
+    con poco contenido -- sin esto, la foto de fondo tapaba casi todo */
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: 100vh; text-align: center; padding: 32px;
 }
@@ -302,7 +305,7 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
    IndexedDB es del mismo origen, aquí solo hace falta mostrarla. */
 .fondo-personalizado {
   position: fixed; inset: 0; background-size: cover; background-position: center;
-  pointer-events: none;
+  opacity: 0.4; pointer-events: none;
 }
 
 .popup-fondo {

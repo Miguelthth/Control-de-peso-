@@ -39,7 +39,7 @@ button, input { font-family: inherit; }
 .texto-suave { color: var(--texto-suave); font-size: 0.82rem; }
 .texto-error { color: var(--peligro); font-size: 0.82rem; margin-top: 10px; }
 
-#app { max-width: 480px; margin: 0 auto; min-height: 100vh; padding-bottom: 76px; }
+#app { position: relative; z-index: 1; max-width: 480px; margin: 0 auto; min-height: 100vh; padding-bottom: 76px; }
 
 .nav-apps { display: flex; gap: 4px; }
 .nav-apps .icono {
@@ -143,7 +143,7 @@ button, input { font-family: inherit; }
    tarjeta normal, sin este problema). */
 .fondo-personalizado {
   position: fixed; inset: 0; background-size: cover; background-position: center;
-  pointer-events: none;
+  opacity: 0.4; pointer-events: none;
 }
 .fondo-vista-previa {
   width: 100%; height: 90px; border-radius: 12px; background-size: cover; background-position: center;

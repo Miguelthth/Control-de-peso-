@@ -354,11 +354,29 @@ function borrarCandado(app, usuario) {
   localStorage.removeItem(clave(app, usuario));
 }
 
-  return { guardarCandado, leerCandado, borrarCandado };
+// "Ya hiciste Face ID hace un momento" -- así Gastos no lo vuelve a pedir si
+// acabas de confirmarlo en el launcher (o viceversa). Ventana corta a
+// propósito: es para cubrir "abrí la app y de ahí entré a Gastos", no para
+// dejar la sesión abierta indefinidamente sin Face ID.
+const CLAVE_RECIENTE = 'ma_faceid_reciente';
+const VENTANA_RECIENTE_MS = 3 * 60 * 1000; // 3 minutos
+
+function marcarFaceIdConfirmado() {
+  localStorage.setItem(CLAVE_RECIENTE, String(Date.now()));
+}
+
+function faceIdConfirmadoReciente() {
+  const ts = Number(localStorage.getItem(CLAVE_RECIENTE) || 0);
+  return Date.now() - ts < VENTANA_RECIENTE_MS;
+}
+
+  return { guardarCandado, leerCandado, borrarCandado, marcarFaceIdConfirmado, faceIdConfirmadoReciente };
 })();
 const guardarCandado = candado.guardarCandado;
 const leerCandado = candado.leerCandado;
 const borrarCandado = candado.borrarCandado;
+const marcarFaceIdConfirmado = candado.marcarFaceIdConfirmado;
+const faceIdConfirmadoReciente = candado.faceIdConfirmadoReciente;
 
 // ── shared/fondo.js ──────────────────────────────────────────
 const fondo = (function () {
@@ -488,6 +506,7 @@ async function entrarConFaceId(usuario) {
     mostrarErrorUsuario('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
     return;
   }
+  candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
   iniciarSesion(usuario, datos.rol);
   mostrarInicio();
 }
@@ -507,6 +526,7 @@ async function intentarCandado(usuario) {
     document.getElementById('candado-texto').textContent = e.message;
     return;
   }
+  candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
   mostrarInicio();
 }
 
@@ -553,6 +573,7 @@ async function activarFaceIdConPin(usuario, rol, pin) {
   try {
     if (!passkey.tieneRegistro(usuario)) await passkey.registrar(usuario); // reusa el de Gastos si ya existe
     candado.guardarCandado('launcher', usuario, { pin, rol });
+    candado.marcarFaceIdConfirmado();
     alert('Face ID activado ✓ — la próxima vez que abras la app te lo va a pedir.');
     actualizarBotonesFaceId();
   } catch (e) {
@@ -789,7 +810,14 @@ async function init() {
     cargarFondoGuardado(); // aquí, no solo en mostrarInicio() -- si no, la
     // pantalla de candado (Face ID), que es la PRIMERA que ves al reabrir la
     // app, se quedaba sin fondo hasta que pasabas de esa pantalla.
-    if (candado.leerCandado('launcher', usuario) && (await passkey.disponible())) {
+    //
+    // Optimista a propósito: NO se espera a passkey.disponible() (esa
+    // consulta al sensor tarda un rato y era justo el "tarda en aparecer")
+    // para decidir qué pantalla mostrar -- si hay PIN cacheado, se muestra
+    // la pantalla de candado de una vez; si el sensor resulta no estar
+    // disponible, intentarCandado() ya lo explica ahí mismo con un mensaje
+    // claro y el botón de "Usar mi PIN" sigue ahí como respaldo.
+    if (candado.leerCandado('launcher', usuario)) {
       mostrarPantallaCandado(usuario);
     } else {
       mostrarInicio();

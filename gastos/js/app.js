@@ -468,11 +468,29 @@ function borrarCandado(app, usuario) {
   localStorage.removeItem(clave(app, usuario));
 }
 
-  return { guardarCandado, leerCandado, borrarCandado };
+// "Ya hiciste Face ID hace un momento" -- así Gastos no lo vuelve a pedir si
+// acabas de confirmarlo en el launcher (o viceversa). Ventana corta a
+// propósito: es para cubrir "abrí la app y de ahí entré a Gastos", no para
+// dejar la sesión abierta indefinidamente sin Face ID.
+const CLAVE_RECIENTE = 'ma_faceid_reciente';
+const VENTANA_RECIENTE_MS = 3 * 60 * 1000; // 3 minutos
+
+function marcarFaceIdConfirmado() {
+  localStorage.setItem(CLAVE_RECIENTE, String(Date.now()));
+}
+
+function faceIdConfirmadoReciente() {
+  const ts = Number(localStorage.getItem(CLAVE_RECIENTE) || 0);
+  return Date.now() - ts < VENTANA_RECIENTE_MS;
+}
+
+  return { guardarCandado, leerCandado, borrarCandado, marcarFaceIdConfirmado, faceIdConfirmadoReciente };
 })();
 const guardarCandado = candado.guardarCandado;
 const leerCandado = candado.leerCandado;
 const borrarCandado = candado.borrarCandado;
+const marcarFaceIdConfirmado = candado.marcarFaceIdConfirmado;
+const faceIdConfirmadoReciente = candado.faceIdConfirmadoReciente;
 
 // ── shared/fondo.js ──────────────────────────────────────────
 const fondo = (function () {
@@ -1432,8 +1450,24 @@ function mostrarPantallaPassword(modo) {
   document.getElementById('password-input').value = '';
   document.getElementById('password-confirmar').value = '';
   document.getElementById('password-input').focus();
-  if (modo === 'entrar') mostrarBotonFaceId();
-  else document.getElementById('btn-faceid-password').classList.add('oculto');
+  if (modo === 'entrar') {
+    if (!intentarEntradaAutomatica()) mostrarBotonFaceId();
+  } else {
+    document.getElementById('btn-faceid-password').classList.add('oculto');
+  }
+}
+
+// Si acabas de confirmar Face ID en el launcher hace un momento, entra solo
+// -- sin volver a pedir Face ID aquí. Antes CADA app pedía su propio Face
+// ID por separado, y eso se sentía como "dos Face ID" para una sola entrada
+// a la app. Regresa true si ya quedó resuelto (no hace falta mostrar botón).
+function intentarEntradaAutomatica() {
+  const datosCache = candado.leerCandado('gastos', getUsuario());
+  if (!datosCache || !candado.faceIdConfirmadoReciente()) return false;
+  E.passwordModo = 'entrar';
+  document.getElementById('password-input').value = datosCache.password;
+  confirmarPassword();
+  return true;
 }
 
 // Face ID es un candado local por dispositivo (ver shared/passkey.js) que
@@ -1442,9 +1476,12 @@ function mostrarPantallaPassword(modo) {
 // dos apps -- lo que decide si Gastos lo usa es si hay una contraseña
 // cacheada aquí (candado 'gastos'), no si el passkey existe (ese puede
 // haberse creado desde el launcher, para el PIN, sin que Gastos sepa).
-async function mostrarBotonFaceId() {
-  const disponible = await passkey.disponible();
-  const mostrar = disponible && !!candado.leerCandado('gastos', getUsuario());
+// Optimista a propósito (no espera passkey.disponible(), esa consulta al
+// sensor era justo la demora de la que se quejó Miguel): si hay contraseña
+// cacheada, se muestra el botón de una vez -- si el sensor resulta no
+// disponible, intentarFaceId() ya lo explica ahí mismo al tocarlo.
+function mostrarBotonFaceId() {
+  const mostrar = !!candado.leerCandado('gastos', getUsuario());
   document.getElementById('btn-faceid-password').classList.toggle('oculto', !mostrar);
   document.getElementById('password-o-separador').classList.toggle('oculto', !mostrar);
 }
@@ -1461,6 +1498,7 @@ async function intentarFaceId() {
     mostrarErrorPassword(e.message);
     return;
   }
+  candado.marcarFaceIdConfirmado();
   document.getElementById('password-input').value = datosCache.password;
   await confirmarPassword();
 }

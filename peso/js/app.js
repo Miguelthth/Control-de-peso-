@@ -589,7 +589,16 @@ function validarPeso(pesoKg) {
   if (!Number.isFinite(n) || n <= 0 || n > 400) {
     throw new Error('Peso inválido');
   }
-  return Math.round(n * 10) / 10;
+  return Math.round(n * 100) / 100;
+}
+
+function normalizarEntradaPeso(valor) {
+  const texto = String(valor ?? '').replace(',', '.').replace(/[^0-9.]/g, '');
+  const punto = texto.indexOf('.');
+  if (punto < 0) return texto.slice(0, 3);
+  const entero = texto.slice(0, punto).slice(0, 3);
+  const decimales = texto.slice(punto + 1).replace(/\./g, '').slice(0, 2);
+  return `${entero}.${decimales}`;
 }
 
 function kgALb(kg) {
@@ -617,10 +626,11 @@ function formatoPesoDual(pesoKg, decimales = 1) {
   return `${kgTxt} kg · ${lbTxt} lb`;
 }
 
-  return { hoyISO, validarPeso, kgALb, lbAKg, aKg, formatoPesoDual };
+  return { hoyISO, validarPeso, normalizarEntradaPeso, kgALb, lbAKg, aKg, formatoPesoDual };
 })();
 const hoyISO = modelo.hoyISO;
 const validarPeso = modelo.validarPeso;
+const normalizarEntradaPeso = modelo.normalizarEntradaPeso;
 const kgALb = modelo.kgALb;
 const lbAKg = modelo.lbAKg;
 const aKg = modelo.aKg;
@@ -646,6 +656,7 @@ function racha(pesos, usuario, hoy = hoyISO()) {
   const fechas = new Set(pesosDeUsuario(pesos, usuario).map((p) => p.fecha));
   let n = 0;
   let cursor = new Date(`${hoy}T00:00:00`);
+  if (!fechas.has(hoy)) cursor.setDate(cursor.getDate() - 1);
   while (true) {
     const iso = cursor.toISOString().slice(0, 10);
     if (!fechas.has(iso)) break;
@@ -1166,7 +1177,7 @@ const esCampoAjusteDiferible = actualizacion.esCampoAjusteDiferible;
 const ui_helpers = (function () {
 function prepararEdicion(registro, unidad) {
   const valor = unidad === 'lb' ? kgALb(registro.pesoKg) : registro.pesoKg;
-  return { fecha: registro.fecha, pesoStr: Number(valor).toFixed(1) };
+  return { fecha: registro.fecha, pesoStr: Number(valor).toFixed(2).replace(/0$/, '') };
 }
 
 function mensajeBorrado({ sinConexion, pendientes }) {
@@ -1346,8 +1357,8 @@ function renderCapturar() {
   document.getElementById('captura-unidad').textContent = unidad;
   document.getElementById('captura-fecha').value = E.captura.fecha;
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
-  document.getElementById('captura-peso-input').value = E.captura.pesoStr;
   document.getElementById('btn-guardar-captura').textContent = E.captura.editandoFechaOriginal ? 'Guardar cambios' : 'Registrar peso';
+  document.getElementById('captura-modo-edicion').classList.toggle('oculto', !E.captura.editandoFechaOriginal);
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
   document.getElementById('captura-ultimo').innerHTML = ultimo
     ? `Última captura: ${escapeHTML(ultimo.fecha)} — ${formatoPesoDualColor(ultimo.pesoKg)}`
@@ -1403,7 +1414,9 @@ function mostrarRegistroOverlay() {
 
 function wireCapturar() {
   document.getElementById('captura-peso-input').addEventListener('input', (e) => {
-    E.captura.pesoStr = e.target.value;
+    const limpio = normalizarEntradaPeso(e.target.value);
+    if (limpio !== e.target.value) e.target.value = limpio;
+    E.captura.pesoStr = limpio;
     renderCapturar();
     intentarRecargaDiferida();
   });
@@ -1469,8 +1482,8 @@ function renderHistorial(serie) {
       (p) => `<div class="lista-item">
       <span>${escapeHTML(formatoFechaCorta(p.fecha))} — ${formatoPesoDualColor(p.pesoKg)}</span>
       <span class="lista-acciones">
-        <button class="icono" data-editar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Editar registro del ${formatoFechaCorta(p.fecha)}`)}">✏️</button>
-        <button class="icono" data-borrar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Borrar registro del ${formatoFechaCorta(p.fecha)}`)}">🗑️</button>
+        <button type="button" class="accion-historial accion-editar" data-editar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Editar registro del ${formatoFechaCorta(p.fecha)}`)}">Editar</button>
+        <button type="button" class="accion-historial accion-borrar" data-borrar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Borrar registro del ${formatoFechaCorta(p.fecha)}`)}">Borrar</button>
       </span>
     </div>`
     )
@@ -1501,6 +1514,8 @@ function editarRegistroPeso(fecha) {
   const input = document.getElementById('captura-peso-input');
   input.value = E.captura.pesoStr;
   input.focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('Registro abierto para editar');
 }
 
 async function borrarRegistroPeso(fecha) {

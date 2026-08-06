@@ -135,6 +135,10 @@ button, input { font-family: inherit; }
 }
 #historial-pesos { margin-top: 10px; }
 .lista-acciones { display: flex; gap: 2px; flex: 0 0 auto; }
+.accion-historial { min-height: 40px; padding: 7px 9px; border: 1px solid var(--borde); border-radius: 9px; background: var(--superficie); color: var(--texto); font-size: .78rem; font-weight: 700; cursor: pointer; }
+.accion-editar { color: var(--primario); }
+.accion-borrar { color: var(--peligro); }
+.modo-edicion { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--primario) 12%, transparent); color: var(--primario); font-weight: 700; }
 .actualizacion-datos { margin: 0 0 12px; }
 .actualizacion-datos div { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
 .actualizacion-datos dt { color: var(--texto-suave); }

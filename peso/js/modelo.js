@@ -11,7 +11,16 @@ export function validarPeso(pesoKg) {
   if (!Number.isFinite(n) || n <= 0 || n > 400) {
     throw new Error('Peso inválido');
   }
-  return Math.round(n * 10) / 10;
+  return Math.round(n * 100) / 100;
+}
+
+export function normalizarEntradaPeso(valor) {
+  const texto = String(valor ?? '').replace(',', '.').replace(/[^0-9.]/g, '');
+  const punto = texto.indexOf('.');
+  if (punto < 0) return texto.slice(0, 3);
+  const entero = texto.slice(0, punto).slice(0, 3);
+  const decimales = texto.slice(punto + 1).replace(/\./g, '').slice(0, 2);
+  return `${entero}.${decimales}`;
 }
 
 export function kgALb(kg) {

@@ -154,6 +154,11 @@ async function activarFaceIdConPin(usuario, rol, pin) {
 // puede llevar awaits en medio es el tramo entre el toque y el registro.
 async function ofrecerFaceId(usuario, rol, pin) {
   if (candado.leerCandado('launcher', usuario)) return; // ya activado -- no volver a preguntar
+  if (passkey.tieneRegistro(usuario)) {
+    candado.guardarCandado('launcher', usuario, { pin, rol });
+    actualizarBotonesFaceId();
+    return;
+  }
   if (!(await passkey.disponible())) return;
   popupFaceId(
     '¿Activar Face ID en este iPhone para no volver a teclear tu PIN?',
@@ -440,6 +445,7 @@ async function init() {
     // claro y el botón de "Usar mi PIN" sigue ahí como respaldo.
     if (candado.leerCandado('launcher', usuario)) {
       mostrarPantallaCandado(usuario);
+      intentarCandado(usuario);
     } else {
       mostrarInicio();
     }

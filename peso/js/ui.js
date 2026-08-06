@@ -8,7 +8,7 @@ import * as api from '../../shared/api.js';
 import * as graficas from './graficas.js';
 import * as actualizacion from './actualizacion.js';
 import * as uiHelpers from './ui_helpers.js';
-import { hoyISO, validarPeso, kgALb, lbAKg, aKg } from './modelo.js';
+import { hoyISO, validarPeso, kgALb, lbAKg, aKg, normalizarEntradaPeso } from './modelo.js';
 import {
   pesosDeUsuario, ultimoPeso, racha, promedioMovil, avanceMeta, promedioSemanal,
 } from './calculos.js';
@@ -168,8 +168,8 @@ function renderCapturar() {
   document.getElementById('captura-unidad').textContent = unidad;
   document.getElementById('captura-fecha').value = E.captura.fecha;
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
-  document.getElementById('captura-peso-input').value = E.captura.pesoStr;
   document.getElementById('btn-guardar-captura').textContent = E.captura.editandoFechaOriginal ? 'Guardar cambios' : 'Registrar peso';
+  document.getElementById('captura-modo-edicion').classList.toggle('oculto', !E.captura.editandoFechaOriginal);
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
   document.getElementById('captura-ultimo').innerHTML = ultimo
     ? `Última captura: ${escapeHTML(ultimo.fecha)} — ${formatoPesoDualColor(ultimo.pesoKg)}`
@@ -225,7 +225,9 @@ function mostrarRegistroOverlay() {
 
 function wireCapturar() {
   document.getElementById('captura-peso-input').addEventListener('input', (e) => {
-    E.captura.pesoStr = e.target.value;
+    const limpio = normalizarEntradaPeso(e.target.value);
+    if (limpio !== e.target.value) e.target.value = limpio;
+    E.captura.pesoStr = limpio;
     renderCapturar();
     intentarRecargaDiferida();
   });
@@ -291,8 +293,8 @@ function renderHistorial(serie) {
       (p) => `<div class="lista-item">
       <span>${escapeHTML(formatoFechaCorta(p.fecha))} — ${formatoPesoDualColor(p.pesoKg)}</span>
       <span class="lista-acciones">
-        <button class="icono" data-editar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Editar registro del ${formatoFechaCorta(p.fecha)}`)}">✏️</button>
-        <button class="icono" data-borrar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Borrar registro del ${formatoFechaCorta(p.fecha)}`)}">🗑️</button>
+        <button type="button" class="accion-historial accion-editar" data-editar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Editar registro del ${formatoFechaCorta(p.fecha)}`)}">Editar</button>
+        <button type="button" class="accion-historial accion-borrar" data-borrar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Borrar registro del ${formatoFechaCorta(p.fecha)}`)}">Borrar</button>
       </span>
     </div>`
     )
@@ -323,6 +325,8 @@ function editarRegistroPeso(fecha) {
   const input = document.getElementById('captura-peso-input');
   input.value = E.captura.pesoStr;
   input.focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('Registro abierto para editar');
 }
 
 async function borrarRegistroPeso(fecha) {

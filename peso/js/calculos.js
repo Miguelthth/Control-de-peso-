@@ -18,6 +18,7 @@ export function racha(pesos, usuario, hoy = hoyISO()) {
   const fechas = new Set(pesosDeUsuario(pesos, usuario).map((p) => p.fecha));
   let n = 0;
   let cursor = new Date(`${hoy}T00:00:00`);
+  if (!fechas.has(hoy)) cursor.setDate(cursor.getDate() - 1);
   while (true) {
     const iso = cursor.toISOString().slice(0, 10);
     if (!fechas.has(iso)) break;

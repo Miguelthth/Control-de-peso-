@@ -2,7 +2,7 @@ import { kgALb } from './modelo.js';
 
 export function prepararEdicion(registro, unidad) {
   const valor = unidad === 'lb' ? kgALb(registro.pesoKg) : registro.pesoKg;
-  return { fecha: registro.fecha, pesoStr: Number(valor).toFixed(1) };
+  return { fecha: registro.fecha, pesoStr: Number(valor).toFixed(2).replace(/0$/, '') };
 }
 
 export function mensajeBorrado({ sinConexion, pendientes }) {

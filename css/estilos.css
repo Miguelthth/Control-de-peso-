@@ -29,6 +29,7 @@ button, input { font-family: inherit; }
 }
 
 .tarjeta-login {
+  position: relative;
   width: min(100%, 360px);
   display: grid;
   gap: var(--space-3);
@@ -39,6 +40,12 @@ button, input { font-family: inherit; }
   box-shadow: var(--sombra-elevada);
   backdrop-filter: blur(16px);
 }
+.btn-volver-acceso {
+  position: absolute; top: 12px; left: 12px; width: 44px !important; height: 44px;
+  min-height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent;
+  color: var(--texto); font-size: 1.55rem; cursor: pointer;
+}
+.btn-volver-acceso:active { background: color-mix(in srgb, var(--primario) 12%, transparent); }
 .tarjeta-login > input,
 .tarjeta-login > button { width: 100%; max-width: none; margin: 0; }
 .tarjeta-login > .texto-suave { margin: 0 0 var(--space-1); text-align: left; }

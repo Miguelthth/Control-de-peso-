@@ -6,6 +6,7 @@ import { borrarToken, guardarToken, leerToken } from './autorizacion.js';
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
+const CLAVE_PERFILES = 'ma_perfiles_conocidos';
 const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
@@ -34,10 +35,32 @@ export function esAdmin() {
   return getRol() === 'admin';
 }
 
+// Solo guarda metadatos de navegación para evitar una consulta preliminar a
+// Apps Script. No contiene PIN, token ni ningún secreto de autenticación.
+export function guardarPerfilConocido(usuario, rol, tienePin = true) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) return;
+  let perfiles = {};
+  try { perfiles = JSON.parse(localStorage.getItem(CLAVE_PERFILES) || '{}'); } catch { perfiles = {}; }
+  perfiles[nombre.toLowerCase()] = { usuario: nombre, rol: String(rol || ''), tienePin: tienePin === true };
+  localStorage.setItem(CLAVE_PERFILES, JSON.stringify(perfiles));
+}
+
+export function leerPerfilConocido(usuario) {
+  try {
+    const perfiles = JSON.parse(localStorage.getItem(CLAVE_PERFILES) || '{}');
+    const perfil = perfiles[String(usuario || '').trim().toLowerCase()];
+    return perfil && typeof perfil.usuario === 'string' ? perfil : null;
+  } catch {
+    return null;
+  }
+}
+
 export function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
   if (token) guardarToken(token);
+  guardarPerfilConocido(usuario, rol, true);
 }
 
 export function cerrarSesion() {

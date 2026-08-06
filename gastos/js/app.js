@@ -127,6 +127,7 @@ const sesion = (function () {
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
+const CLAVE_PERFILES = 'ma_perfiles_conocidos';
 const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
@@ -155,10 +156,32 @@ function esAdmin() {
   return getRol() === 'admin';
 }
 
+// Solo guarda metadatos de navegación para evitar una consulta preliminar a
+// Apps Script. No contiene PIN, token ni ningún secreto de autenticación.
+function guardarPerfilConocido(usuario, rol, tienePin = true) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) return;
+  let perfiles = {};
+  try { perfiles = JSON.parse(localStorage.getItem(CLAVE_PERFILES) || '{}'); } catch { perfiles = {}; }
+  perfiles[nombre.toLowerCase()] = { usuario: nombre, rol: String(rol || ''), tienePin: tienePin === true };
+  localStorage.setItem(CLAVE_PERFILES, JSON.stringify(perfiles));
+}
+
+function leerPerfilConocido(usuario) {
+  try {
+    const perfiles = JSON.parse(localStorage.getItem(CLAVE_PERFILES) || '{}');
+    const perfil = perfiles[String(usuario || '').trim().toLowerCase()];
+    return perfil && typeof perfil.usuario === 'string' ? perfil : null;
+  } catch {
+    return null;
+  }
+}
+
 function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
   if (token) guardarToken(token);
+  guardarPerfilConocido(usuario, rol, true);
 }
 
 function cerrarSesion() {
@@ -228,13 +251,15 @@ function exigirSesion(rutaLauncher) {
   return true;
 }
 
-  return { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
+  return { getUrl, setUrl, getUsuario, getRol, esAdmin, guardarPerfilConocido, leerPerfilConocido, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
 })();
 const getUrl = sesion.getUrl;
 const setUrl = sesion.setUrl;
 const getUsuario = sesion.getUsuario;
 const getRol = sesion.getRol;
 const esAdmin = sesion.esAdmin;
+const guardarPerfilConocido = sesion.guardarPerfilConocido;
+const leerPerfilConocido = sesion.leerPerfilConocido;
 const iniciarSesion = sesion.iniciarSesion;
 const cerrarSesion = sesion.cerrarSesion;
 const cerrarSesionEnSegundoPlano = sesion.cerrarSesionEnSegundoPlano;

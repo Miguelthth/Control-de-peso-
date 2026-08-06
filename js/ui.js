@@ -1,6 +1,6 @@
 // Launcher: login (URL → usuario → PIN) y los dos botones grandes.
 
-import { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesionEnSegundoPlano, guardarClaveSesion, ejecutarUnaVez, leerToken, sesionAutenticada, accesoFaceIdValido } from '../shared/sesion.js';
+import { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesionEnSegundoPlano, guardarClaveSesion, ejecutarUnaVez, leerToken, sesionAutenticada, accesoFaceIdValido, guardarPerfilConocido, leerPerfilConocido } from '../shared/sesion.js';
 import * as api from '../shared/api.js';
 import * as passkey from '../shared/passkey.js';
 import * as candado from '../shared/candado.js';
@@ -259,6 +259,13 @@ async function continuarUsuario() {
   const usuario = document.getElementById('usuario-input').value.trim();
   if (!usuario) return;
   document.getElementById('usuario-error').classList.add('oculto');
+  const conocido = leerPerfilConocido(usuario);
+  if (conocido?.tienePin) {
+    usuarioTemp = conocido.usuario;
+    rolTemp = conocido.rol;
+    mostrarPantallaPin();
+    return;
+  }
   try {
     const r = await api.validarUsuario(usuario);
     exigirBackendActual(r);
@@ -268,11 +275,9 @@ async function continuarUsuario() {
     }
     usuarioTemp = usuario;
     rolTemp = r.rol;
+    guardarPerfilConocido(usuario, r.rol, r.tienePin);
     if (r.tienePin) {
-      mostrarPantalla('pantalla-pin');
-      document.getElementById('pin-input').value = '';
-      document.getElementById('pin-error').classList.add('oculto');
-      document.getElementById('pin-input').focus();
+      mostrarPantallaPin();
     } else {
       mostrarPantalla('pantalla-pin-nuevo');
       document.getElementById('codigo-activacion-input').value = '';
@@ -287,8 +292,24 @@ async function continuarUsuario() {
   }
 }
 
+function mostrarPantallaPin() {
+  mostrarPantalla('pantalla-pin');
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-error').classList.add('oculto');
+  document.getElementById('pin-input').focus();
+}
+
+function volverAUsuario() {
+  document.getElementById('pin-input').value = '';
+  document.getElementById('codigo-activacion-input').value = '';
+  mostrarPantalla('pantalla-usuario');
+  document.getElementById('usuario-input').focus();
+}
+
 async function continuarPin() {
   const pin = document.getElementById('pin-input').value;
+  const boton = document.getElementById('btn-pin-continuar');
+  boton.textContent = 'Verificando…';
   try {
     const r = await api.validarPin(usuarioTemp, pin);
     exigirBackendActual(r, { requiereToken: true });
@@ -302,6 +323,8 @@ async function continuarPin() {
     ofrecerFaceId(usuarioTemp, rolTemp, pin);
   } catch (e) {
     mostrarErrorPin('No se pudo validar: ' + e.message);
+  } finally {
+    boton.textContent = 'Entrar';
   }
 }
 
@@ -360,6 +383,8 @@ function wireEventos() {
   });
 
   document.getElementById('btn-pin-continuar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, continuarPin));
+  document.getElementById('btn-pin-volver').addEventListener('click', volverAUsuario);
+  document.getElementById('btn-activacion-volver').addEventListener('click', volverAUsuario);
   document.getElementById('pin-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-pin-continuar').click();
   });

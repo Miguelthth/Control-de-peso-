@@ -127,6 +127,7 @@ const sesion = (function () {
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
+const CLAVE_PERFILES = 'ma_perfiles_conocidos';
 const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
@@ -155,10 +156,32 @@ function esAdmin() {
   return getRol() === 'admin';
 }
 
+// Solo guarda metadatos de navegación para evitar una consulta preliminar a
+// Apps Script. No contiene PIN, token ni ningún secreto de autenticación.
+function guardarPerfilConocido(usuario, rol, tienePin = true) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) return;
+  let perfiles = {};
+  try { perfiles = JSON.parse(localStorage.getItem(CLAVE_PERFILES) || '{}'); } catch { perfiles = {}; }
+  perfiles[nombre.toLowerCase()] = { usuario: nombre, rol: String(rol || ''), tienePin: tienePin === true };
+  localStorage.setItem(CLAVE_PERFILES, JSON.stringify(perfiles));
+}
+
+function leerPerfilConocido(usuario) {
+  try {
+    const perfiles = JSON.parse(localStorage.getItem(CLAVE_PERFILES) || '{}');
+    const perfil = perfiles[String(usuario || '').trim().toLowerCase()];
+    return perfil && typeof perfil.usuario === 'string' ? perfil : null;
+  } catch {
+    return null;
+  }
+}
+
 function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
   if (token) guardarToken(token);
+  guardarPerfilConocido(usuario, rol, true);
 }
 
 function cerrarSesion() {
@@ -228,13 +251,15 @@ function exigirSesion(rutaLauncher) {
   return true;
 }
 
-  return { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
+  return { getUrl, setUrl, getUsuario, getRol, esAdmin, guardarPerfilConocido, leerPerfilConocido, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
 })();
 const getUrl = sesion.getUrl;
 const setUrl = sesion.setUrl;
 const getUsuario = sesion.getUsuario;
 const getRol = sesion.getRol;
 const esAdmin = sesion.esAdmin;
+const guardarPerfilConocido = sesion.guardarPerfilConocido;
+const leerPerfilConocido = sesion.leerPerfilConocido;
 const iniciarSesion = sesion.iniciarSesion;
 const cerrarSesion = sesion.cerrarSesion;
 const cerrarSesionEnSegundoPlano = sesion.cerrarSesionEnSegundoPlano;
@@ -1321,6 +1346,8 @@ function renderCapturar() {
   document.getElementById('captura-unidad').textContent = unidad;
   document.getElementById('captura-fecha').value = E.captura.fecha;
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
+  document.getElementById('captura-peso-input').value = E.captura.pesoStr;
+  document.getElementById('btn-guardar-captura').textContent = E.captura.editandoFechaOriginal ? 'Guardar cambios' : 'Registrar peso';
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
   document.getElementById('captura-ultimo').innerHTML = ultimo
     ? `Última captura: ${escapeHTML(ultimo.fecha)} — ${formatoPesoDualColor(ultimo.pesoKg)}`
@@ -1448,6 +1475,22 @@ function renderHistorial(serie) {
     </div>`
     )
     .join('');
+  conectarAccionesHistorial(cont);
+}
+
+function conectarAccionesHistorial(cont) {
+  cont.querySelectorAll('[data-editar-peso]').forEach((boton) => {
+    boton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editarRegistroPeso(boton.dataset.editarPeso);
+    });
+  });
+  cont.querySelectorAll('[data-borrar-peso]').forEach((boton) => {
+    boton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      borrarRegistroPeso(boton.dataset.borrarPeso);
+    });
+  });
 }
 
 function editarRegistroPeso(fecha) {
@@ -1907,12 +1950,6 @@ function wireGlobal() {
       e.preventDefault();
       confirmarPopup('Hay un peso sin guardar. ¿Quieres salir?').then((ok) => { if (ok) location.href = a.href; });
     });
-  });
-  document.getElementById('historial-pesos').addEventListener('click', (e) => {
-    const editar = e.target.closest('[data-editar-peso]');
-    const borrar = e.target.closest('[data-borrar-peso]');
-    if (editar) editarRegistroPeso(editar.dataset.editarPeso);
-    else if (borrar) borrarRegistroPeso(borrar.dataset.borrarPeso);
   });
   document.getElementById('btn-ver-historial').addEventListener('click', (e) => {
     const cont = document.getElementById('historial-pesos');

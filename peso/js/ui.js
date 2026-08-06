@@ -168,6 +168,8 @@ function renderCapturar() {
   document.getElementById('captura-unidad').textContent = unidad;
   document.getElementById('captura-fecha').value = E.captura.fecha;
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
+  document.getElementById('captura-peso-input').value = E.captura.pesoStr;
+  document.getElementById('btn-guardar-captura').textContent = E.captura.editandoFechaOriginal ? 'Guardar cambios' : 'Registrar peso';
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
   document.getElementById('captura-ultimo').innerHTML = ultimo
     ? `Última captura: ${escapeHTML(ultimo.fecha)} — ${formatoPesoDualColor(ultimo.pesoKg)}`
@@ -295,6 +297,22 @@ function renderHistorial(serie) {
     </div>`
     )
     .join('');
+  conectarAccionesHistorial(cont);
+}
+
+function conectarAccionesHistorial(cont) {
+  cont.querySelectorAll('[data-editar-peso]').forEach((boton) => {
+    boton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editarRegistroPeso(boton.dataset.editarPeso);
+    });
+  });
+  cont.querySelectorAll('[data-borrar-peso]').forEach((boton) => {
+    boton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      borrarRegistroPeso(boton.dataset.borrarPeso);
+    });
+  });
 }
 
 function editarRegistroPeso(fecha) {
@@ -754,12 +772,6 @@ function wireGlobal() {
       e.preventDefault();
       confirmarPopup('Hay un peso sin guardar. ¿Quieres salir?').then((ok) => { if (ok) location.href = a.href; });
     });
-  });
-  document.getElementById('historial-pesos').addEventListener('click', (e) => {
-    const editar = e.target.closest('[data-editar-peso]');
-    const borrar = e.target.closest('[data-borrar-peso]');
-    if (editar) editarRegistroPeso(editar.dataset.editarPeso);
-    else if (borrar) borrarRegistroPeso(borrar.dataset.borrarPeso);
   });
   document.getElementById('btn-ver-historial').addEventListener('click', (e) => {
     const cont = document.getElementById('historial-pesos');

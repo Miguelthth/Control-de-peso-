@@ -39,6 +39,7 @@
 
 <div id="pantalla-pin" class="pantalla pantalla-centrada oculto">
   <div class="tarjeta-login">
+    <button class="btn-volver-acceso" id="btn-pin-volver" type="button" aria-label="Regresar a usuario">←</button>
     <div class="marca-acceso compacta"><img src="icon-512.png" alt=""><div><strong>Confirma que eres tú</strong><span>Tu PIN protege el acceso</span></div></div>
     <input type="password" inputmode="numeric" maxlength="4" id="pin-input" aria-label="PIN de cuatro dígitos" class="input-pin" placeholder="••••" autocomplete="current-password">
     <button class="btn-primario" id="btn-pin-continuar">Entrar</button>
@@ -48,6 +49,7 @@
 
 <div id="pantalla-pin-nuevo" class="pantalla pantalla-centrada oculto">
   <div class="tarjeta-login">
+    <button class="btn-volver-acceso" id="btn-activacion-volver" type="button" aria-label="Regresar a usuario">←</button>
     <div class="marca-acceso compacta"><img src="icon-512.png" alt=""><div><strong>Activa tu acceso</strong><span>Este paso se hace una sola vez</span></div></div>
     <p class="texto-suave">Escribe el código que te entregó el administrador y crea tu PIN.</p>
     <input type="password" inputmode="numeric" minlength="8" id="codigo-activacion-input" aria-label="Código de activación" class="input-pin" placeholder="Código de activación" autocomplete="one-time-code">

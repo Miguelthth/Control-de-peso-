@@ -6,20 +6,33 @@
 import * as cola from './cola.js';
 import * as api from '../../shared/api.js';
 import * as graficas from './graficas.js';
+import * as actualizacion from './actualizacion.js';
+import * as uiHelpers from './ui_helpers.js';
 import { hoyISO, validarPeso, kgALb, lbAKg, aKg } from './modelo.js';
 import {
   pesosDeUsuario, ultimoPeso, racha, promedioMovil, avanceMeta, promedioSemanal,
 } from './calculos.js';
-import { getUsuario, esAdmin, exigirSesion, cerrarSesion } from '../../shared/sesion.js';
+import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
 import * as fondo from '../../shared/fondo.js';
+import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
+
+api.configurarManejadorAuth(() => {
+  cerrarSesionEnSegundoPlano(() => undefined);
+  location.href = '../index.html';
+});
 
 const E = {
   vista: 'capturar',
   datos: { usuarios: [], pesos: [], retoInicio: null, retoFin: null },
   sinConexion: false,
-  captura: { fecha: hoyISO(), pesoStr: '' },
+  captura: { fecha: hoyISO(), fechaOriginal: hoyISO(), editandoFechaOriginal: null, pesoStr: '' },
   graficaActiva: 'diaria',
+  actualizacion: { metadata: null, buscando: false, preparada: false },
 };
+
+let registroSW = null;
+let intentarRecargaDiferida = () => {};
+const ajustesPendientes = new Set();
 
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -60,6 +73,8 @@ function toast(msg, esError = false) {
     el.className = 'toast-simple';
     document.body.appendChild(el);
   }
+  el.setAttribute('role', esError ? 'alert' : 'status');
+  el.setAttribute('aria-live', esError ? 'assertive' : 'polite');
   el.style.background = esError ? 'var(--peligro)' : 'var(--texto)';
   el.style.color = esError ? '#fff' : 'var(--fondo)';
   el.textContent = msg;
@@ -89,7 +104,7 @@ async function iniciarApp() {
   document.getElementById('app').classList.remove('oculto');
   cargarFondoGuardado(); // no bloquea el arranque -- se aplica en cuanto esté lista
   await cargarYRenderizar();
-  cola.iniciarSincronizacionAutomatica(() => cargarYRenderizar());
+  cola.iniciarSincronizacionAutomatica(getUsuario(), () => cargarYRenderizar());
   // Para que el peso que capture Cindy/Miguel le llegue rápido al otro sin
   // recargar a mano: cada 8s se pregunta solo el número de versión (barato,
   // sin tocar Hojas) y nomás si cambió se jala 'datos' completo. Al volver
@@ -105,7 +120,7 @@ async function iniciarApp() {
 }
 
 async function cargarYRenderizar() {
-  const { datos, sinConexion } = await cola.refrescarDatos();
+  const { datos, sinConexion } = await cola.refrescarDatos(getUsuario());
   E.datos = datos;
   E.sinConexion = sinConexion;
   actualizarBadgeConexion();
@@ -114,7 +129,7 @@ async function cargarYRenderizar() {
 
 function actualizarBadgeConexion() {
   const el = document.getElementById('badge-conexion');
-  const pendientes = cola.leerCola().length;
+  const pendientes = cola.leerCola(getUsuario()).length;
   if (E.sinConexion) {
     el.textContent = pendientes ? `📴 Sin conexión · ${pendientes} sin sincronizar` : '📴 Sin conexión (viendo lo último guardado)';
     el.classList.remove('oculto');
@@ -130,7 +145,11 @@ function cambiarVista(nombre) {
   E.vista = nombre;
   document.querySelectorAll('.vista').forEach((v) => v.classList.remove('activa'));
   document.getElementById(`vista-${nombre}`).classList.add('activa');
-  document.querySelectorAll('.nav-inferior button').forEach((b) => b.classList.toggle('activo', b.dataset.vista === nombre));
+  document.querySelectorAll('.nav-inferior button').forEach((b) => {
+    const activo = b.dataset.vista === nombre;
+    b.classList.toggle('activo', activo);
+    if (activo) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   render();
 }
 
@@ -151,7 +170,7 @@ function renderCapturar() {
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
   document.getElementById('captura-ultimo').innerHTML = ultimo
-    ? `Última captura: ${ultimo.fecha} — ${formatoPesoDualColor(ultimo.pesoKg)}`
+    ? `Última captura: ${escapeHTML(ultimo.fecha)} — ${formatoPesoDualColor(ultimo.pesoKg)}`
     : 'Todavía no capturas nada.';
   const r = racha(E.datos.pesos, getUsuario());
   document.getElementById('captura-racha').textContent = r > 0 ? `🔥 Racha: ${r} día(s)` : '';
@@ -168,16 +187,22 @@ async function guardarCaptura() {
     const unidad = miUnidad();
     const pesoKg = validarPeso(aKg(E.captura.pesoStr, unidad));
     const fecha = E.captura.fecha;
-    cola.encolarPeso(getUsuario(), fecha, pesoKg);
-    E.datos.pesos = E.datos.pesos.filter((p) => !(p.usuario === getUsuario() && p.fecha === fecha));
+    const operaciones = uiHelpers.planificarEdicion(E.captura.editandoFechaOriginal, fecha, pesoKg);
+    for (const operacion of operaciones) {
+      if (operacion.tipo === 'borrar') cola.encolarBorrado(getUsuario(), operacion.fecha);
+      else cola.encolarPeso(getUsuario(), operacion.fecha, operacion.pesoKg);
+    }
+    const fechasQuitadas = new Set(operaciones.map((o) => o.fecha));
+    E.datos.pesos = E.datos.pesos.filter((p) => !(p.usuario === getUsuario() && fechasQuitadas.has(p.fecha)));
     E.datos.pesos.push({ usuario: getUsuario(), fecha, pesoKg });
     toast('Guardado ✓');
-    E.captura.pesoStr = '';
+    E.captura = { fecha: hoyISO(), fechaOriginal: hoyISO(), editandoFechaOriginal: null, pesoStr: '' };
     document.getElementById('captura-peso-input').value = '';
+    intentarRecargaDiferida();
     actualizarBadgeConexion();
     render();
     mostrarRegistroOverlay();
-    cola.sincronizar().then(() => { actualizarBadgeConexion(); });
+    cola.sincronizar(getUsuario()).then(() => { actualizarBadgeConexion(); });
   } catch (e) {
     toast(e.message, true);
   }
@@ -200,12 +225,14 @@ function wireCapturar() {
   document.getElementById('captura-peso-input').addEventListener('input', (e) => {
     E.captura.pesoStr = e.target.value;
     renderCapturar();
+    intentarRecargaDiferida();
   });
   document.getElementById('captura-fecha').addEventListener('change', (e) => {
     E.captura.fecha = e.target.value;
     renderCapturar();
+    intentarRecargaDiferida();
   });
-  document.getElementById('btn-guardar-captura').addEventListener('click', guardarCaptura);
+  document.getElementById('btn-guardar-captura').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarCaptura));
 }
 
 // ---------- mi progreso ----------
@@ -260,32 +287,54 @@ function renderHistorial(serie) {
   cont.innerHTML = ultimos
     .map(
       (p) => `<div class="lista-item">
-      <span>${formatoFechaCorta(p.fecha)} — ${formatoPesoDualColor(p.pesoKg)}</span>
-      <button class="icono" data-borrar-peso="${p.fecha}" title="Borrar este registro">🗑️</button>
+      <span>${escapeHTML(formatoFechaCorta(p.fecha))} — ${formatoPesoDualColor(p.pesoKg)}</span>
+      <span class="lista-acciones">
+        <button class="icono" data-editar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Editar registro del ${formatoFechaCorta(p.fecha)}`)}">✏️</button>
+        <button class="icono" data-borrar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Borrar registro del ${formatoFechaCorta(p.fecha)}`)}">🗑️</button>
+      </span>
     </div>`
     )
     .join('');
 }
 
+function editarRegistroPeso(fecha) {
+  const registro = E.datos.pesos.find((p) => p.usuario === getUsuario() && p.fecha === fecha);
+  if (!registro) return;
+  E.captura = { ...uiHelpers.prepararEdicion(registro, miUnidad()), fechaOriginal: fecha, editandoFechaOriginal: fecha };
+  cambiarVista('capturar');
+  const input = document.getElementById('captura-peso-input');
+  input.value = E.captura.pesoStr;
+  input.focus();
+}
+
 async function borrarRegistroPeso(fecha) {
   const ok = await confirmarPopup(`¿Borrar tu registro del ${formatoFechaCorta(fecha)}? No se puede deshacer.`);
   if (!ok) return;
-  try {
-    const r = await api.borrarPesoFecha(getUsuario(), fecha);
-    if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el borrado');
-    toast('Registro borrado ✓');
-    await cargarYRenderizar();
-  } catch (e) {
-    toast('No se pudo borrar (¿sin conexión?): ' + e.message, true);
-  }
+  // Igual que guardarCaptura(): se encola y se refleja de una, no espera al
+  // servidor -- antes esto sí esperaba la red y tronaba sin conexión.
+  cola.encolarBorrado(getUsuario(), fecha);
+  E.datos.pesos = E.datos.pesos.filter((p) => !(p.usuario === getUsuario() && p.fecha === fecha));
+  const pendientes = cola.leerCola(getUsuario()).length;
+  toast(uiHelpers.mensajeBorrado({ sinConexion: !navigator.onLine || E.sinConexion, pendientes }));
+  actualizarBadgeConexion();
+  render();
+  cola.sincronizar(getUsuario()).then(() => { actualizarBadgeConexion(); });
 }
 
 const IDS_GRAFICA = { diaria: 'grafica-diaria', tendencia: 'grafica-progreso', semanal: 'grafica-semanal' };
 
 function mostrarGraficaActiva() {
-  document.querySelectorAll('#grafica-tabs button').forEach((b) => b.classList.toggle('activo', b.dataset.grafica === E.graficaActiva));
+  document.querySelectorAll('#grafica-tabs button').forEach((b) => {
+    const activo = b.dataset.grafica === E.graficaActiva;
+    b.classList.toggle('activo', activo);
+    b.setAttribute('aria-selected', String(activo));
+    b.tabIndex = activo ? 0 : -1;
+  });
   Object.entries(IDS_GRAFICA).forEach(([clave, id]) => {
-    document.getElementById(id).classList.toggle('oculto', clave !== E.graficaActiva);
+    const panel = document.getElementById(id);
+    const oculto = clave !== E.graficaActiva;
+    panel.classList.toggle('oculto', oculto);
+    panel.hidden = oculto;
   });
 }
 
@@ -350,16 +399,16 @@ function renderReto() {
   document.getElementById('grafica-versus').innerHTML = graficas.svgBarraVersus(
     filas[0]?.avance?.pctAvance || 0,
     filas[1]?.avance?.pctAvance || 0,
-    filas[0]?.nombre || getUsuario(),
-    filas[1]?.nombre || '—',
+    escapeHTML(filas[0]?.nombre || getUsuario()),
+    escapeHTML(filas[1]?.nombre || '—'),
     { width: 340, colorA: colorDeUsuario(filas[0]?.nombre || getUsuario()), colorB: colorDeUsuario(filas[1]?.nombre || '') }
   );
 
   document.getElementById('reto-tarjetas').innerHTML = filas.map((f) => `
-    <div class="tarjeta-persona" style="border-top:3px solid ${colorDeUsuario(f.nombre)};">
-      ${f.avance ? `<img class="avatar-marca-agua" src="${avatarMeta(f.avance.pctAvance)}" alt="">` : ''}
+    <div class="tarjeta-persona" style="border-top:3px solid ${colorSeguro(colorDeUsuario(f.nombre))};">
+      ${f.avance ? `<img class="avatar-marca-agua" src="${escapeAtributo(urlLocalSegura(avatarMeta(f.avance.pctAvance)))}" alt="">` : ''}
       <div class="tarjeta-persona-contenido">
-      <h3 style="color:${colorDeUsuario(f.nombre)};">${f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre}</h3>
+      <h3 style="color:${colorSeguro(colorDeUsuario(f.nombre))};">${escapeHTML(f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre)}</h3>
       <div class="dato-grande valor-dual">${formatoPesoDualColor(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
@@ -381,13 +430,71 @@ function renderAjustes() {
   document.getElementById('ajustes-usuario').textContent = getUsuario();
   document.getElementById('ajustes-inicial-unidad').textContent = unidad;
   document.getElementById('ajustes-meta-unidad').textContent = unidad;
-  document.getElementById('ajustes-meta').value = u.metaKg != null ? fmt1(unidad === 'kg' ? u.metaKg : kgALb(u.metaKg)) : '';
-  document.getElementById('ajustes-inicial').value = u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '';
-  document.querySelectorAll('#unidad-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.unidad === unidad));
+  asignarCampoAjuste('ajustes-meta', u.metaKg != null ? fmt1(unidad === 'kg' ? u.metaKg : kgALb(u.metaKg)) : '');
+  asignarCampoAjuste('ajustes-inicial', u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '');
+  document.querySelectorAll('#unidad-grupo button').forEach((b) => {
+    const activo = b.dataset.unidad === unidad;
+    b.classList.toggle('activo', activo); b.setAttribute('aria-pressed', String(activo));
+  });
   document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
   document.getElementById('tarjeta-fechas-reto').classList.toggle('oculto', !esAdmin());
-  document.getElementById('reto-fecha-inicio').value = E.datos.retoInicio || '';
-  document.getElementById('reto-fecha-fin').value = E.datos.retoFin || '';
+  asignarCampoAjuste('reto-fecha-inicio', E.datos.retoInicio || '');
+  asignarCampoAjuste('reto-fecha-fin', E.datos.retoFin || '');
+  const meta = E.actualizacion.metadata;
+  document.getElementById('actualizacion-version').textContent = meta?.version || '—';
+  document.getElementById('actualizacion-fecha').textContent = meta
+    ? actualizacion.formatearFechaActualizacion(meta.installedAt) : 'Sin información';
+  document.getElementById('actualizacion-estado').textContent = actualizacion.obtenerEstadoActualizacion({
+    soportado: 'serviceWorker' in navigator, metadata: meta,
+    buscando: E.actualizacion.buscando, preparada: E.actualizacion.preparada,
+  });
+}
+
+function asignarCampoAjuste(id, valor) {
+  const campo = document.getElementById(id);
+  if (ajustesPendientes.has(id)) return;
+  campo.value = valor;
+  campo.dataset.valorPersistido = valor;
+}
+
+function confirmarCamposAjuste(ids) {
+  for (const id of ids) {
+    const campo = document.getElementById(id);
+    campo.dataset.valorPersistido = campo.value;
+    ajustesPendientes.delete(id);
+  }
+  intentarRecargaDiferida();
+}
+
+async function releerMetadataActualizacion() {
+  E.actualizacion.metadata = await actualizacion.leerMetadataActualizacion();
+  if (E.vista === 'ajustes') renderAjustes();
+}
+
+function observarInstalacion(worker) {
+  if (!worker) return;
+  worker.addEventListener('statechange', () => {
+    if (worker.state === 'installed') {
+      E.actualizacion.preparada = true;
+      E.actualizacion.buscando = false;
+      if (E.vista === 'ajustes') renderAjustes();
+    }
+  });
+}
+
+async function buscarActualizacionManual() {
+  E.actualizacion.buscando = true;
+  E.actualizacion.preparada = false;
+  renderAjustes();
+  try {
+    await actualizacion.buscarActualizacion(registroSW);
+    observarInstalacion(registroSW.installing);
+    if (!registroSW.installing) E.actualizacion.buscando = false;
+  } catch (e) {
+    E.actualizacion.buscando = false;
+    toast(e.message, true);
+  }
+  renderAjustes();
 }
 
 // ---------- fondo de pantalla personalizado ----------
@@ -453,6 +560,7 @@ async function guardarFechasRetoAjustes() {
     if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el guardado');
     E.datos.retoInicio = inicio || null;
     E.datos.retoFin = fin || null;
+    confirmarCamposAjuste(['reto-fecha-inicio', 'reto-fecha-fin']);
     toast('Fechas guardadas ✓');
   } catch (e) {
     toast('No se pudo guardar (¿sin conexión?): ' + e.message, true);
@@ -471,6 +579,7 @@ async function guardarMetaAjustes() {
     const u = usuarioObj(getUsuario());
     u.metaKg = metaKg;
     u.pesoInicialKg = pesoInicialKg;
+    confirmarCamposAjuste(['ajustes-meta', 'ajustes-inicial']);
     toast('Meta guardada ✓');
     render();
   } catch (e) {
@@ -491,11 +600,11 @@ async function cambiarUnidadAjustes(unidad) {
 }
 
 async function cambiarPinAjustes() {
-  const actual = prompt('Tu PIN actual (vacío si no tienes uno):') || '';
-  const nuevo = prompt('Nuevo PIN (4 dígitos, vacío para quedarte sin PIN):');
+  const actual = prompt('Tu PIN actual:') || '';
+  const nuevo = prompt('Nuevo PIN (4 dígitos):');
   if (nuevo === null) return;
-  if (nuevo !== '' && !/^\d{4}$/.test(nuevo)) {
-    toast('El PIN nuevo debe ser de 4 dígitos (o vacío para quitarlo)', true);
+  if (!/^\d{4}$/.test(nuevo)) {
+    toast('El PIN nuevo debe ser de 4 dígitos', true);
     return;
   }
   try {
@@ -531,6 +640,13 @@ function exportarMisDatosPeso() {
 }
 
 function wireAjustes() {
+  document.getElementById('vista-ajustes').addEventListener('input', (e) => {
+    if (!actualizacion.esCampoAjusteDiferible(e.target.id, e.target.type)) return;
+    if (e.target.value === e.target.dataset.valorPersistido) ajustesPendientes.delete(e.target.id);
+    else ajustesPendientes.add(e.target.id);
+    intentarRecargaDiferida();
+  });
+  document.getElementById('btn-buscar-actualizacion').addEventListener('click', buscarActualizacionManual);
   document.getElementById('btn-exportar-peso').addEventListener('click', exportarMisDatosPeso);
   document.getElementById('btn-elegir-fondo').addEventListener('click', () => document.getElementById('input-fondo').click());
   document.getElementById('input-fondo').addEventListener('change', (e) => {
@@ -548,7 +664,7 @@ function wireAjustes() {
     cambiarUnidadAjustes(btn.dataset.unidad);
   });
   document.getElementById('btn-cambiar-usuario').addEventListener('click', () => {
-    cerrarSesion();
+    cerrarSesionEnSegundoPlano(api.cerrarSesionServidor);
     location.href = '../index.html';
   });
   document.getElementById('btn-borrar-mis-datos').addEventListener('click', async () => {
@@ -567,6 +683,25 @@ function wireAjustes() {
 
 // ---------- popup de confirmación (reemplaza confirm() nativo) ----------
 
+let focoAntesPopup = null;
+function activarPopupAccesible(fondo, cerrar) {
+  focoAntesPopup = document.activeElement;
+  const botones = [...fondo.querySelectorAll('button:not(:disabled)')];
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cerrar(); return; }
+    if (e.key !== 'Tab' || !botones.length) return;
+    const primero = botones[0]; const ultimo = botones[botones.length - 1];
+    if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+  };
+  fondo.addEventListener('keydown', onKey);
+  botones[0]?.focus();
+  return () => {
+    fondo.removeEventListener('keydown', onKey);
+    focoAntesPopup?.focus?.(); focoAntesPopup = null;
+  };
+}
+
 function confirmarPopup(mensaje) {
   return new Promise((resolve) => {
     const fondo = document.getElementById('popup-confirmar');
@@ -574,16 +709,19 @@ function confirmarPopup(mensaje) {
     fondo.classList.remove('oculto');
     const btnSi = document.getElementById('popup-aceptar');
     const btnNo = document.getElementById('popup-cancelar');
+    let limpiarAccesibilidad = () => {};
     const limpiar = (valor) => {
       fondo.classList.add('oculto');
       btnSi.removeEventListener('click', onSi);
       btnNo.removeEventListener('click', onNo);
+      limpiarAccesibilidad();
       resolve(valor);
     };
     const onSi = () => limpiar(true);
     const onNo = () => limpiar(false);
     btnSi.addEventListener('click', onSi);
     btnNo.addEventListener('click', onNo);
+    limpiarAccesibilidad = activarPopupAccesible(fondo, () => limpiar(false));
   });
 }
 
@@ -599,15 +737,29 @@ function wireGlobal() {
     E.graficaActiva = btn.dataset.grafica;
     mostrarGraficaActiva();
   });
+  document.getElementById('grafica-tabs').addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const tabs = [...e.currentTarget.querySelectorAll('[role="tab"]')];
+    const actual = tabs.indexOf(document.activeElement);
+    if (actual < 0) return;
+    e.preventDefault();
+    const siguiente = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (actual + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    E.graficaActiva = tabs[siguiente].dataset.grafica;
+    mostrarGraficaActiva();
+    tabs[siguiente].focus();
+  });
   document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
     a.addEventListener('click', (e) => {
+      if (!debeConfirmarNavegacion({ valor: E.captura.pesoStr, enviado: false })) return;
       e.preventDefault();
-      confirmarPopup('¿Seguro que quieres ir a Gastos?').then((ok) => { if (ok) location.href = a.href; });
+      confirmarPopup('Hay un peso sin guardar. ¿Quieres salir?').then((ok) => { if (ok) location.href = a.href; });
     });
   });
   document.getElementById('historial-pesos').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-borrar-peso]');
-    if (btn) borrarRegistroPeso(btn.dataset.borrarPeso);
+    const editar = e.target.closest('[data-editar-peso]');
+    const borrar = e.target.closest('[data-borrar-peso]');
+    if (editar) editarRegistroPeso(editar.dataset.editarPeso);
+    else if (borrar) borrarRegistroPeso(borrar.dataset.borrarPeso);
   });
   document.getElementById('btn-ver-historial').addEventListener('click', (e) => {
     const cont = document.getElementById('historial-pesos');
@@ -638,20 +790,38 @@ if ('serviceWorker' in navigator) {
   // Ver comentario igual en js/ui.js (launcher) -- update() fuerza la
   // revisión sin cambiar la URL del service worker en cada carga.
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('../sw.js').then((r) => r.update()).catch(() => {});
+    navigator.serviceWorker.register('../sw.js').then((r) => {
+      registroSW = r;
+      r.addEventListener('updatefound', () => observarInstalacion(r.installing));
+      observarInstalacion(r.installing);
+      releerMetadataActualizacion();
+      return r.update();
+    }).catch(() => {});
   });
   // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
   // control un service worker nuevo, pero no si hay un campo con texto sin
   // mandar: espera a que la app pase a segundo plano para no borrarlo.
   let recargando = false;
+  let recargaDiferida = false;
   function intentarRecargar() {
     if (recargando) return;
     const activo = document.activeElement;
     const escribiendo = activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA') && activo.value;
-    if (escribiendo) return;
+    const decision = actualizacion.decidirRecargaActualizacion({
+      capturaPendiente: actualizacion.hayCapturaPesoPendiente(E.captura),
+      formularioPendiente: ajustesPendientes.size > 0,
+      escribiendoActivo: Boolean(escribiendo), recargaDiferida,
+    });
+    recargaDiferida = decision.diferir;
+    if (!decision.recargar) return;
     recargando = true;
-    location.reload();
+    releerMetadataActualizacion().finally(() => location.reload());
   }
+  intentarRecargaDiferida = function () {
+    if (recargaDiferida && !actualizacion.hayCapturaPesoPendiente(E.captura) && ajustesPendientes.size === 0) intentarRecargar();
+  };
+  document.addEventListener('input', intentarRecargaDiferida);
   navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargar(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargaDiferida(); });
+  window.addEventListener('pagehide', intentarRecargaDiferida);
 }

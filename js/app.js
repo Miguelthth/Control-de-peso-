@@ -1,6 +1,124 @@
 // ARCHIVO GENERADO por build.py (paquete "launcher") -- no editar a mano.
 // Edita los archivos fuente y vuelve a correr: python build.py
 
+// ── shared/autorizacion.js ──────────────────────────────────────────
+const autorizacion = (function () {
+const CLAVE_TOKEN = 'ma_token';
+const PUBLICAS = new Set(['validarUsuario', 'validarPin', 'validarActivacion']);
+const MENSAJE_BACKEND_ANTIGUO = 'El servidor necesita actualizarse primero. Pide al administrador desplegar la nueva versión de Apps Script.';
+
+function storagePredeterminado() {
+  return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+}
+
+function guardarToken(token, storage = storagePredeterminado()) {
+  if (storage && token) storage.setItem(CLAVE_TOKEN, String(token));
+}
+
+function leerToken(storage = storagePredeterminado()) {
+  return storage ? storage.getItem(CLAVE_TOKEN) || '' : '';
+}
+
+function borrarToken(storage = storagePredeterminado()) {
+  if (storage) storage.removeItem(CLAVE_TOKEN);
+}
+
+function requiereAutorizacion(accion) {
+  return !PUBLICAS.has(String(accion || ''));
+}
+
+function agregarCredenciales(solicitud, usuario, token) {
+  if (!requiereAutorizacion(solicitud.accion)) return { ...solicitud };
+  return { ...solicitud, usuario: solicitud.usuario || usuario, token };
+}
+
+function exigirBackendActual(respuesta, { requiereToken = false } = {}) {
+  const version = Number(respuesta?.apiVersion);
+  if (!Number.isFinite(version) || version < 2 || (requiereToken && respuesta?.ok === true && !String(respuesta?.token || ''))) {
+    throw new Error(MENSAJE_BACKEND_ANTIGUO);
+  }
+  return true;
+}
+
+function validarSesion({
+  sesion, usuarioActual, usuarioSolicitado, ahora = Date.now(), rolRequerido = null, alcancePermitido = null,
+}) {
+  if (!sesion || !usuarioActual || !usuarioActual.activo) return false;
+  if (sesion.expira <= ahora) return false;
+  if (sesion.usuario !== usuarioSolicitado || usuarioActual.usuario !== sesion.usuario) return false;
+  if (usuarioActual.rol !== sesion.rol) return false;
+  if (rolRequerido && usuarioActual.rol !== rolRequerido) return false;
+  return sesion.alcance === 'completo' || sesion.alcance === alcancePermitido;
+}
+
+function puedeValidarPin(pinConfigurado, pinRecibido) {
+  return String(pinConfigurado || '') !== '' && String(pinConfigurado) === String(pinRecibido || '').trim();
+}
+
+function siguienteBloqueoPin(intentosAnteriores, ahora = Date.now()) {
+  const intentos = Math.max(0, Number(intentosAnteriores) || 0) + 1;
+  const demora = Math.min(60000, Math.pow(2, Math.max(0, intentos - 3)) * 1000);
+  return { intentos, hasta: ahora + demora };
+}
+
+function pinNuevoValido(pin) { return /^\d{4}$/.test(String(pin)); }
+
+function usuarioValido(usuario) {
+  return /^[\p{L}\p{N} _.-]{1,64}$/u.test(String(usuario || '')) && !String(usuario).includes('..');
+}
+
+function fechaISOValida(fecha) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) return false;
+  const d = new Date(`${fecha}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === fecha;
+}
+
+function numeroEnRango(valor, minimo, maximo) {
+  const n = Number(valor);
+  return Number.isFinite(n) && n >= minimo && n <= maximo;
+}
+
+function blobCifradoValido(blob, maximo = 1000000) {
+  if (typeof blob !== 'string' || blob.length < 2 || blob.length > maximo || /^[=+\-@]/.test(blob)) return false;
+  try {
+    const p = JSON.parse(blob);
+    const b64 = (v) => typeof v === 'string' && v.length <= maximo && /^[A-Za-z0-9+/]+={0,2}$/.test(v);
+    return p && p.cifrado === true && p.v === 1 && b64(p.salt) && b64(p.iv) && b64(p.datos);
+  } catch { return false; }
+}
+
+function dividirTexto(texto, maximo = 40000) {
+  const valor = String(texto);
+  if (!Number.isInteger(maximo) || maximo < 1) throw new Error('Tamaño de chunk inválido');
+  if (valor === '') return [''];
+  const chunks = [];
+  for (let i = 0; i < valor.length; i += maximo) chunks.push(valor.slice(i, i + maximo));
+  return chunks;
+}
+
+function reunirTexto(chunks) {
+  return Array.isArray(chunks) ? chunks.map(String).join('') : '';
+}
+
+  return { guardarToken, leerToken, borrarToken, requiereAutorizacion, agregarCredenciales, exigirBackendActual, validarSesion, puedeValidarPin, siguienteBloqueoPin, pinNuevoValido, usuarioValido, fechaISOValida, numeroEnRango, blobCifradoValido, dividirTexto, reunirTexto };
+})();
+const guardarToken = autorizacion.guardarToken;
+const leerToken = autorizacion.leerToken;
+const borrarToken = autorizacion.borrarToken;
+const requiereAutorizacion = autorizacion.requiereAutorizacion;
+const agregarCredenciales = autorizacion.agregarCredenciales;
+const exigirBackendActual = autorizacion.exigirBackendActual;
+const validarSesion = autorizacion.validarSesion;
+const puedeValidarPin = autorizacion.puedeValidarPin;
+const siguienteBloqueoPin = autorizacion.siguienteBloqueoPin;
+const pinNuevoValido = autorizacion.pinNuevoValido;
+const usuarioValido = autorizacion.usuarioValido;
+const fechaISOValida = autorizacion.fechaISOValida;
+const numeroEnRango = autorizacion.numeroEnRango;
+const blobCifradoValido = autorizacion.blobCifradoValido;
+const dividirTexto = autorizacion.dividirTexto;
+const reunirTexto = autorizacion.reunirTexto;
+
 // ── shared/sesion.js ──────────────────────────────────────────
 const sesion = (function () {
 // Sesión compartida entre el launcher, Gastos y Peso (mismo origen -- misma
@@ -9,6 +127,7 @@ const sesion = (function () {
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
+const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
 // -- si el iPhone borra localStorage entre usos (pasa en algunos ajustes de
@@ -36,28 +155,80 @@ function esAdmin() {
   return getRol() === 'admin';
 }
 
-function iniciarSesion(usuario, rol) {
+function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
+  if (token) guardarToken(token);
 }
 
 function cerrarSesion() {
   localStorage.removeItem(CLAVE_USUARIO);
   localStorage.removeItem(CLAVE_ROL);
+  borrarClaveSesion();
+  borrarToken();
+}
+
+// Inicia la invalidación mientras el token todavía existe, limpia el estado
+// local de inmediato y absorbe errores de red: salir nunca debe dejar la UI
+// esperando ni conservar credenciales en el dispositivo.
+function cerrarSesionEnSegundoPlano(invalidar) {
+  let solicitud;
+  try { solicitud = invalidar(); }
+  catch { solicitud = undefined; }
+  cerrarSesion();
+  return Promise.resolve(solicitud).catch(() => undefined);
+}
+
+function debeConfirmarNavegacion({ valor, enviado }) {
+  return !enviado && String(valor ?? '').trim().length > 0;
+}
+
+async function ejecutarUnaVez(boton, accion) {
+  if (boton.disabled) return undefined;
+  boton.disabled = true;
+  try { return await accion(); }
+  finally { boton.disabled = false; }
+}
+
+function sesionAutenticada(usuario, token) {
+  return String(usuario || '').length > 0 && String(token || '').length > 0;
+}
+
+function accesoFaceIdValido(respuesta) {
+  return respuesta?.ok === true && String(respuesta.token || '').length > 0;
+}
+
+
+// El PIN/contraseña que se escribió al entrar en el launcher, guardado SOLO
+// en sessionStorage (se borra solo al cerrar la pestaña/navegador, nunca
+// persiste como localStorage) -- Gastos lo prueba primero como su propia
+// contraseña de cifrado antes de preguntar la suya, para no volver a pedir
+// nada al pasar de Peso a Gastos. Nunca se manda al servidor -- solo se usa
+// localmente para intentar descifrar (ver gastos/js/ui.js::intentarEntradaAutomatica).
+function guardarClaveSesion(pass) {
+  sessionStorage.setItem(CLAVE_SESION_PASS, pass);
+}
+
+function leerClaveSesion() {
+  return sessionStorage.getItem(CLAVE_SESION_PASS) || '';
+}
+
+function borrarClaveSesion() {
+  sessionStorage.removeItem(CLAVE_SESION_PASS);
 }
 
 // Llamar al cargar cualquier sub-app: si falta URL o sesión, regresa al
 // launcher para iniciar sesión ahí. `rutaLauncher` es relativa a la sub-app
 // (ej. '../index.html').
 function exigirSesion(rutaLauncher) {
-  if (!getUrl() || !getUsuario()) {
+  if (!getUrl() || !getUsuario() || !leerToken()) {
     location.href = rutaLauncher;
     return false;
   }
   return true;
 }
 
-  return { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion, exigirSesion };
+  return { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
 })();
 const getUrl = sesion.getUrl;
 const setUrl = sesion.setUrl;
@@ -66,6 +237,14 @@ const getRol = sesion.getRol;
 const esAdmin = sesion.esAdmin;
 const iniciarSesion = sesion.iniciarSesion;
 const cerrarSesion = sesion.cerrarSesion;
+const cerrarSesionEnSegundoPlano = sesion.cerrarSesionEnSegundoPlano;
+const debeConfirmarNavegacion = sesion.debeConfirmarNavegacion;
+const ejecutarUnaVez = sesion.ejecutarUnaVez;
+const sesionAutenticada = sesion.sesionAutenticada;
+const accesoFaceIdValido = sesion.accesoFaceIdValido;
+const guardarClaveSesion = sesion.guardarClaveSesion;
+const leerClaveSesion = sesion.leerClaveSesion;
+const borrarClaveSesion = sesion.borrarClaveSesion;
 const exigirSesion = sesion.exigirSesion;
 
 // ── shared/api.js ──────────────────────────────────────────
@@ -74,35 +253,98 @@ const api = (function () {
 // Sin caché, sin cola -- eso vive en cola.js de cada app. Aquí solo se habla
 // con el servidor.
 
-async function _get(params) {
-  const url = getUrl();
-  if (!url) throw new Error('No hay URL de Apps Script configurada.');
-  const qs = new URLSearchParams(params).toString();
-  const resp = await fetch(`${url}?${qs}`);
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+const TIMEOUT_MS = 12000;
+let manejadorAuth = null;
+
+function configurarManejadorAuth(fn) {
+  manejadorAuth = typeof fn === 'function' ? fn : null;
+}
+
+function esFalloAuth(resultado) {
+  if (!resultado || resultado.ok !== false) return false;
+  const detalle = `${resultado.codigo || ''} ${resultado.error || ''}`;
+  return /(?:auth|sesi[oó]n.*(?:inv[aá]lida|vencida|expirada)|token)/i.test(detalle);
+}
+
+class ApiError extends Error {
+  constructor(message, { code, status, cause } = {}) {
+    super(message, { cause });
+    this.name = 'ApiError';
+    this.code = code;
+    if (status !== undefined) this.status = status;
+  }
+}
+
+async function solicitarJson(url, opciones = {}, { fetchImpl = fetch, timeoutMs = TIMEOUT_MS, scheduler = globalThis } = {}) {
+  const controlador = new AbortController();
+  const signalExterno = opciones.signal;
+  let vencioTimeout = false;
+  const cancelarExterno = () => controlador.abort(signalExterno.reason);
+  if (signalExterno?.aborted) cancelarExterno();
+  else signalExterno?.addEventListener('abort', cancelarExterno, { once: true });
+  const temporizador = scheduler.setTimeout(() => {
+    vencioTimeout = true;
+    controlador.abort();
+  }, timeoutMs);
+  try {
+    const resp = await fetchImpl(url, { ...opciones, signal: controlador.signal });
+    if (!resp.ok) {
+      const code = resp.status === 401 || resp.status === 403 ? 'AUTH' : 'HTTP';
+      throw new ApiError(`El servidor respondió HTTP ${resp.status}. Intenta de nuevo.`, { code, status: resp.status });
+    }
+    try {
+      const resultado = await resp.json();
+      if (esFalloAuth(resultado)) {
+        try { manejadorAuth?.(); } catch { /* el manejo de UI no cambia el error de red */ }
+        throw new ApiError(resultado.error || 'La sesión expiró. Vuelve a entrar.', { code: 'AUTH', status: resp.status });
+      }
+      return resultado;
+    } catch (cause) {
+      if (cause instanceof ApiError) throw cause;
+      throw new ApiError('El servidor devolvió una respuesta inválida. Intenta de nuevo.', { code: 'RESPONSE', cause });
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (signalExterno?.aborted && !vencioTimeout) {
+      throw new ApiError('La solicitud fue cancelada.', { code: 'ABORTED', cause: error });
+    }
+    if (vencioTimeout || error?.name === 'AbortError') {
+      throw new ApiError('La solicitud tardó demasiado. Revisa tu conexión e intenta de nuevo.', { code: 'TIMEOUT', cause: error });
+    }
+    if (error instanceof TypeError) {
+      throw new ApiError('No se pudo establecer conexión. Revisa tu red e intenta de nuevo.', { code: 'NETWORK', cause: error });
+    }
+    throw new ApiError('No se pudo completar la solicitud. Intenta de nuevo.', { code: 'NETWORK', cause: error });
+  } finally {
+    scheduler.clearTimeout(temporizador);
+    signalExterno?.removeEventListener('abort', cancelarExterno);
+  }
 }
 
 async function _post(body) {
   const url = getUrl();
   if (!url) throw new Error('No hay URL de Apps Script configurada.');
-  const resp = await fetch(url, {
+  const resultado = await solicitarJson(url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight CORS con Apps Script
-    body: JSON.stringify(body),
+    body: JSON.stringify(agregarCredenciales(body, getUsuario(), leerToken())),
   });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+  return resultado;
+}
+
+async function cerrarSesionServidor() {
+  try { return await _post({ accion: 'cerrarSesion' }); }
+  finally { borrarToken(); }
 }
 
 function leerDatos() {
-  return _get({ accion: 'datos' });
+  return _post({ accion: 'leerDatos' });
 }
 
 // Consulta barata (no toca Hojas) para saber si algo cambió en Peso antes
 // de pedir 'datos' completo -- se puede llamar seguido sin gastar cuota.
 function leerVersion() {
-  return _get({ accion: 'version' });
+  return _post({ accion: 'leerVersion' });
 }
 
 function guardarFechasReto(usuario, inicio, fin) {
@@ -115,6 +357,10 @@ function validarUsuario(usuario) {
 
 function validarPin(usuario, pin) {
   return _post({ accion: 'validarPin', usuario, pin });
+}
+
+function validarActivacion(usuario, codigo) {
+  return _post({ accion: 'validarActivacion', usuario, codigo });
 }
 
 function crearPin(usuario, pinNuevo) {
@@ -145,8 +391,8 @@ function borrarPesoFecha(usuario, fecha) {
   return _post({ accion: 'borrarPesoFecha', usuario, fecha });
 }
 
-function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
-  return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
+function crearUsuario(nombreNuevo, rolNuevo) {
+  return _post({ accion: 'crearUsuario', nombreNuevo, rolNuevo });
 }
 
 function guardarGastos(usuario, blob) {
@@ -154,16 +400,21 @@ function guardarGastos(usuario, blob) {
 }
 
 function leerGastos(usuario) {
-  return _get({ accion: 'leerGastos', usuario });
+  return _post({ accion: 'leerGastos', usuario });
 }
 
-  return { leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
+  return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
+const configurarManejadorAuth = api.configurarManejadorAuth;
+const ApiError = api.ApiError;
+const solicitarJson = api.solicitarJson;
+const cerrarSesionServidor = api.cerrarSesionServidor;
 const leerDatos = api.leerDatos;
 const leerVersion = api.leerVersion;
 const guardarFechasReto = api.guardarFechasReto;
 const validarUsuario = api.validarUsuario;
 const validarPin = api.validarPin;
+const validarActivacion = api.validarActivacion;
 const crearPin = api.crearPin;
 const cambiarPin = api.cambiarPin;
 const guardarPeso = api.guardarPeso;
@@ -326,9 +577,10 @@ const candado = (function () {
 // Guarda localmente (por usuario, por app) el secreto que Face ID va a
 // "revelar" en vez de pedirte que lo teclees: el PIN de sesión del launcher,
 // o la contraseña de cifrado de Gastos. Vive en localStorage -- protegido
-// por el propio bloqueo del iPhone, igual que cualquier sesión guardada en
-// Safari. Ver shared/passkey.js para el porqué esto es un candado local y
-// no una autenticación remota real.
+// solo por el sandbox/bloqueo del dispositivo, no por cifrado propio. Un XSS
+// que ejecute JavaScript en este mismo origen podría leerlo. Task 4/5 debe
+// añadir una CSP estricta y revisar los puntos de inyección. Ver
+// shared/passkey.js: esto es un candado local, no autenticación remota real.
 
 function clave(app, usuario) {
   return `ma_candado_${app}_${usuario}`;
@@ -465,7 +717,12 @@ const borrarFondo = fondo.borrarFondo;
 const comprimirImagen = fondo.comprimirImagen;
 
 // ── js/ui.js ──────────────────────────────────────────
-// Launcher: login (URL → usuario → PIN o sin PIN) y los dos botones grandes.
+// Launcher: login (URL → usuario → PIN) y los dos botones grandes.
+
+api.configurarManejadorAuth(() => {
+  cerrarSesionEnSegundoPlano(() => undefined);
+  location.href = 'index.html';
+});
 
 let usuarioTemp = null;
 let rolTemp = null;
@@ -494,21 +751,39 @@ async function renderFaceIdUsuarios() {
 // del toque del usuario. Por eso `verificar`/`registrar` van siempre como lo
 // PRIMERO dentro de un handler de click -- nunca después de un await, un
 // confirm() nativo, ni al cargar la página (ahí las rechaza en seco).
-async function entrarConFaceId(usuario) {
+async function autenticarConFaceId(usuario, mostrarError) {
   try {
     await passkey.verificar(usuario);
   } catch (e) {
-    mostrarErrorUsuario(e.message);
-    return;
+    mostrarError(e.message);
+    return false;
   }
   const datos = candado.leerCandado('launcher', usuario);
   if (!datos) {
-    mostrarErrorUsuario('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
-    return;
+    mostrarError('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
+    return false;
+  }
+  let acceso;
+  try {
+    acceso = await api.validarPin(usuario, datos.pin || '');
+    exigirBackendActual(acceso, { requiereToken: true });
+  } catch (e) {
+    mostrarError('No se pudo validar la sesión: ' + e.message);
+    return false;
+  }
+  if (!accesoFaceIdValido(acceso)) {
+    mostrarError('La sesión expiró. Entra con tu PIN para continuar.');
+    return false;
   }
   candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
-  iniciarSesion(usuario, datos.rol);
+  guardarClaveSesion(datos.pin || ''); // misma idea: Gastos la prueba sola, sin volver a preguntar
+  iniciarSesion(usuario, datos.rol, acceso.token);
   mostrarInicio();
+  return true;
+}
+
+function entrarConFaceId(usuario) {
+  return autenticarConFaceId(usuario, mostrarErrorUsuario);
 }
 
 function mostrarPantallaCandado(usuario) {
@@ -519,20 +794,16 @@ function mostrarPantallaCandado(usuario) {
 
 // Va colgada del botón, NO se dispara sola al abrir: ninguna app web puede
 // lanzar Face ID sin que toques algo primero (Safari lo bloquea).
-async function intentarCandado(usuario) {
-  try {
-    await passkey.verificar(usuario);
-  } catch (e) {
-    document.getElementById('candado-texto').textContent = e.message;
-    return;
-  }
-  candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
-  mostrarInicio();
+function intentarCandado(usuario) {
+  return autenticarConFaceId(usuario, (mensaje) => {
+    document.getElementById('candado-texto').textContent = mensaje;
+  });
 }
 
 // El callback corre DENTRO del click en "Sí, activar" -- ese es el toque que
 // Safari necesita para dejar pasar el registro biométrico.
 function popupFaceId(mensaje, onAceptar) {
+  const focoAnterior = document.activeElement;
   const fondo = document.getElementById('popup-faceid');
   document.getElementById('popup-faceid-mensaje').textContent = mensaje;
   fondo.classList.remove('oculto');
@@ -542,11 +813,20 @@ function popupFaceId(mensaje, onAceptar) {
     fondo.classList.add('oculto');
     btnSi.removeEventListener('click', onSi);
     btnNo.removeEventListener('click', onNo);
+    fondo.removeEventListener('keydown', onKey);
+    focoAnterior?.focus?.();
   };
   const onSi = () => { cerrar(); onAceptar(); };
   const onNo = () => cerrar();
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cerrar(); }
+    if (e.key === 'Tab' && e.shiftKey && document.activeElement === btnNo) { e.preventDefault(); btnSi.focus(); }
+    else if (e.key === 'Tab' && !e.shiftKey && document.activeElement === btnSi) { e.preventDefault(); btnNo.focus(); }
+  };
   btnSi.addEventListener('click', onSi);
   btnNo.addEventListener('click', onNo);
+  fondo.addEventListener('keydown', onKey);
+  btnNo.focus();
 }
 
 // El passkey (registro biométrico) es UNO por usuario y sirve para las dos
@@ -600,9 +880,10 @@ async function activarFaceId() {
     alert('No se puede activar Face ID aquí:\n\n' + motivo);
     return;
   }
-  const pin = prompt('Para activar Face ID, confirma tu PIN actual (vacío si no tienes uno):') || '';
+  const pin = prompt('Para activar Face ID, confirma tu PIN actual:') || '';
   try {
     const r = await api.validarPin(usuario, pin);
+    exigirBackendActual(r, { requiereToken: true });
     if (!r.ok) {
       alert('PIN incorrecto');
       return;
@@ -664,10 +945,10 @@ async function agregarUsuario() {
   const nombreNuevo = prompt('Nombre del usuario nuevo:');
   if (!nombreNuevo || !nombreNuevo.trim()) return;
   const esOtroAdmin = confirm('¿Este usuario también es administrador?\n\nAceptar = sí, administrador.\nCancelar = no, usuario normal.');
-  const pinAdmin = prompt('Tu PIN (vacío si no tienes uno):') || '';
   try {
-    const r = await api.crearUsuario(getUsuario(), pinAdmin, nombreNuevo.trim(), esOtroAdmin ? 'admin' : 'normal');
-    if (r.ok) alert(`Listo, "${nombreNuevo.trim()}" ya puede entrar (sin PIN hasta que decida ponerse uno).`);
+    const r = await api.crearUsuario(nombreNuevo.trim(), esOtroAdmin ? 'admin' : 'normal');
+    exigirBackendActual(r);
+    if (r.ok && r.codigoActivacion) alert(`Usuario creado. Código de activación de un solo uso para ${nombreNuevo.trim()}:\n\n${r.codigoActivacion}\n\nEntrégaselo por un canal privado; no volverá a mostrarse.`);
     else alert(r.error || 'No se pudo crear');
   } catch (e) {
     alert('No se pudo crear: ' + e.message);
@@ -692,6 +973,7 @@ async function continuarUsuario() {
   document.getElementById('usuario-error').classList.add('oculto');
   try {
     const r = await api.validarUsuario(usuario);
+    exigirBackendActual(r);
     if (!r.ok) {
       mostrarErrorUsuario('Usuario incorrecto');
       return;
@@ -705,6 +987,12 @@ async function continuarUsuario() {
       document.getElementById('pin-input').focus();
     } else {
       mostrarPantalla('pantalla-pin-nuevo');
+      document.getElementById('codigo-activacion-input').value = '';
+      document.getElementById('codigo-activacion-input').disabled = false;
+      document.getElementById('activacion-error').classList.add('oculto');
+      document.getElementById('pin-nuevo-input').classList.add('oculto');
+      document.getElementById('btn-pin-nuevo-guardar').classList.add('oculto');
+      document.getElementById('btn-pin-nuevo-mostrar').classList.remove('oculto');
     }
   } catch (e) {
     mostrarErrorUsuario('No se pudo validar (¿la URL es correcta?): ' + e.message);
@@ -715,15 +1003,43 @@ async function continuarPin() {
   const pin = document.getElementById('pin-input').value;
   try {
     const r = await api.validarPin(usuarioTemp, pin);
+    exigirBackendActual(r, { requiereToken: true });
     if (!r.ok) {
       mostrarErrorPin('PIN incorrecto');
       return;
     }
-    iniciarSesion(usuarioTemp, rolTemp);
+    iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
+    guardarClaveSesion(pin); // Gastos la prueba sola al abrir, sin volver a preguntar
     mostrarInicio();
     ofrecerFaceId(usuarioTemp, rolTemp, pin);
   } catch (e) {
     mostrarErrorPin('No se pudo validar: ' + e.message);
+  }
+}
+
+async function validarCodigoActivacion() {
+  const codigo = document.getElementById('codigo-activacion-input').value.trim();
+  const error = document.getElementById('activacion-error');
+  error.classList.add('oculto');
+  if (!/^\d{8,}$/.test(codigo)) {
+    error.textContent = 'El código de activación debe tener al menos 8 dígitos.';
+    error.classList.remove('oculto');
+    return;
+  }
+  try {
+    const r = await api.validarActivacion(usuarioTemp, codigo);
+    exigirBackendActual(r, { requiereToken: true });
+    if (!r.ok) throw new Error(r.error || 'Código de activación incorrecto');
+    guardarToken(r.token);
+    document.getElementById('codigo-activacion-input').disabled = true;
+    document.getElementById('pin-nuevo-input').classList.remove('oculto');
+    document.getElementById('btn-pin-nuevo-guardar').classList.remove('oculto');
+    document.getElementById('btn-pin-nuevo-mostrar').classList.add('oculto');
+    document.getElementById('pin-nuevo-input').focus();
+  } catch (e) {
+    borrarToken();
+    error.textContent = e.message;
+    error.classList.remove('oculto');
   }
 }
 
@@ -733,16 +1049,13 @@ async function guardarPinNuevo() {
     alert('El PIN debe ser de 4 dígitos');
     return;
   }
-  await api.crearPin(usuarioTemp, pin);
-  iniciarSesion(usuarioTemp, rolTemp);
+  const r = await api.crearPin(usuarioTemp, pin);
+  exigirBackendActual(r, { requiereToken: true });
+  if (!r.ok || !r.token) throw new Error(r.error || 'No se pudo crear el PIN');
+  iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
+  guardarClaveSesion(pin); // Gastos la prueba sola al abrir, sin volver a preguntar
   mostrarInicio();
   ofrecerFaceId(usuarioTemp, rolTemp, pin);
-}
-
-function entrarSinPin() {
-  iniciarSesion(usuarioTemp, rolTemp);
-  mostrarInicio();
-  ofrecerFaceId(usuarioTemp, rolTemp, '');
 }
 
 function wireEventos() {
@@ -753,26 +1066,21 @@ function wireEventos() {
     mostrarPantalla('pantalla-usuario');
   });
 
-  document.getElementById('btn-usuario-continuar').addEventListener('click', continuarUsuario);
+  document.getElementById('btn-usuario-continuar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, continuarUsuario));
   document.getElementById('usuario-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') continuarUsuario();
+    if (e.key === 'Enter') document.getElementById('btn-usuario-continuar').click();
   });
 
-  document.getElementById('btn-pin-continuar').addEventListener('click', continuarPin);
+  document.getElementById('btn-pin-continuar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, continuarPin));
   document.getElementById('pin-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') continuarPin();
+    if (e.key === 'Enter') document.getElementById('btn-pin-continuar').click();
   });
 
-  document.getElementById('btn-pin-nuevo-mostrar').addEventListener('click', () => {
-    document.getElementById('pin-nuevo-input').classList.remove('oculto');
-    document.getElementById('btn-pin-nuevo-guardar').classList.remove('oculto');
-    document.getElementById('btn-pin-nuevo-mostrar').classList.add('oculto');
-  });
-  document.getElementById('btn-pin-nuevo-guardar').addEventListener('click', guardarPinNuevo);
-  document.getElementById('btn-sin-pin').addEventListener('click', entrarSinPin);
+  document.getElementById('btn-pin-nuevo-mostrar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, validarCodigoActivacion));
+  document.getElementById('btn-pin-nuevo-guardar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarPinNuevo));
 
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
-    cerrarSesion();
+    cerrarSesionEnSegundoPlano(api.cerrarSesionServidor);
     document.getElementById('usuario-input').value = '';
     mostrarPantalla('pantalla-usuario');
     renderFaceIdUsuarios();
@@ -782,7 +1090,7 @@ function wireEventos() {
   document.getElementById('btn-candado-entrar').addEventListener('click', () => intentarCandado(getUsuario()));
   document.getElementById('btn-candado-pin').addEventListener('click', () => {
     const usuario = getUsuario();
-    cerrarSesion();
+    cerrarSesionEnSegundoPlano(api.cerrarSesionServidor);
     document.getElementById('usuario-input').value = usuario;
     mostrarPantalla('pantalla-usuario');
     renderFaceIdUsuarios();
@@ -801,7 +1109,7 @@ async function init() {
     mostrarPantalla('pantalla-url');
     return;
   }
-  if (getUsuario()) {
+  if (sesionAutenticada(getUsuario(), leerToken())) {
     // Sesión ya guardada -- si activaste Face ID para este usuario, hay que
     // re-confirmar cada vez que se abre la app (no basta con haber entrado
     // una vez); si no lo activaste, entra directo como siempre. La pantalla

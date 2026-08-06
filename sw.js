@@ -5,17 +5,20 @@
 
 // CACHE (con número de versión) es el "shell" -- html/css/js, cambia cada
 // vez que se sube algo, así que se vuelve a bajar completo cada vez, a
-// propósito. CACHE_ASSETS NO lleva número de versión y NUNCA se borra en
-// activate -- fotos y videos rara vez cambian, así que si ya están ahí de
-// una versión anterior, NO se vuelven a descargar (ver precachearAssets).
+// propósito. CACHE_ASSETS tiene su propia versión: fotos y videos rara vez
+// cambian, pero al incrementarla se invalidan de forma explícita y activate
+// elimina las versiones anteriores (ver precachearAssets).
 // Antes todo vivía junto en CACHE: cada versión nueva volvía a bajar los
 // videos completos aunque no hubieran cambiado -- eso era la parte lenta.
-const CACHE = 'mis-apps-v24';
-const CACHE_ASSETS = 'mis-apps-assets';
+const CACHE = 'mis-apps-v28';
+const CACHE_ASSETS = 'mis-apps-assets-v2';
+const VERSION = 'v28';
+const URL_METADATA = './__app_meta__.json';
 
 const ARCHIVOS = [
   './index.html',
   './css/estilos.css',
+  './shared/tema.css',
   './js/app.js',
   './manifest.json',
   './icon-512.png',
@@ -46,7 +49,14 @@ async function precachearAssets() {
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    Promise.all([caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)), precachearAssets()]).then(() => self.skipWaiting())
+    Promise.all([caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)), precachearAssets()])
+      .then(async () => {
+        const cache = await caches.open(CACHE);
+        await cache.put(URL_METADATA, new Response(JSON.stringify({
+          version: 'v28', installedAt: new Date().toISOString(),
+        }), { headers: { 'Content-Type': 'application/json' } }));
+      })
+      .then(() => self.skipWaiting())
   );
 });
 

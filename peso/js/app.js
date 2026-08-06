@@ -1,6 +1,124 @@
 // ARCHIVO GENERADO por build.py (paquete "peso") -- no editar a mano.
 // Edita los archivos fuente y vuelve a correr: python build.py
 
+// ── shared/autorizacion.js ──────────────────────────────────────────
+const autorizacion = (function () {
+const CLAVE_TOKEN = 'ma_token';
+const PUBLICAS = new Set(['validarUsuario', 'validarPin', 'validarActivacion']);
+const MENSAJE_BACKEND_ANTIGUO = 'El servidor necesita actualizarse primero. Pide al administrador desplegar la nueva versión de Apps Script.';
+
+function storagePredeterminado() {
+  return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+}
+
+function guardarToken(token, storage = storagePredeterminado()) {
+  if (storage && token) storage.setItem(CLAVE_TOKEN, String(token));
+}
+
+function leerToken(storage = storagePredeterminado()) {
+  return storage ? storage.getItem(CLAVE_TOKEN) || '' : '';
+}
+
+function borrarToken(storage = storagePredeterminado()) {
+  if (storage) storage.removeItem(CLAVE_TOKEN);
+}
+
+function requiereAutorizacion(accion) {
+  return !PUBLICAS.has(String(accion || ''));
+}
+
+function agregarCredenciales(solicitud, usuario, token) {
+  if (!requiereAutorizacion(solicitud.accion)) return { ...solicitud };
+  return { ...solicitud, usuario: solicitud.usuario || usuario, token };
+}
+
+function exigirBackendActual(respuesta, { requiereToken = false } = {}) {
+  const version = Number(respuesta?.apiVersion);
+  if (!Number.isFinite(version) || version < 2 || (requiereToken && respuesta?.ok === true && !String(respuesta?.token || ''))) {
+    throw new Error(MENSAJE_BACKEND_ANTIGUO);
+  }
+  return true;
+}
+
+function validarSesion({
+  sesion, usuarioActual, usuarioSolicitado, ahora = Date.now(), rolRequerido = null, alcancePermitido = null,
+}) {
+  if (!sesion || !usuarioActual || !usuarioActual.activo) return false;
+  if (sesion.expira <= ahora) return false;
+  if (sesion.usuario !== usuarioSolicitado || usuarioActual.usuario !== sesion.usuario) return false;
+  if (usuarioActual.rol !== sesion.rol) return false;
+  if (rolRequerido && usuarioActual.rol !== rolRequerido) return false;
+  return sesion.alcance === 'completo' || sesion.alcance === alcancePermitido;
+}
+
+function puedeValidarPin(pinConfigurado, pinRecibido) {
+  return String(pinConfigurado || '') !== '' && String(pinConfigurado) === String(pinRecibido || '').trim();
+}
+
+function siguienteBloqueoPin(intentosAnteriores, ahora = Date.now()) {
+  const intentos = Math.max(0, Number(intentosAnteriores) || 0) + 1;
+  const demora = Math.min(60000, Math.pow(2, Math.max(0, intentos - 3)) * 1000);
+  return { intentos, hasta: ahora + demora };
+}
+
+function pinNuevoValido(pin) { return /^\d{4}$/.test(String(pin)); }
+
+function usuarioValido(usuario) {
+  return /^[\p{L}\p{N} _.-]{1,64}$/u.test(String(usuario || '')) && !String(usuario).includes('..');
+}
+
+function fechaISOValida(fecha) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) return false;
+  const d = new Date(`${fecha}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === fecha;
+}
+
+function numeroEnRango(valor, minimo, maximo) {
+  const n = Number(valor);
+  return Number.isFinite(n) && n >= minimo && n <= maximo;
+}
+
+function blobCifradoValido(blob, maximo = 1000000) {
+  if (typeof blob !== 'string' || blob.length < 2 || blob.length > maximo || /^[=+\-@]/.test(blob)) return false;
+  try {
+    const p = JSON.parse(blob);
+    const b64 = (v) => typeof v === 'string' && v.length <= maximo && /^[A-Za-z0-9+/]+={0,2}$/.test(v);
+    return p && p.cifrado === true && p.v === 1 && b64(p.salt) && b64(p.iv) && b64(p.datos);
+  } catch { return false; }
+}
+
+function dividirTexto(texto, maximo = 40000) {
+  const valor = String(texto);
+  if (!Number.isInteger(maximo) || maximo < 1) throw new Error('Tamaño de chunk inválido');
+  if (valor === '') return [''];
+  const chunks = [];
+  for (let i = 0; i < valor.length; i += maximo) chunks.push(valor.slice(i, i + maximo));
+  return chunks;
+}
+
+function reunirTexto(chunks) {
+  return Array.isArray(chunks) ? chunks.map(String).join('') : '';
+}
+
+  return { guardarToken, leerToken, borrarToken, requiereAutorizacion, agregarCredenciales, exigirBackendActual, validarSesion, puedeValidarPin, siguienteBloqueoPin, pinNuevoValido, usuarioValido, fechaISOValida, numeroEnRango, blobCifradoValido, dividirTexto, reunirTexto };
+})();
+const guardarToken = autorizacion.guardarToken;
+const leerToken = autorizacion.leerToken;
+const borrarToken = autorizacion.borrarToken;
+const requiereAutorizacion = autorizacion.requiereAutorizacion;
+const agregarCredenciales = autorizacion.agregarCredenciales;
+const exigirBackendActual = autorizacion.exigirBackendActual;
+const validarSesion = autorizacion.validarSesion;
+const puedeValidarPin = autorizacion.puedeValidarPin;
+const siguienteBloqueoPin = autorizacion.siguienteBloqueoPin;
+const pinNuevoValido = autorizacion.pinNuevoValido;
+const usuarioValido = autorizacion.usuarioValido;
+const fechaISOValida = autorizacion.fechaISOValida;
+const numeroEnRango = autorizacion.numeroEnRango;
+const blobCifradoValido = autorizacion.blobCifradoValido;
+const dividirTexto = autorizacion.dividirTexto;
+const reunirTexto = autorizacion.reunirTexto;
+
 // ── shared/sesion.js ──────────────────────────────────────────
 const sesion = (function () {
 // Sesión compartida entre el launcher, Gastos y Peso (mismo origen -- misma
@@ -9,6 +127,7 @@ const sesion = (function () {
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
+const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
 // -- si el iPhone borra localStorage entre usos (pasa en algunos ajustes de
@@ -36,28 +155,80 @@ function esAdmin() {
   return getRol() === 'admin';
 }
 
-function iniciarSesion(usuario, rol) {
+function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
+  if (token) guardarToken(token);
 }
 
 function cerrarSesion() {
   localStorage.removeItem(CLAVE_USUARIO);
   localStorage.removeItem(CLAVE_ROL);
+  borrarClaveSesion();
+  borrarToken();
+}
+
+// Inicia la invalidación mientras el token todavía existe, limpia el estado
+// local de inmediato y absorbe errores de red: salir nunca debe dejar la UI
+// esperando ni conservar credenciales en el dispositivo.
+function cerrarSesionEnSegundoPlano(invalidar) {
+  let solicitud;
+  try { solicitud = invalidar(); }
+  catch { solicitud = undefined; }
+  cerrarSesion();
+  return Promise.resolve(solicitud).catch(() => undefined);
+}
+
+function debeConfirmarNavegacion({ valor, enviado }) {
+  return !enviado && String(valor ?? '').trim().length > 0;
+}
+
+async function ejecutarUnaVez(boton, accion) {
+  if (boton.disabled) return undefined;
+  boton.disabled = true;
+  try { return await accion(); }
+  finally { boton.disabled = false; }
+}
+
+function sesionAutenticada(usuario, token) {
+  return String(usuario || '').length > 0 && String(token || '').length > 0;
+}
+
+function accesoFaceIdValido(respuesta) {
+  return respuesta?.ok === true && String(respuesta.token || '').length > 0;
+}
+
+
+// El PIN/contraseña que se escribió al entrar en el launcher, guardado SOLO
+// en sessionStorage (se borra solo al cerrar la pestaña/navegador, nunca
+// persiste como localStorage) -- Gastos lo prueba primero como su propia
+// contraseña de cifrado antes de preguntar la suya, para no volver a pedir
+// nada al pasar de Peso a Gastos. Nunca se manda al servidor -- solo se usa
+// localmente para intentar descifrar (ver gastos/js/ui.js::intentarEntradaAutomatica).
+function guardarClaveSesion(pass) {
+  sessionStorage.setItem(CLAVE_SESION_PASS, pass);
+}
+
+function leerClaveSesion() {
+  return sessionStorage.getItem(CLAVE_SESION_PASS) || '';
+}
+
+function borrarClaveSesion() {
+  sessionStorage.removeItem(CLAVE_SESION_PASS);
 }
 
 // Llamar al cargar cualquier sub-app: si falta URL o sesión, regresa al
 // launcher para iniciar sesión ahí. `rutaLauncher` es relativa a la sub-app
 // (ej. '../index.html').
 function exigirSesion(rutaLauncher) {
-  if (!getUrl() || !getUsuario()) {
+  if (!getUrl() || !getUsuario() || !leerToken()) {
     location.href = rutaLauncher;
     return false;
   }
   return true;
 }
 
-  return { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion, exigirSesion };
+  return { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
 })();
 const getUrl = sesion.getUrl;
 const setUrl = sesion.setUrl;
@@ -66,6 +237,14 @@ const getRol = sesion.getRol;
 const esAdmin = sesion.esAdmin;
 const iniciarSesion = sesion.iniciarSesion;
 const cerrarSesion = sesion.cerrarSesion;
+const cerrarSesionEnSegundoPlano = sesion.cerrarSesionEnSegundoPlano;
+const debeConfirmarNavegacion = sesion.debeConfirmarNavegacion;
+const ejecutarUnaVez = sesion.ejecutarUnaVez;
+const sesionAutenticada = sesion.sesionAutenticada;
+const accesoFaceIdValido = sesion.accesoFaceIdValido;
+const guardarClaveSesion = sesion.guardarClaveSesion;
+const leerClaveSesion = sesion.leerClaveSesion;
+const borrarClaveSesion = sesion.borrarClaveSesion;
 const exigirSesion = sesion.exigirSesion;
 
 // ── shared/api.js ──────────────────────────────────────────
@@ -74,35 +253,98 @@ const api = (function () {
 // Sin caché, sin cola -- eso vive en cola.js de cada app. Aquí solo se habla
 // con el servidor.
 
-async function _get(params) {
-  const url = getUrl();
-  if (!url) throw new Error('No hay URL de Apps Script configurada.');
-  const qs = new URLSearchParams(params).toString();
-  const resp = await fetch(`${url}?${qs}`);
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+const TIMEOUT_MS = 12000;
+let manejadorAuth = null;
+
+function configurarManejadorAuth(fn) {
+  manejadorAuth = typeof fn === 'function' ? fn : null;
+}
+
+function esFalloAuth(resultado) {
+  if (!resultado || resultado.ok !== false) return false;
+  const detalle = `${resultado.codigo || ''} ${resultado.error || ''}`;
+  return /(?:auth|sesi[oó]n.*(?:inv[aá]lida|vencida|expirada)|token)/i.test(detalle);
+}
+
+class ApiError extends Error {
+  constructor(message, { code, status, cause } = {}) {
+    super(message, { cause });
+    this.name = 'ApiError';
+    this.code = code;
+    if (status !== undefined) this.status = status;
+  }
+}
+
+async function solicitarJson(url, opciones = {}, { fetchImpl = fetch, timeoutMs = TIMEOUT_MS, scheduler = globalThis } = {}) {
+  const controlador = new AbortController();
+  const signalExterno = opciones.signal;
+  let vencioTimeout = false;
+  const cancelarExterno = () => controlador.abort(signalExterno.reason);
+  if (signalExterno?.aborted) cancelarExterno();
+  else signalExterno?.addEventListener('abort', cancelarExterno, { once: true });
+  const temporizador = scheduler.setTimeout(() => {
+    vencioTimeout = true;
+    controlador.abort();
+  }, timeoutMs);
+  try {
+    const resp = await fetchImpl(url, { ...opciones, signal: controlador.signal });
+    if (!resp.ok) {
+      const code = resp.status === 401 || resp.status === 403 ? 'AUTH' : 'HTTP';
+      throw new ApiError(`El servidor respondió HTTP ${resp.status}. Intenta de nuevo.`, { code, status: resp.status });
+    }
+    try {
+      const resultado = await resp.json();
+      if (esFalloAuth(resultado)) {
+        try { manejadorAuth?.(); } catch { /* el manejo de UI no cambia el error de red */ }
+        throw new ApiError(resultado.error || 'La sesión expiró. Vuelve a entrar.', { code: 'AUTH', status: resp.status });
+      }
+      return resultado;
+    } catch (cause) {
+      if (cause instanceof ApiError) throw cause;
+      throw new ApiError('El servidor devolvió una respuesta inválida. Intenta de nuevo.', { code: 'RESPONSE', cause });
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (signalExterno?.aborted && !vencioTimeout) {
+      throw new ApiError('La solicitud fue cancelada.', { code: 'ABORTED', cause: error });
+    }
+    if (vencioTimeout || error?.name === 'AbortError') {
+      throw new ApiError('La solicitud tardó demasiado. Revisa tu conexión e intenta de nuevo.', { code: 'TIMEOUT', cause: error });
+    }
+    if (error instanceof TypeError) {
+      throw new ApiError('No se pudo establecer conexión. Revisa tu red e intenta de nuevo.', { code: 'NETWORK', cause: error });
+    }
+    throw new ApiError('No se pudo completar la solicitud. Intenta de nuevo.', { code: 'NETWORK', cause: error });
+  } finally {
+    scheduler.clearTimeout(temporizador);
+    signalExterno?.removeEventListener('abort', cancelarExterno);
+  }
 }
 
 async function _post(body) {
   const url = getUrl();
   if (!url) throw new Error('No hay URL de Apps Script configurada.');
-  const resp = await fetch(url, {
+  const resultado = await solicitarJson(url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight CORS con Apps Script
-    body: JSON.stringify(body),
+    body: JSON.stringify(agregarCredenciales(body, getUsuario(), leerToken())),
   });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+  return resultado;
+}
+
+async function cerrarSesionServidor() {
+  try { return await _post({ accion: 'cerrarSesion' }); }
+  finally { borrarToken(); }
 }
 
 function leerDatos() {
-  return _get({ accion: 'datos' });
+  return _post({ accion: 'leerDatos' });
 }
 
 // Consulta barata (no toca Hojas) para saber si algo cambió en Peso antes
 // de pedir 'datos' completo -- se puede llamar seguido sin gastar cuota.
 function leerVersion() {
-  return _get({ accion: 'version' });
+  return _post({ accion: 'leerVersion' });
 }
 
 function guardarFechasReto(usuario, inicio, fin) {
@@ -115,6 +357,10 @@ function validarUsuario(usuario) {
 
 function validarPin(usuario, pin) {
   return _post({ accion: 'validarPin', usuario, pin });
+}
+
+function validarActivacion(usuario, codigo) {
+  return _post({ accion: 'validarActivacion', usuario, codigo });
 }
 
 function crearPin(usuario, pinNuevo) {
@@ -145,8 +391,8 @@ function borrarPesoFecha(usuario, fecha) {
   return _post({ accion: 'borrarPesoFecha', usuario, fecha });
 }
 
-function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
-  return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
+function crearUsuario(nombreNuevo, rolNuevo) {
+  return _post({ accion: 'crearUsuario', nombreNuevo, rolNuevo });
 }
 
 function guardarGastos(usuario, blob) {
@@ -154,16 +400,21 @@ function guardarGastos(usuario, blob) {
 }
 
 function leerGastos(usuario) {
-  return _get({ accion: 'leerGastos', usuario });
+  return _post({ accion: 'leerGastos', usuario });
 }
 
-  return { leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
+  return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
+const configurarManejadorAuth = api.configurarManejadorAuth;
+const ApiError = api.ApiError;
+const solicitarJson = api.solicitarJson;
+const cerrarSesionServidor = api.cerrarSesionServidor;
 const leerDatos = api.leerDatos;
 const leerVersion = api.leerVersion;
 const guardarFechasReto = api.guardarFechasReto;
 const validarUsuario = api.validarUsuario;
 const validarPin = api.validarPin;
+const validarActivacion = api.validarActivacion;
 const crearPin = api.crearPin;
 const cambiarPin = api.cambiarPin;
 const guardarPeso = api.guardarPeso;
@@ -260,6 +511,43 @@ const guardarFondo = fondo.guardarFondo;
 const leerFondo = fondo.leerFondo;
 const borrarFondo = fondo.borrarFondo;
 const comprimirImagen = fondo.comprimirImagen;
+
+// ── shared/ui_seguridad.js ──────────────────────────────────────────
+const ui_seguridad = (function () {
+function escapeHTML(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, (caracter) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[caracter]);
+}
+
+function escapeAtributo(valor) {
+  return escapeHTML(valor).replace(/[\u0000-\u001f\u007f]/g, '');
+}
+
+function idSeguro(valor) {
+  const id = String(valor ?? '');
+  return /^[A-Za-z0-9_-]{1,80}$/.test(id) ? id : '';
+}
+
+function urlLocalSegura(valor) {
+  const url = String(valor ?? '');
+  return /^(?:\.\.\/|\.\/)?(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/.test(url) ? url : '';
+}
+
+function colorSeguro(valor, respaldo = '#999999') {
+  const color = String(valor ?? '');
+  return /^(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$/.test(color)
+    ? color
+    : respaldo;
+}
+
+  return { escapeHTML, escapeAtributo, idSeguro, urlLocalSegura, colorSeguro };
+})();
+const escapeHTML = ui_seguridad.escapeHTML;
+const escapeAtributo = ui_seguridad.escapeAtributo;
+const idSeguro = ui_seguridad.idSeguro;
+const urlLocalSegura = ui_seguridad.urlLocalSegura;
+const colorSeguro = ui_seguridad.colorSeguro;
 
 // ── peso/js/modelo.js ──────────────────────────────────────────
 const modelo = (function () {
@@ -615,14 +903,59 @@ function guardarJSON(clave, valor) {
   localStorage.setItem(clave, JSON.stringify(valor));
 }
 
-function leerCola() {
-  return leerJSON(CLAVE_COLA, []);
+function compactarOperaciones(operaciones) {
+  const ultimas = new Map();
+  for (const entrada of operaciones || []) {
+    if (!entrada?.usuario || !entrada?.fecha) continue;
+    const clave = `${entrada.usuario}\u0000${entrada.fecha}`;
+    if (ultimas.has(clave)) ultimas.set(clave, entrada);
+    else ultimas.set(clave, entrada);
+  }
+  return [...ultimas.values()];
+}
+
+function nuevoOpId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function identidadOperacion(entrada) {
+  return entrada.opId || `${entrada.usuario}\u0000${entrada.fecha}\u0000${entrada.tipo || 'guardar'}\u0000${entrada.ts || ''}`;
+}
+
+function claveCola(usuario) {
+  return `${CLAVE_COLA}:${encodeURIComponent(String(usuario || '').trim())}`;
+}
+
+function migrarColaAnterior() {
+  const anterior = leerJSON(CLAVE_COLA, []);
+  if (!anterior.length) return;
+  const usuarios = new Set(anterior.map((e) => e.usuario).filter(Boolean));
+  for (const usuario of usuarios) {
+    const clave = claveCola(usuario);
+    const propias = anterior.filter((e) => e.usuario === usuario);
+    const existentes = leerJSON(clave, []);
+    guardarJSON(clave, compactarOperaciones(existentes.concat(propias)));
+  }
+  localStorage.removeItem(CLAVE_COLA);
+}
+
+function leerCola(usuario) {
+  migrarColaAnterior();
+  if (!usuario) return [];
+  return leerJSON(claveCola(usuario), []).filter((e) => e.usuario === usuario);
 }
 
 function encolarPeso(usuario, fecha, pesoKg) {
-  const cola = leerCola().filter((e) => !(e.usuario === usuario && e.fecha === fecha));
-  cola.push({ usuario, fecha, pesoKg, ts: Date.now() });
-  guardarJSON(CLAVE_COLA, cola);
+  const cola = compactarOperaciones(leerCola(usuario).concat({ tipo: 'guardar', usuario, fecha, pesoKg, ts: Date.now(), opId: nuevoOpId() }));
+  guardarJSON(claveCola(usuario), cola);
+}
+
+// Igual que encolarPeso pero para un borrado -- así "Borrar" funciona sin
+// red exactamente igual que "Guardar" (antes solo guardar tenía cola).
+function encolarBorrado(usuario, fecha) {
+  const cola = compactarOperaciones(leerCola(usuario).concat({ tipo: 'borrar', usuario, fecha, ts: Date.now(), opId: nuevoOpId() }));
+  guardarJSON(claveCola(usuario), cola);
 }
 
 function leerCache() {
@@ -636,27 +969,31 @@ function guardarCache(datos) {
 // Snapshot del servidor (o el último cacheado si no hay señal) + lo que
 // todavía está en la cola sin confirmar, para que lo que acabas de capturar
 // se vea de inmediato aunque no haya llegado al Sheet.
-function conColaEncima(datos) {
-  const cola = leerCola();
+function conColaEncima(datos, usuario) {
+  const cola = leerCola(usuario);
   if (!cola.length) return datos;
   const pesos = datos.pesos.filter(
     (p) => !cola.some((e) => e.usuario === p.usuario && e.fecha === p.fecha)
   );
-  for (const e of cola) pesos.push({ usuario: e.usuario, fecha: e.fecha, pesoKg: e.pesoKg });
+  // Entradas viejas sin `tipo` (antes de que existiera el borrado en cola)
+  // se tratan como 'guardar', para no perder nada ya encolado.
+  for (const e of cola) {
+    if (e.tipo !== 'borrar') pesos.push({ usuario: e.usuario, fecha: e.fecha, pesoKg: e.pesoKg });
+  }
   return { ...datos, pesos };
 }
 
-async function refrescarDatos() {
+async function refrescarDatos(usuario) {
   try {
     const datos = await api.leerDatos();
     if (datos.ok) {
       const plano = { usuarios: datos.usuarios, pesos: datos.pesos, version: datos.version, retoInicio: datos.retoInicio, retoFin: datos.retoFin };
       guardarCache(plano);
-      return { datos: conColaEncima(plano), sinConexion: false };
+      return { datos: conColaEncima(plano, usuario), sinConexion: false };
     }
     throw new Error(datos.error || 'Error del servidor');
   } catch {
-    return { datos: conColaEncima(leerCache()), sinConexion: true };
+    return { datos: conColaEncima(leerCache(), usuario), sinConexion: true };
   }
 }
 
@@ -676,28 +1013,36 @@ async function hayCambiosRemotos() {
 
 let sincronizando = false;
 
-async function sincronizar() {
+async function sincronizar(usuario, transporte = api) {
   if (sincronizando) return;
-  const cola = leerCola();
+  const cola = leerCola(usuario);
   if (!cola.length || !navigator.onLine) return;
   sincronizando = true;
+  try {
   const pendientes = [];
   for (const entrada of cola) {
     try {
-      const r = await api.guardarPeso(entrada.usuario, entrada.fecha, entrada.pesoKg);
+      const r = entrada.tipo === 'borrar'
+        ? await transporte.borrarPesoFecha(entrada.usuario, entrada.fecha)
+        : await transporte.guardarPeso(entrada.usuario, entrada.fecha, entrada.pesoKg);
       if (!r.ok) pendientes.push(entrada);
+      else {
+        const id = identidadOperacion(entrada);
+        guardarJSON(claveCola(usuario), leerCola(usuario).filter((e) => identidadOperacion(e) !== id));
+      }
     } catch {
       pendientes.push(entrada); // sigue sin señal -- se queda en la cola
     }
   }
-  guardarJSON(CLAVE_COLA, pendientes);
-  sincronizando = false;
-  return { sincronizados: cola.length - pendientes.length, pendientes: pendientes.length };
+  return { sincronizados: cola.length - pendientes.length, pendientes: leerCola(usuario).length };
+  } finally {
+    sincronizando = false;
+  }
 }
 
-function iniciarSincronizacionAutomatica(alSincronizar) {
+function iniciarSincronizacionAutomatica(usuario, alSincronizar) {
   const intentar = async () => {
-    const r = await sincronizar();
+    const r = await sincronizar(usuario);
     if (r && r.sincronizados > 0 && alSincronizar) alSincronizar(r);
   };
   window.addEventListener('online', intentar);
@@ -705,15 +1050,118 @@ function iniciarSincronizacionAutomatica(alSincronizar) {
   intentar();
 }
 
-  return { leerCola, encolarPeso, leerCache, refrescarDatos, hayCambiosRemotos, sincronizar, iniciarSincronizacionAutomatica };
+  return { compactarOperaciones, leerCola, encolarPeso, encolarBorrado, leerCache, refrescarDatos, hayCambiosRemotos, sincronizar, iniciarSincronizacionAutomatica };
 })();
+const compactarOperaciones = cola.compactarOperaciones;
 const leerCola = cola.leerCola;
 const encolarPeso = cola.encolarPeso;
+const encolarBorrado = cola.encolarBorrado;
 const leerCache = cola.leerCache;
 const refrescarDatos = cola.refrescarDatos;
 const hayCambiosRemotos = cola.hayCambiosRemotos;
 const sincronizar = cola.sincronizar;
 const iniciarSincronizacionAutomatica = cola.iniciarSincronizacionAutomatica;
+
+// ── peso/js/actualizacion.js ──────────────────────────────────────────
+const actualizacion = (function () {
+const URL_METADATA = '../__app_meta__.json';
+
+function normalizarMetadata(valor) {
+  if (!valor || typeof valor !== 'object') return null;
+  const version = String(valor.version || '').trim();
+  const installedAt = String(valor.installedAt || '').trim();
+  if (!version || !installedAt || Number.isNaN(Date.parse(installedAt))) return null;
+  return { version, installedAt: new Date(installedAt).toISOString() };
+}
+
+function formatearFechaActualizacion(installedAt, zonaHoraria = 'America/Tijuana') {
+  const fecha = new Date(installedAt);
+  if (Number.isNaN(fecha.getTime())) return 'Sin información';
+  const opciones = {
+    dateStyle: 'long', timeStyle: 'short', hour12: false,
+    ...(zonaHoraria ? { timeZone: zonaHoraria } : {}),
+  };
+  try { return new Intl.DateTimeFormat('es-MX', opciones).format(fecha); }
+  catch { return new Intl.DateTimeFormat('es-MX', { dateStyle: 'long', timeStyle: 'short' }).format(fecha); }
+}
+
+function obtenerEstadoActualizacion({ soportado, buscando = false, preparada = false, metadata = null }) {
+  if (!soportado) return 'No disponible';
+  if (buscando) return 'Buscando actualización…';
+  if (preparada) return 'Actualización preparada';
+  return metadata ? 'Actualizada' : 'Sin información';
+}
+
+async function leerMetadataActualizacion(fetchFn = fetch) {
+  try {
+    const respuesta = await fetchFn(URL_METADATA, { cache: 'no-store' });
+    if (!respuesta.ok) return null;
+    return normalizarMetadata(await respuesta.json());
+  } catch { return null; }
+}
+
+async function buscarActualizacion(registro) {
+  if (!registro?.update) throw new Error('Actualizaciones no disponibles');
+  await registro.update();
+  return registro;
+}
+
+function hayCapturaPesoPendiente(captura) {
+  if (!captura) return false;
+  const tienePeso = String(captura.pesoStr ?? '').trim().length > 0;
+  const cambioFecha = captura.fechaOriginal && captura.fecha !== captura.fechaOriginal;
+  return Boolean(tienePeso || cambioFecha);
+}
+
+function decidirRecargaActualizacion({ capturaPendiente, formularioPendiente = false, escribiendoActivo, recargaDiferida = false }) {
+  if (capturaPendiente || formularioPendiente || escribiendoActivo) return { recargar: false, diferir: true };
+  return { recargar: true, diferir: false };
+}
+
+const CAMPOS_AJUSTE_DIFERIBLES = new Set([
+  'ajustes-meta', 'ajustes-inicial', 'reto-fecha-inicio', 'reto-fecha-fin',
+]);
+
+function esCampoAjusteDiferible(id, type) {
+  return type !== 'file' && CAMPOS_AJUSTE_DIFERIBLES.has(String(id || ''));
+}
+
+  return { normalizarMetadata, formatearFechaActualizacion, obtenerEstadoActualizacion, leerMetadataActualizacion, buscarActualizacion, hayCapturaPesoPendiente, decidirRecargaActualizacion, esCampoAjusteDiferible };
+})();
+const normalizarMetadata = actualizacion.normalizarMetadata;
+const formatearFechaActualizacion = actualizacion.formatearFechaActualizacion;
+const obtenerEstadoActualizacion = actualizacion.obtenerEstadoActualizacion;
+const leerMetadataActualizacion = actualizacion.leerMetadataActualizacion;
+const buscarActualizacion = actualizacion.buscarActualizacion;
+const hayCapturaPesoPendiente = actualizacion.hayCapturaPesoPendiente;
+const decidirRecargaActualizacion = actualizacion.decidirRecargaActualizacion;
+const esCampoAjusteDiferible = actualizacion.esCampoAjusteDiferible;
+
+// ── peso/js/ui_helpers.js ──────────────────────────────────────────
+const ui_helpers = (function () {
+function prepararEdicion(registro, unidad) {
+  const valor = unidad === 'lb' ? kgALb(registro.pesoKg) : registro.pesoKg;
+  return { fecha: registro.fecha, pesoStr: Number(valor).toFixed(1) };
+}
+
+function mensajeBorrado({ sinConexion, pendientes }) {
+  if (sinConexion) return 'Registro borrado en este dispositivo · pendiente de sincronizar';
+  if (pendientes > 0) return 'Registro borrado · sincronización pendiente';
+  return 'Registro borrado';
+}
+
+function planificarEdicion(fechaOriginal, fechaNueva, pesoKg) {
+  const operaciones = [];
+  if (fechaOriginal && fechaOriginal !== fechaNueva) operaciones.push({ tipo: 'borrar', fecha: fechaOriginal });
+  operaciones.push({ tipo: 'guardar', fecha: fechaNueva, pesoKg });
+  return operaciones;
+}
+
+  return { prepararEdicion, mensajeBorrado, planificarEdicion };
+})();
+const prepararEdicion = ui_helpers.prepararEdicion;
+const mensajeBorrado = ui_helpers.mensajeBorrado;
+const planificarEdicion = ui_helpers.planificarEdicion;
 
 // ── peso/js/ui.js ──────────────────────────────────────────
 // Estado, render y eventos. El único archivo que toca el DOM.
@@ -721,13 +1169,23 @@ const iniciarSincronizacionAutomatica = cola.iniciarSincronizacionAutomatica;
 // de llegar aquí -- esta app solo confirma que hay sesión (exigirSesion) y
 // usa getUsuario() para saber quién eres.
 
+api.configurarManejadorAuth(() => {
+  cerrarSesionEnSegundoPlano(() => undefined);
+  location.href = '../index.html';
+});
+
 const E = {
   vista: 'capturar',
   datos: { usuarios: [], pesos: [], retoInicio: null, retoFin: null },
   sinConexion: false,
-  captura: { fecha: hoyISO(), pesoStr: '' },
+  captura: { fecha: hoyISO(), fechaOriginal: hoyISO(), editandoFechaOriginal: null, pesoStr: '' },
   graficaActiva: 'diaria',
+  actualizacion: { metadata: null, buscando: false, preparada: false },
 };
+
+let registroSW = null;
+let intentarRecargaDiferida = () => {};
+const ajustesPendientes = new Set();
 
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -768,6 +1226,8 @@ function toast(msg, esError = false) {
     el.className = 'toast-simple';
     document.body.appendChild(el);
   }
+  el.setAttribute('role', esError ? 'alert' : 'status');
+  el.setAttribute('aria-live', esError ? 'assertive' : 'polite');
   el.style.background = esError ? 'var(--peligro)' : 'var(--texto)';
   el.style.color = esError ? '#fff' : 'var(--fondo)';
   el.textContent = msg;
@@ -797,7 +1257,7 @@ async function iniciarApp() {
   document.getElementById('app').classList.remove('oculto');
   cargarFondoGuardado(); // no bloquea el arranque -- se aplica en cuanto esté lista
   await cargarYRenderizar();
-  cola.iniciarSincronizacionAutomatica(() => cargarYRenderizar());
+  cola.iniciarSincronizacionAutomatica(getUsuario(), () => cargarYRenderizar());
   // Para que el peso que capture Cindy/Miguel le llegue rápido al otro sin
   // recargar a mano: cada 8s se pregunta solo el número de versión (barato,
   // sin tocar Hojas) y nomás si cambió se jala 'datos' completo. Al volver
@@ -813,7 +1273,7 @@ async function iniciarApp() {
 }
 
 async function cargarYRenderizar() {
-  const { datos, sinConexion } = await cola.refrescarDatos();
+  const { datos, sinConexion } = await cola.refrescarDatos(getUsuario());
   E.datos = datos;
   E.sinConexion = sinConexion;
   actualizarBadgeConexion();
@@ -822,7 +1282,7 @@ async function cargarYRenderizar() {
 
 function actualizarBadgeConexion() {
   const el = document.getElementById('badge-conexion');
-  const pendientes = cola.leerCola().length;
+  const pendientes = cola.leerCola(getUsuario()).length;
   if (E.sinConexion) {
     el.textContent = pendientes ? `📴 Sin conexión · ${pendientes} sin sincronizar` : '📴 Sin conexión (viendo lo último guardado)';
     el.classList.remove('oculto');
@@ -838,7 +1298,11 @@ function cambiarVista(nombre) {
   E.vista = nombre;
   document.querySelectorAll('.vista').forEach((v) => v.classList.remove('activa'));
   document.getElementById(`vista-${nombre}`).classList.add('activa');
-  document.querySelectorAll('.nav-inferior button').forEach((b) => b.classList.toggle('activo', b.dataset.vista === nombre));
+  document.querySelectorAll('.nav-inferior button').forEach((b) => {
+    const activo = b.dataset.vista === nombre;
+    b.classList.toggle('activo', activo);
+    if (activo) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   render();
 }
 
@@ -859,7 +1323,7 @@ function renderCapturar() {
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   const ultimo = ultimoPeso(E.datos.pesos, getUsuario());
   document.getElementById('captura-ultimo').innerHTML = ultimo
-    ? `Última captura: ${ultimo.fecha} — ${formatoPesoDualColor(ultimo.pesoKg)}`
+    ? `Última captura: ${escapeHTML(ultimo.fecha)} — ${formatoPesoDualColor(ultimo.pesoKg)}`
     : 'Todavía no capturas nada.';
   const r = racha(E.datos.pesos, getUsuario());
   document.getElementById('captura-racha').textContent = r > 0 ? `🔥 Racha: ${r} día(s)` : '';
@@ -876,16 +1340,22 @@ async function guardarCaptura() {
     const unidad = miUnidad();
     const pesoKg = validarPeso(aKg(E.captura.pesoStr, unidad));
     const fecha = E.captura.fecha;
-    cola.encolarPeso(getUsuario(), fecha, pesoKg);
-    E.datos.pesos = E.datos.pesos.filter((p) => !(p.usuario === getUsuario() && p.fecha === fecha));
+    const operaciones = uiHelpers.planificarEdicion(E.captura.editandoFechaOriginal, fecha, pesoKg);
+    for (const operacion of operaciones) {
+      if (operacion.tipo === 'borrar') cola.encolarBorrado(getUsuario(), operacion.fecha);
+      else cola.encolarPeso(getUsuario(), operacion.fecha, operacion.pesoKg);
+    }
+    const fechasQuitadas = new Set(operaciones.map((o) => o.fecha));
+    E.datos.pesos = E.datos.pesos.filter((p) => !(p.usuario === getUsuario() && fechasQuitadas.has(p.fecha)));
     E.datos.pesos.push({ usuario: getUsuario(), fecha, pesoKg });
     toast('Guardado ✓');
-    E.captura.pesoStr = '';
+    E.captura = { fecha: hoyISO(), fechaOriginal: hoyISO(), editandoFechaOriginal: null, pesoStr: '' };
     document.getElementById('captura-peso-input').value = '';
+    intentarRecargaDiferida();
     actualizarBadgeConexion();
     render();
     mostrarRegistroOverlay();
-    cola.sincronizar().then(() => { actualizarBadgeConexion(); });
+    cola.sincronizar(getUsuario()).then(() => { actualizarBadgeConexion(); });
   } catch (e) {
     toast(e.message, true);
   }
@@ -908,12 +1378,14 @@ function wireCapturar() {
   document.getElementById('captura-peso-input').addEventListener('input', (e) => {
     E.captura.pesoStr = e.target.value;
     renderCapturar();
+    intentarRecargaDiferida();
   });
   document.getElementById('captura-fecha').addEventListener('change', (e) => {
     E.captura.fecha = e.target.value;
     renderCapturar();
+    intentarRecargaDiferida();
   });
-  document.getElementById('btn-guardar-captura').addEventListener('click', guardarCaptura);
+  document.getElementById('btn-guardar-captura').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarCaptura));
 }
 
 // ---------- mi progreso ----------
@@ -968,32 +1440,54 @@ function renderHistorial(serie) {
   cont.innerHTML = ultimos
     .map(
       (p) => `<div class="lista-item">
-      <span>${formatoFechaCorta(p.fecha)} — ${formatoPesoDualColor(p.pesoKg)}</span>
-      <button class="icono" data-borrar-peso="${p.fecha}" title="Borrar este registro">🗑️</button>
+      <span>${escapeHTML(formatoFechaCorta(p.fecha))} — ${formatoPesoDualColor(p.pesoKg)}</span>
+      <span class="lista-acciones">
+        <button class="icono" data-editar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Editar registro del ${formatoFechaCorta(p.fecha)}`)}">✏️</button>
+        <button class="icono" data-borrar-peso="${escapeAtributo(p.fecha)}" aria-label="${escapeAtributo(`Borrar registro del ${formatoFechaCorta(p.fecha)}`)}">🗑️</button>
+      </span>
     </div>`
     )
     .join('');
 }
 
+function editarRegistroPeso(fecha) {
+  const registro = E.datos.pesos.find((p) => p.usuario === getUsuario() && p.fecha === fecha);
+  if (!registro) return;
+  E.captura = { ...uiHelpers.prepararEdicion(registro, miUnidad()), fechaOriginal: fecha, editandoFechaOriginal: fecha };
+  cambiarVista('capturar');
+  const input = document.getElementById('captura-peso-input');
+  input.value = E.captura.pesoStr;
+  input.focus();
+}
+
 async function borrarRegistroPeso(fecha) {
   const ok = await confirmarPopup(`¿Borrar tu registro del ${formatoFechaCorta(fecha)}? No se puede deshacer.`);
   if (!ok) return;
-  try {
-    const r = await api.borrarPesoFecha(getUsuario(), fecha);
-    if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el borrado');
-    toast('Registro borrado ✓');
-    await cargarYRenderizar();
-  } catch (e) {
-    toast('No se pudo borrar (¿sin conexión?): ' + e.message, true);
-  }
+  // Igual que guardarCaptura(): se encola y se refleja de una, no espera al
+  // servidor -- antes esto sí esperaba la red y tronaba sin conexión.
+  cola.encolarBorrado(getUsuario(), fecha);
+  E.datos.pesos = E.datos.pesos.filter((p) => !(p.usuario === getUsuario() && p.fecha === fecha));
+  const pendientes = cola.leerCola(getUsuario()).length;
+  toast(uiHelpers.mensajeBorrado({ sinConexion: !navigator.onLine || E.sinConexion, pendientes }));
+  actualizarBadgeConexion();
+  render();
+  cola.sincronizar(getUsuario()).then(() => { actualizarBadgeConexion(); });
 }
 
 const IDS_GRAFICA = { diaria: 'grafica-diaria', tendencia: 'grafica-progreso', semanal: 'grafica-semanal' };
 
 function mostrarGraficaActiva() {
-  document.querySelectorAll('#grafica-tabs button').forEach((b) => b.classList.toggle('activo', b.dataset.grafica === E.graficaActiva));
+  document.querySelectorAll('#grafica-tabs button').forEach((b) => {
+    const activo = b.dataset.grafica === E.graficaActiva;
+    b.classList.toggle('activo', activo);
+    b.setAttribute('aria-selected', String(activo));
+    b.tabIndex = activo ? 0 : -1;
+  });
   Object.entries(IDS_GRAFICA).forEach(([clave, id]) => {
-    document.getElementById(id).classList.toggle('oculto', clave !== E.graficaActiva);
+    const panel = document.getElementById(id);
+    const oculto = clave !== E.graficaActiva;
+    panel.classList.toggle('oculto', oculto);
+    panel.hidden = oculto;
   });
 }
 
@@ -1058,16 +1552,16 @@ function renderReto() {
   document.getElementById('grafica-versus').innerHTML = graficas.svgBarraVersus(
     filas[0]?.avance?.pctAvance || 0,
     filas[1]?.avance?.pctAvance || 0,
-    filas[0]?.nombre || getUsuario(),
-    filas[1]?.nombre || '—',
+    escapeHTML(filas[0]?.nombre || getUsuario()),
+    escapeHTML(filas[1]?.nombre || '—'),
     { width: 340, colorA: colorDeUsuario(filas[0]?.nombre || getUsuario()), colorB: colorDeUsuario(filas[1]?.nombre || '') }
   );
 
   document.getElementById('reto-tarjetas').innerHTML = filas.map((f) => `
-    <div class="tarjeta-persona" style="border-top:3px solid ${colorDeUsuario(f.nombre)};">
-      ${f.avance ? `<img class="avatar-marca-agua" src="${avatarMeta(f.avance.pctAvance)}" alt="">` : ''}
+    <div class="tarjeta-persona" style="border-top:3px solid ${colorSeguro(colorDeUsuario(f.nombre))};">
+      ${f.avance ? `<img class="avatar-marca-agua" src="${escapeAtributo(urlLocalSegura(avatarMeta(f.avance.pctAvance)))}" alt="">` : ''}
       <div class="tarjeta-persona-contenido">
-      <h3 style="color:${colorDeUsuario(f.nombre)};">${f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre}</h3>
+      <h3 style="color:${colorSeguro(colorDeUsuario(f.nombre))};">${escapeHTML(f.nombre === getUsuario() ? `${f.nombre} (tú)` : f.nombre)}</h3>
       <div class="dato-grande valor-dual">${formatoPesoDualColor(f.ultimo)}</div>
       <div class="texto-suave">🔥 ${f.racha} día(s) de racha</div>
       ${f.avance ? `
@@ -1089,13 +1583,71 @@ function renderAjustes() {
   document.getElementById('ajustes-usuario').textContent = getUsuario();
   document.getElementById('ajustes-inicial-unidad').textContent = unidad;
   document.getElementById('ajustes-meta-unidad').textContent = unidad;
-  document.getElementById('ajustes-meta').value = u.metaKg != null ? fmt1(unidad === 'kg' ? u.metaKg : kgALb(u.metaKg)) : '';
-  document.getElementById('ajustes-inicial').value = u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '';
-  document.querySelectorAll('#unidad-grupo button').forEach((b) => b.classList.toggle('activo', b.dataset.unidad === unidad));
+  asignarCampoAjuste('ajustes-meta', u.metaKg != null ? fmt1(unidad === 'kg' ? u.metaKg : kgALb(u.metaKg)) : '');
+  asignarCampoAjuste('ajustes-inicial', u.pesoInicialKg != null ? fmt1(unidad === 'kg' ? u.pesoInicialKg : kgALb(u.pesoInicialKg)) : '');
+  document.querySelectorAll('#unidad-grupo button').forEach((b) => {
+    const activo = b.dataset.unidad === unidad;
+    b.classList.toggle('activo', activo); b.setAttribute('aria-pressed', String(activo));
+  });
   document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
   document.getElementById('tarjeta-fechas-reto').classList.toggle('oculto', !esAdmin());
-  document.getElementById('reto-fecha-inicio').value = E.datos.retoInicio || '';
-  document.getElementById('reto-fecha-fin').value = E.datos.retoFin || '';
+  asignarCampoAjuste('reto-fecha-inicio', E.datos.retoInicio || '');
+  asignarCampoAjuste('reto-fecha-fin', E.datos.retoFin || '');
+  const meta = E.actualizacion.metadata;
+  document.getElementById('actualizacion-version').textContent = meta?.version || '—';
+  document.getElementById('actualizacion-fecha').textContent = meta
+    ? actualizacion.formatearFechaActualizacion(meta.installedAt) : 'Sin información';
+  document.getElementById('actualizacion-estado').textContent = actualizacion.obtenerEstadoActualizacion({
+    soportado: 'serviceWorker' in navigator, metadata: meta,
+    buscando: E.actualizacion.buscando, preparada: E.actualizacion.preparada,
+  });
+}
+
+function asignarCampoAjuste(id, valor) {
+  const campo = document.getElementById(id);
+  if (ajustesPendientes.has(id)) return;
+  campo.value = valor;
+  campo.dataset.valorPersistido = valor;
+}
+
+function confirmarCamposAjuste(ids) {
+  for (const id of ids) {
+    const campo = document.getElementById(id);
+    campo.dataset.valorPersistido = campo.value;
+    ajustesPendientes.delete(id);
+  }
+  intentarRecargaDiferida();
+}
+
+async function releerMetadataActualizacion() {
+  E.actualizacion.metadata = await actualizacion.leerMetadataActualizacion();
+  if (E.vista === 'ajustes') renderAjustes();
+}
+
+function observarInstalacion(worker) {
+  if (!worker) return;
+  worker.addEventListener('statechange', () => {
+    if (worker.state === 'installed') {
+      E.actualizacion.preparada = true;
+      E.actualizacion.buscando = false;
+      if (E.vista === 'ajustes') renderAjustes();
+    }
+  });
+}
+
+async function buscarActualizacionManual() {
+  E.actualizacion.buscando = true;
+  E.actualizacion.preparada = false;
+  renderAjustes();
+  try {
+    await actualizacion.buscarActualizacion(registroSW);
+    observarInstalacion(registroSW.installing);
+    if (!registroSW.installing) E.actualizacion.buscando = false;
+  } catch (e) {
+    E.actualizacion.buscando = false;
+    toast(e.message, true);
+  }
+  renderAjustes();
 }
 
 // ---------- fondo de pantalla personalizado ----------
@@ -1161,6 +1713,7 @@ async function guardarFechasRetoAjustes() {
     if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el guardado');
     E.datos.retoInicio = inicio || null;
     E.datos.retoFin = fin || null;
+    confirmarCamposAjuste(['reto-fecha-inicio', 'reto-fecha-fin']);
     toast('Fechas guardadas ✓');
   } catch (e) {
     toast('No se pudo guardar (¿sin conexión?): ' + e.message, true);
@@ -1179,6 +1732,7 @@ async function guardarMetaAjustes() {
     const u = usuarioObj(getUsuario());
     u.metaKg = metaKg;
     u.pesoInicialKg = pesoInicialKg;
+    confirmarCamposAjuste(['ajustes-meta', 'ajustes-inicial']);
     toast('Meta guardada ✓');
     render();
   } catch (e) {
@@ -1199,11 +1753,11 @@ async function cambiarUnidadAjustes(unidad) {
 }
 
 async function cambiarPinAjustes() {
-  const actual = prompt('Tu PIN actual (vacío si no tienes uno):') || '';
-  const nuevo = prompt('Nuevo PIN (4 dígitos, vacío para quedarte sin PIN):');
+  const actual = prompt('Tu PIN actual:') || '';
+  const nuevo = prompt('Nuevo PIN (4 dígitos):');
   if (nuevo === null) return;
-  if (nuevo !== '' && !/^\d{4}$/.test(nuevo)) {
-    toast('El PIN nuevo debe ser de 4 dígitos (o vacío para quitarlo)', true);
+  if (!/^\d{4}$/.test(nuevo)) {
+    toast('El PIN nuevo debe ser de 4 dígitos', true);
     return;
   }
   try {
@@ -1239,6 +1793,13 @@ function exportarMisDatosPeso() {
 }
 
 function wireAjustes() {
+  document.getElementById('vista-ajustes').addEventListener('input', (e) => {
+    if (!actualizacion.esCampoAjusteDiferible(e.target.id, e.target.type)) return;
+    if (e.target.value === e.target.dataset.valorPersistido) ajustesPendientes.delete(e.target.id);
+    else ajustesPendientes.add(e.target.id);
+    intentarRecargaDiferida();
+  });
+  document.getElementById('btn-buscar-actualizacion').addEventListener('click', buscarActualizacionManual);
   document.getElementById('btn-exportar-peso').addEventListener('click', exportarMisDatosPeso);
   document.getElementById('btn-elegir-fondo').addEventListener('click', () => document.getElementById('input-fondo').click());
   document.getElementById('input-fondo').addEventListener('change', (e) => {
@@ -1256,7 +1817,7 @@ function wireAjustes() {
     cambiarUnidadAjustes(btn.dataset.unidad);
   });
   document.getElementById('btn-cambiar-usuario').addEventListener('click', () => {
-    cerrarSesion();
+    cerrarSesionEnSegundoPlano(api.cerrarSesionServidor);
     location.href = '../index.html';
   });
   document.getElementById('btn-borrar-mis-datos').addEventListener('click', async () => {
@@ -1275,6 +1836,25 @@ function wireAjustes() {
 
 // ---------- popup de confirmación (reemplaza confirm() nativo) ----------
 
+let focoAntesPopup = null;
+function activarPopupAccesible(fondo, cerrar) {
+  focoAntesPopup = document.activeElement;
+  const botones = [...fondo.querySelectorAll('button:not(:disabled)')];
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cerrar(); return; }
+    if (e.key !== 'Tab' || !botones.length) return;
+    const primero = botones[0]; const ultimo = botones[botones.length - 1];
+    if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+  };
+  fondo.addEventListener('keydown', onKey);
+  botones[0]?.focus();
+  return () => {
+    fondo.removeEventListener('keydown', onKey);
+    focoAntesPopup?.focus?.(); focoAntesPopup = null;
+  };
+}
+
 function confirmarPopup(mensaje) {
   return new Promise((resolve) => {
     const fondo = document.getElementById('popup-confirmar');
@@ -1282,16 +1862,19 @@ function confirmarPopup(mensaje) {
     fondo.classList.remove('oculto');
     const btnSi = document.getElementById('popup-aceptar');
     const btnNo = document.getElementById('popup-cancelar');
+    let limpiarAccesibilidad = () => {};
     const limpiar = (valor) => {
       fondo.classList.add('oculto');
       btnSi.removeEventListener('click', onSi);
       btnNo.removeEventListener('click', onNo);
+      limpiarAccesibilidad();
       resolve(valor);
     };
     const onSi = () => limpiar(true);
     const onNo = () => limpiar(false);
     btnSi.addEventListener('click', onSi);
     btnNo.addEventListener('click', onNo);
+    limpiarAccesibilidad = activarPopupAccesible(fondo, () => limpiar(false));
   });
 }
 
@@ -1307,15 +1890,29 @@ function wireGlobal() {
     E.graficaActiva = btn.dataset.grafica;
     mostrarGraficaActiva();
   });
+  document.getElementById('grafica-tabs').addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const tabs = [...e.currentTarget.querySelectorAll('[role="tab"]')];
+    const actual = tabs.indexOf(document.activeElement);
+    if (actual < 0) return;
+    e.preventDefault();
+    const siguiente = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (actual + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    E.graficaActiva = tabs[siguiente].dataset.grafica;
+    mostrarGraficaActiva();
+    tabs[siguiente].focus();
+  });
   document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
     a.addEventListener('click', (e) => {
+      if (!debeConfirmarNavegacion({ valor: E.captura.pesoStr, enviado: false })) return;
       e.preventDefault();
-      confirmarPopup('¿Seguro que quieres ir a Gastos?').then((ok) => { if (ok) location.href = a.href; });
+      confirmarPopup('Hay un peso sin guardar. ¿Quieres salir?').then((ok) => { if (ok) location.href = a.href; });
     });
   });
   document.getElementById('historial-pesos').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-borrar-peso]');
-    if (btn) borrarRegistroPeso(btn.dataset.borrarPeso);
+    const editar = e.target.closest('[data-editar-peso]');
+    const borrar = e.target.closest('[data-borrar-peso]');
+    if (editar) editarRegistroPeso(editar.dataset.editarPeso);
+    else if (borrar) borrarRegistroPeso(borrar.dataset.borrarPeso);
   });
   document.getElementById('btn-ver-historial').addEventListener('click', (e) => {
     const cont = document.getElementById('historial-pesos');
@@ -1346,20 +1943,38 @@ if ('serviceWorker' in navigator) {
   // Ver comentario igual en js/ui.js (launcher) -- update() fuerza la
   // revisión sin cambiar la URL del service worker en cada carga.
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('../sw.js').then((r) => r.update()).catch(() => {});
+    navigator.serviceWorker.register('../sw.js').then((r) => {
+      registroSW = r;
+      r.addEventListener('updatefound', () => observarInstalacion(r.installing));
+      observarInstalacion(r.installing);
+      releerMetadataActualizacion();
+      return r.update();
+    }).catch(() => {});
   });
   // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
   // control un service worker nuevo, pero no si hay un campo con texto sin
   // mandar: espera a que la app pase a segundo plano para no borrarlo.
   let recargando = false;
+  let recargaDiferida = false;
   function intentarRecargar() {
     if (recargando) return;
     const activo = document.activeElement;
     const escribiendo = activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA') && activo.value;
-    if (escribiendo) return;
+    const decision = actualizacion.decidirRecargaActualizacion({
+      capturaPendiente: actualizacion.hayCapturaPesoPendiente(E.captura),
+      formularioPendiente: ajustesPendientes.size > 0,
+      escribiendoActivo: Boolean(escribiendo), recargaDiferida,
+    });
+    recargaDiferida = decision.diferir;
+    if (!decision.recargar) return;
     recargando = true;
-    location.reload();
+    releerMetadataActualizacion().finally(() => location.reload());
   }
+  intentarRecargaDiferida = function () {
+    if (recargaDiferida && !actualizacion.hayCapturaPesoPendiente(E.captura) && ajustesPendientes.size === 0) intentarRecargar();
+  };
+  document.addEventListener('input', intentarRecargaDiferida);
   navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargar(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargaDiferida(); });
+  window.addEventListener('pagehide', intentarRecargaDiferida);
 }

@@ -1,25 +1,6 @@
 :root {
-  --primario: #4c5fd5;
-  --primario-2: #7c6ef2;
-  --acento: #ff6b4a;
-  --exito: #22a06b;
-  --peligro: #e5484d;
-
-  --fondo: #f4f5fb;
-  --superficie: #ffffff;
-  --superficie-alt: #eef0fa;
-  --texto: #1c1e2b;
-  --texto-suave: #6b7080;
-  --borde: #e2e4f0;
-  --sombra: 0 2px 10px rgba(28, 30, 43, 0.06);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --fondo: #14151f; --superficie: #1c1e2b; --superficie-alt: #23253a;
-    --texto: #eceefb; --texto-suave: #9498ac; --borde: #2c2f42;
-    --sombra: 0 2px 10px rgba(0, 0, 0, 0.35);
-  }
+  --launcher-card-gap: var(--space-4);
+  --launcher-copy-size: var(--text-sm);
 }
 
 * { box-sizing: border-box; }
@@ -46,6 +27,35 @@ button, input { font-family: inherit; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: 100vh; text-align: center; padding: 32px;
 }
+
+.tarjeta-login {
+  width: min(100%, 360px);
+  display: grid;
+  gap: var(--space-3);
+  padding: clamp(24px, 7vw, 34px);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-lg);
+  background: color-mix(in srgb, var(--superficie) 96%, transparent);
+  box-shadow: var(--sombra-elevada);
+  backdrop-filter: blur(16px);
+}
+.tarjeta-login > input,
+.tarjeta-login > button { width: 100%; max-width: none; margin: 0; }
+.tarjeta-login > .texto-suave { margin: 0 0 var(--space-1); text-align: left; }
+
+.marca-acceso {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  text-align: left;
+}
+.marca-acceso img { width: 58px; height: 58px; border-radius: 18px; box-shadow: var(--sombra); }
+.marca-acceso div { display: grid; gap: 2px; }
+.marca-acceso strong { color: var(--texto); font-size: var(--text-xl); line-height: var(--leading-tight); }
+.marca-acceso span { color: var(--texto-suave); font-size: var(--text-sm); }
+.marca-acceso.compacta img { width: 48px; height: 48px; border-radius: 15px; }
+.marca-acceso.compacta strong { font-size: var(--text-lg); }
 .emoji-grande { font-size: 3rem; margin-bottom: 10px; }
 .pantalla-centrada h1 { margin: 0 0 14px; font-size: 1.2rem; }
 
@@ -95,3 +105,22 @@ button, input { font-family: inherit; }
 .btn-launcher:hover { border-color: var(--primario); box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--primario) 45%, transparent); }
 .btn-launcher:active { transform: translateY(1px); }
 .btn-launcher .emoji { font-size: 1.8rem; }
+
+/* Capa visual del launcher */
+.pantalla-centrada { min-height: 100dvh; padding: max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); background: radial-gradient(circle at 90% 5%, rgba(76,95,213,.14), transparent 34%), radial-gradient(circle at 5% 92%, rgba(255,107,74,.1), transparent 32%), var(--fondo); }
+.pantalla-centrada > div[style] { max-width: 360px !important; }
+.pantalla-centrada input:not(.input-pin) { min-height: 50px; padding: 12px 14px !important; border: 1px solid var(--borde) !important; border-radius: var(--radio-sm) !important; background: var(--superficie); color: var(--texto); }
+.marca-launcher { display: flex; align-items: center; gap: 13px; margin-bottom: 20px; text-align: left; }
+.marca-launcher img { width: 58px; height: 58px; border-radius: 17px; box-shadow: 0 12px 28px rgba(76,95,213,.22); }
+.marca-launcher span { display: block; font-size: 1.25rem; font-weight: 800; letter-spacing: -.02em; }
+.marca-launcher small { display: block; margin-top: 2px; color: var(--texto-suave); font-size: .78rem; }
+.tarjeta-acceso { width: min(100%, 360px); padding: 24px; border: 1px solid var(--borde); border-radius: var(--radio-lg); background: var(--superficie); box-shadow: var(--sombra-elevada); }
+.tarjeta-acceso h1 { font-size: 1.35rem; margin-bottom: 4px; }
+.subtitulo-launcher { margin: 0 0 18px; }
+.botones-launcher { max-width: none; margin-top: 0; }
+.btn-launcher { min-height: 76px; padding: 16px 18px; border-radius: var(--radio-md); box-shadow: none; }
+.btn-launcher:first-child { border-left: 4px solid var(--acento); }
+.btn-launcher:last-child { border-left: 4px solid var(--primario); }
+.input-pin { min-height: 54px; border-radius: var(--radio-sm); }
+.popup-caja { border-radius: var(--radio-lg); padding: 24px; }
+@media (max-height: 700px) { .pantalla-centrada { justify-content: flex-start; overflow-y: auto; } }

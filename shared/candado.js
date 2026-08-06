@@ -1,9 +1,10 @@
 // Guarda localmente (por usuario, por app) el secreto que Face ID va a
 // "revelar" en vez de pedirte que lo teclees: el PIN de sesión del launcher,
 // o la contraseña de cifrado de Gastos. Vive en localStorage -- protegido
-// por el propio bloqueo del iPhone, igual que cualquier sesión guardada en
-// Safari. Ver shared/passkey.js para el porqué esto es un candado local y
-// no una autenticación remota real.
+// solo por el sandbox/bloqueo del dispositivo, no por cifrado propio. Un XSS
+// que ejecute JavaScript en este mismo origen podría leerlo. Task 4/5 debe
+// añadir una CSP estricta y revisar los puntos de inyección. Ver
+// shared/passkey.js: esto es un candado local, no autenticación remota real.
 
 function clave(app, usuario) {
   return `ma_candado_${app}_${usuario}`;

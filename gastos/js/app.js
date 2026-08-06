@@ -1,6 +1,124 @@
 // ARCHIVO GENERADO por build.py (paquete "gastos") -- no editar a mano.
 // Edita los archivos fuente y vuelve a correr: python build.py
 
+// ── shared/autorizacion.js ──────────────────────────────────────────
+const autorizacion = (function () {
+const CLAVE_TOKEN = 'ma_token';
+const PUBLICAS = new Set(['validarUsuario', 'validarPin', 'validarActivacion']);
+const MENSAJE_BACKEND_ANTIGUO = 'El servidor necesita actualizarse primero. Pide al administrador desplegar la nueva versión de Apps Script.';
+
+function storagePredeterminado() {
+  return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+}
+
+function guardarToken(token, storage = storagePredeterminado()) {
+  if (storage && token) storage.setItem(CLAVE_TOKEN, String(token));
+}
+
+function leerToken(storage = storagePredeterminado()) {
+  return storage ? storage.getItem(CLAVE_TOKEN) || '' : '';
+}
+
+function borrarToken(storage = storagePredeterminado()) {
+  if (storage) storage.removeItem(CLAVE_TOKEN);
+}
+
+function requiereAutorizacion(accion) {
+  return !PUBLICAS.has(String(accion || ''));
+}
+
+function agregarCredenciales(solicitud, usuario, token) {
+  if (!requiereAutorizacion(solicitud.accion)) return { ...solicitud };
+  return { ...solicitud, usuario: solicitud.usuario || usuario, token };
+}
+
+function exigirBackendActual(respuesta, { requiereToken = false } = {}) {
+  const version = Number(respuesta?.apiVersion);
+  if (!Number.isFinite(version) || version < 2 || (requiereToken && respuesta?.ok === true && !String(respuesta?.token || ''))) {
+    throw new Error(MENSAJE_BACKEND_ANTIGUO);
+  }
+  return true;
+}
+
+function validarSesion({
+  sesion, usuarioActual, usuarioSolicitado, ahora = Date.now(), rolRequerido = null, alcancePermitido = null,
+}) {
+  if (!sesion || !usuarioActual || !usuarioActual.activo) return false;
+  if (sesion.expira <= ahora) return false;
+  if (sesion.usuario !== usuarioSolicitado || usuarioActual.usuario !== sesion.usuario) return false;
+  if (usuarioActual.rol !== sesion.rol) return false;
+  if (rolRequerido && usuarioActual.rol !== rolRequerido) return false;
+  return sesion.alcance === 'completo' || sesion.alcance === alcancePermitido;
+}
+
+function puedeValidarPin(pinConfigurado, pinRecibido) {
+  return String(pinConfigurado || '') !== '' && String(pinConfigurado) === String(pinRecibido || '').trim();
+}
+
+function siguienteBloqueoPin(intentosAnteriores, ahora = Date.now()) {
+  const intentos = Math.max(0, Number(intentosAnteriores) || 0) + 1;
+  const demora = Math.min(60000, Math.pow(2, Math.max(0, intentos - 3)) * 1000);
+  return { intentos, hasta: ahora + demora };
+}
+
+function pinNuevoValido(pin) { return /^\d{4}$/.test(String(pin)); }
+
+function usuarioValido(usuario) {
+  return /^[\p{L}\p{N} _.-]{1,64}$/u.test(String(usuario || '')) && !String(usuario).includes('..');
+}
+
+function fechaISOValida(fecha) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) return false;
+  const d = new Date(`${fecha}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === fecha;
+}
+
+function numeroEnRango(valor, minimo, maximo) {
+  const n = Number(valor);
+  return Number.isFinite(n) && n >= minimo && n <= maximo;
+}
+
+function blobCifradoValido(blob, maximo = 1000000) {
+  if (typeof blob !== 'string' || blob.length < 2 || blob.length > maximo || /^[=+\-@]/.test(blob)) return false;
+  try {
+    const p = JSON.parse(blob);
+    const b64 = (v) => typeof v === 'string' && v.length <= maximo && /^[A-Za-z0-9+/]+={0,2}$/.test(v);
+    return p && p.cifrado === true && p.v === 1 && b64(p.salt) && b64(p.iv) && b64(p.datos);
+  } catch { return false; }
+}
+
+function dividirTexto(texto, maximo = 40000) {
+  const valor = String(texto);
+  if (!Number.isInteger(maximo) || maximo < 1) throw new Error('Tamaño de chunk inválido');
+  if (valor === '') return [''];
+  const chunks = [];
+  for (let i = 0; i < valor.length; i += maximo) chunks.push(valor.slice(i, i + maximo));
+  return chunks;
+}
+
+function reunirTexto(chunks) {
+  return Array.isArray(chunks) ? chunks.map(String).join('') : '';
+}
+
+  return { guardarToken, leerToken, borrarToken, requiereAutorizacion, agregarCredenciales, exigirBackendActual, validarSesion, puedeValidarPin, siguienteBloqueoPin, pinNuevoValido, usuarioValido, fechaISOValida, numeroEnRango, blobCifradoValido, dividirTexto, reunirTexto };
+})();
+const guardarToken = autorizacion.guardarToken;
+const leerToken = autorizacion.leerToken;
+const borrarToken = autorizacion.borrarToken;
+const requiereAutorizacion = autorizacion.requiereAutorizacion;
+const agregarCredenciales = autorizacion.agregarCredenciales;
+const exigirBackendActual = autorizacion.exigirBackendActual;
+const validarSesion = autorizacion.validarSesion;
+const puedeValidarPin = autorizacion.puedeValidarPin;
+const siguienteBloqueoPin = autorizacion.siguienteBloqueoPin;
+const pinNuevoValido = autorizacion.pinNuevoValido;
+const usuarioValido = autorizacion.usuarioValido;
+const fechaISOValida = autorizacion.fechaISOValida;
+const numeroEnRango = autorizacion.numeroEnRango;
+const blobCifradoValido = autorizacion.blobCifradoValido;
+const dividirTexto = autorizacion.dividirTexto;
+const reunirTexto = autorizacion.reunirTexto;
+
 // ── shared/sesion.js ──────────────────────────────────────────
 const sesion = (function () {
 // Sesión compartida entre el launcher, Gastos y Peso (mismo origen -- misma
@@ -9,6 +127,7 @@ const sesion = (function () {
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
+const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
 // -- si el iPhone borra localStorage entre usos (pasa en algunos ajustes de
@@ -36,28 +155,80 @@ function esAdmin() {
   return getRol() === 'admin';
 }
 
-function iniciarSesion(usuario, rol) {
+function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
+  if (token) guardarToken(token);
 }
 
 function cerrarSesion() {
   localStorage.removeItem(CLAVE_USUARIO);
   localStorage.removeItem(CLAVE_ROL);
+  borrarClaveSesion();
+  borrarToken();
+}
+
+// Inicia la invalidación mientras el token todavía existe, limpia el estado
+// local de inmediato y absorbe errores de red: salir nunca debe dejar la UI
+// esperando ni conservar credenciales en el dispositivo.
+function cerrarSesionEnSegundoPlano(invalidar) {
+  let solicitud;
+  try { solicitud = invalidar(); }
+  catch { solicitud = undefined; }
+  cerrarSesion();
+  return Promise.resolve(solicitud).catch(() => undefined);
+}
+
+function debeConfirmarNavegacion({ valor, enviado }) {
+  return !enviado && String(valor ?? '').trim().length > 0;
+}
+
+async function ejecutarUnaVez(boton, accion) {
+  if (boton.disabled) return undefined;
+  boton.disabled = true;
+  try { return await accion(); }
+  finally { boton.disabled = false; }
+}
+
+function sesionAutenticada(usuario, token) {
+  return String(usuario || '').length > 0 && String(token || '').length > 0;
+}
+
+function accesoFaceIdValido(respuesta) {
+  return respuesta?.ok === true && String(respuesta.token || '').length > 0;
+}
+
+
+// El PIN/contraseña que se escribió al entrar en el launcher, guardado SOLO
+// en sessionStorage (se borra solo al cerrar la pestaña/navegador, nunca
+// persiste como localStorage) -- Gastos lo prueba primero como su propia
+// contraseña de cifrado antes de preguntar la suya, para no volver a pedir
+// nada al pasar de Peso a Gastos. Nunca se manda al servidor -- solo se usa
+// localmente para intentar descifrar (ver gastos/js/ui.js::intentarEntradaAutomatica).
+function guardarClaveSesion(pass) {
+  sessionStorage.setItem(CLAVE_SESION_PASS, pass);
+}
+
+function leerClaveSesion() {
+  return sessionStorage.getItem(CLAVE_SESION_PASS) || '';
+}
+
+function borrarClaveSesion() {
+  sessionStorage.removeItem(CLAVE_SESION_PASS);
 }
 
 // Llamar al cargar cualquier sub-app: si falta URL o sesión, regresa al
 // launcher para iniciar sesión ahí. `rutaLauncher` es relativa a la sub-app
 // (ej. '../index.html').
 function exigirSesion(rutaLauncher) {
-  if (!getUrl() || !getUsuario()) {
+  if (!getUrl() || !getUsuario() || !leerToken()) {
     location.href = rutaLauncher;
     return false;
   }
   return true;
 }
 
-  return { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion, exigirSesion };
+  return { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
 })();
 const getUrl = sesion.getUrl;
 const setUrl = sesion.setUrl;
@@ -66,6 +237,14 @@ const getRol = sesion.getRol;
 const esAdmin = sesion.esAdmin;
 const iniciarSesion = sesion.iniciarSesion;
 const cerrarSesion = sesion.cerrarSesion;
+const cerrarSesionEnSegundoPlano = sesion.cerrarSesionEnSegundoPlano;
+const debeConfirmarNavegacion = sesion.debeConfirmarNavegacion;
+const ejecutarUnaVez = sesion.ejecutarUnaVez;
+const sesionAutenticada = sesion.sesionAutenticada;
+const accesoFaceIdValido = sesion.accesoFaceIdValido;
+const guardarClaveSesion = sesion.guardarClaveSesion;
+const leerClaveSesion = sesion.leerClaveSesion;
+const borrarClaveSesion = sesion.borrarClaveSesion;
 const exigirSesion = sesion.exigirSesion;
 
 // ── shared/api.js ──────────────────────────────────────────
@@ -74,35 +253,98 @@ const api = (function () {
 // Sin caché, sin cola -- eso vive en cola.js de cada app. Aquí solo se habla
 // con el servidor.
 
-async function _get(params) {
-  const url = getUrl();
-  if (!url) throw new Error('No hay URL de Apps Script configurada.');
-  const qs = new URLSearchParams(params).toString();
-  const resp = await fetch(`${url}?${qs}`);
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+const TIMEOUT_MS = 12000;
+let manejadorAuth = null;
+
+function configurarManejadorAuth(fn) {
+  manejadorAuth = typeof fn === 'function' ? fn : null;
+}
+
+function esFalloAuth(resultado) {
+  if (!resultado || resultado.ok !== false) return false;
+  const detalle = `${resultado.codigo || ''} ${resultado.error || ''}`;
+  return /(?:auth|sesi[oó]n.*(?:inv[aá]lida|vencida|expirada)|token)/i.test(detalle);
+}
+
+class ApiError extends Error {
+  constructor(message, { code, status, cause } = {}) {
+    super(message, { cause });
+    this.name = 'ApiError';
+    this.code = code;
+    if (status !== undefined) this.status = status;
+  }
+}
+
+async function solicitarJson(url, opciones = {}, { fetchImpl = fetch, timeoutMs = TIMEOUT_MS, scheduler = globalThis } = {}) {
+  const controlador = new AbortController();
+  const signalExterno = opciones.signal;
+  let vencioTimeout = false;
+  const cancelarExterno = () => controlador.abort(signalExterno.reason);
+  if (signalExterno?.aborted) cancelarExterno();
+  else signalExterno?.addEventListener('abort', cancelarExterno, { once: true });
+  const temporizador = scheduler.setTimeout(() => {
+    vencioTimeout = true;
+    controlador.abort();
+  }, timeoutMs);
+  try {
+    const resp = await fetchImpl(url, { ...opciones, signal: controlador.signal });
+    if (!resp.ok) {
+      const code = resp.status === 401 || resp.status === 403 ? 'AUTH' : 'HTTP';
+      throw new ApiError(`El servidor respondió HTTP ${resp.status}. Intenta de nuevo.`, { code, status: resp.status });
+    }
+    try {
+      const resultado = await resp.json();
+      if (esFalloAuth(resultado)) {
+        try { manejadorAuth?.(); } catch { /* el manejo de UI no cambia el error de red */ }
+        throw new ApiError(resultado.error || 'La sesión expiró. Vuelve a entrar.', { code: 'AUTH', status: resp.status });
+      }
+      return resultado;
+    } catch (cause) {
+      if (cause instanceof ApiError) throw cause;
+      throw new ApiError('El servidor devolvió una respuesta inválida. Intenta de nuevo.', { code: 'RESPONSE', cause });
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (signalExterno?.aborted && !vencioTimeout) {
+      throw new ApiError('La solicitud fue cancelada.', { code: 'ABORTED', cause: error });
+    }
+    if (vencioTimeout || error?.name === 'AbortError') {
+      throw new ApiError('La solicitud tardó demasiado. Revisa tu conexión e intenta de nuevo.', { code: 'TIMEOUT', cause: error });
+    }
+    if (error instanceof TypeError) {
+      throw new ApiError('No se pudo establecer conexión. Revisa tu red e intenta de nuevo.', { code: 'NETWORK', cause: error });
+    }
+    throw new ApiError('No se pudo completar la solicitud. Intenta de nuevo.', { code: 'NETWORK', cause: error });
+  } finally {
+    scheduler.clearTimeout(temporizador);
+    signalExterno?.removeEventListener('abort', cancelarExterno);
+  }
 }
 
 async function _post(body) {
   const url = getUrl();
   if (!url) throw new Error('No hay URL de Apps Script configurada.');
-  const resp = await fetch(url, {
+  const resultado = await solicitarJson(url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight CORS con Apps Script
-    body: JSON.stringify(body),
+    body: JSON.stringify(agregarCredenciales(body, getUsuario(), leerToken())),
   });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+  return resultado;
+}
+
+async function cerrarSesionServidor() {
+  try { return await _post({ accion: 'cerrarSesion' }); }
+  finally { borrarToken(); }
 }
 
 function leerDatos() {
-  return _get({ accion: 'datos' });
+  return _post({ accion: 'leerDatos' });
 }
 
 // Consulta barata (no toca Hojas) para saber si algo cambió en Peso antes
 // de pedir 'datos' completo -- se puede llamar seguido sin gastar cuota.
 function leerVersion() {
-  return _get({ accion: 'version' });
+  return _post({ accion: 'leerVersion' });
 }
 
 function guardarFechasReto(usuario, inicio, fin) {
@@ -115,6 +357,10 @@ function validarUsuario(usuario) {
 
 function validarPin(usuario, pin) {
   return _post({ accion: 'validarPin', usuario, pin });
+}
+
+function validarActivacion(usuario, codigo) {
+  return _post({ accion: 'validarActivacion', usuario, codigo });
 }
 
 function crearPin(usuario, pinNuevo) {
@@ -145,8 +391,8 @@ function borrarPesoFecha(usuario, fecha) {
   return _post({ accion: 'borrarPesoFecha', usuario, fecha });
 }
 
-function crearUsuario(usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo) {
-  return _post({ accion: 'crearUsuario', usuarioAdmin, pinAdmin, nombreNuevo, rolNuevo });
+function crearUsuario(nombreNuevo, rolNuevo) {
+  return _post({ accion: 'crearUsuario', nombreNuevo, rolNuevo });
 }
 
 function guardarGastos(usuario, blob) {
@@ -154,16 +400,21 @@ function guardarGastos(usuario, blob) {
 }
 
 function leerGastos(usuario) {
-  return _get({ accion: 'leerGastos', usuario });
+  return _post({ accion: 'leerGastos', usuario });
 }
 
-  return { leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
+  return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
+const configurarManejadorAuth = api.configurarManejadorAuth;
+const ApiError = api.ApiError;
+const solicitarJson = api.solicitarJson;
+const cerrarSesionServidor = api.cerrarSesionServidor;
 const leerDatos = api.leerDatos;
 const leerVersion = api.leerVersion;
 const guardarFechasReto = api.guardarFechasReto;
 const validarUsuario = api.validarUsuario;
 const validarPin = api.validarPin;
+const validarActivacion = api.validarActivacion;
 const crearPin = api.crearPin;
 const cambiarPin = api.cambiarPin;
 const guardarPeso = api.guardarPeso;
@@ -440,9 +691,10 @@ const candado = (function () {
 // Guarda localmente (por usuario, por app) el secreto que Face ID va a
 // "revelar" en vez de pedirte que lo teclees: el PIN de sesión del launcher,
 // o la contraseña de cifrado de Gastos. Vive en localStorage -- protegido
-// por el propio bloqueo del iPhone, igual que cualquier sesión guardada en
-// Safari. Ver shared/passkey.js para el porqué esto es un candado local y
-// no una autenticación remota real.
+// solo por el sandbox/bloqueo del dispositivo, no por cifrado propio. Un XSS
+// que ejecute JavaScript en este mismo origen podría leerlo. Task 4/5 debe
+// añadir una CSP estricta y revisar los puntos de inyección. Ver
+// shared/passkey.js: esto es un candado local, no autenticación remota real.
 
 function clave(app, usuario) {
   return `ma_candado_${app}_${usuario}`;
@@ -577,6 +829,43 @@ const guardarFondo = fondo.guardarFondo;
 const leerFondo = fondo.leerFondo;
 const borrarFondo = fondo.borrarFondo;
 const comprimirImagen = fondo.comprimirImagen;
+
+// ── shared/ui_seguridad.js ──────────────────────────────────────────
+const ui_seguridad = (function () {
+function escapeHTML(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, (caracter) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[caracter]);
+}
+
+function escapeAtributo(valor) {
+  return escapeHTML(valor).replace(/[\u0000-\u001f\u007f]/g, '');
+}
+
+function idSeguro(valor) {
+  const id = String(valor ?? '');
+  return /^[A-Za-z0-9_-]{1,80}$/.test(id) ? id : '';
+}
+
+function urlLocalSegura(valor) {
+  const url = String(valor ?? '');
+  return /^(?:\.\.\/|\.\/)?(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/.test(url) ? url : '';
+}
+
+function colorSeguro(valor, respaldo = '#999999') {
+  const color = String(valor ?? '');
+  return /^(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$/.test(color)
+    ? color
+    : respaldo;
+}
+
+  return { escapeHTML, escapeAtributo, idSeguro, urlLocalSegura, colorSeguro };
+})();
+const escapeHTML = ui_seguridad.escapeHTML;
+const escapeAtributo = ui_seguridad.escapeAtributo;
+const idSeguro = ui_seguridad.idSeguro;
+const urlLocalSegura = ui_seguridad.urlLocalSegura;
+const colorSeguro = ui_seguridad.colorSeguro;
 
 // ── gastos/js/modelo.js ──────────────────────────────────────────
 const modelo = (function () {
@@ -1200,11 +1489,38 @@ function limpiarPendiente(usuario) {
   localStorage.removeItem(clavePendiente(usuario));
 }
 
+function crearLecturaApertura(usuario, dependencias = {}) {
+  const leerLocal = dependencias.leerPendiente || leerPendiente;
+  const leerRemoto = dependencias.leerRemoto || leerGastos;
+  let promesa;
+  return {
+    leer() {
+      if (!promesa) {
+        promesa = Promise.resolve().then(async () => {
+          const pendiente = leerLocal(usuario);
+          if (pendiente) return { ok: true, blob: pendiente, pendienteDeSincronizar: true };
+          const respuesta = await leerRemoto(usuario);
+          return { ...respuesta, pendienteDeSincronizar: false };
+        }).catch((error) => {
+          promesa = null;
+          throw error;
+        });
+      }
+      return promesa;
+    },
+  };
+}
+
+async function intentarEntradaGuardada(datosCache, confirmadoReciente, confirmar) {
+  if (!datosCache || !confirmadoReciente) return false;
+  return (await confirmar(datosCache.password)) === true;
+}
+
 // Para decidir "crear contraseña" vs "ingresar contraseña" al conectar, sin
 // necesitar la contraseña todavía.
-async function existeGastos(usuario) {
-  if (leerPendiente(usuario)) return true;
-  const r = await leerGastos(usuario);
+async function existeGastos(usuario, lectura = crearLecturaApertura(usuario)) {
+  const r = await lectura.leer();
+  if (!r.ok) throw new Error(r.error || 'No se pudo verificar el acceso. Intenta de nuevo.');
   return !!(r.ok && r.blob);
 }
 
@@ -1212,17 +1528,16 @@ async function existeGastos(usuario) {
 // escrituras subsecuentes (cada "Guardar") no repitan PBKDF2 (250k
 // iteraciones, cientos de ms) -- solo el primer descifrado de la sesión paga
 // ese costo.
-async function cargar(usuario, password) {
-  const pendiente = leerPendiente(usuario);
-  if (pendiente) {
+async function cargar(usuario, password, lectura = crearLecturaApertura(usuario)) {
+  const r = await lectura.leer();
+  if (r.pendienteDeSincronizar) {
     // Hay un guardado que no llegó al servidor todavía -- es más reciente
     // que lo que haya en la Hoja, así que se usa este.
-    const paquete = JSON.parse(pendiente);
+    const paquete = JSON.parse(r.blob);
     const { clave, saltB64 } = await crearClaveSesion(password, paquete.salt);
     const datos = await descifrarConClave(paquete, clave); // avienta si password mal
     return { datos: normalizarDatos(datos), pendienteDeSincronizar: true, clave, saltB64 };
   }
-  const r = await leerGastos(usuario);
   if (!r.ok) throw new Error(r.error || 'No se pudo leer');
   if (!r.blob) {
     const { clave, saltB64 } = await crearClaveSesion(password);
@@ -1238,51 +1553,120 @@ async function cargar(usuario, password) {
 // cola local (sin señal) -- en ambos casos el dato ya está a salvo.
 // `clave`/`saltB64` vienen de cargar() o crearClaveSesion() -- ya no se
 // vuelve a pedir la contraseña ni a rederivarla en cada guardado.
-async function guardar(usuario, datos, clave, saltB64) {
-  const paquete = await cifrarConClave(datos, clave, saltB64);
-  const blobStr = JSON.stringify(paquete);
-  try {
-    const r = await guardarGastos(usuario, blobStr);
-    if (r.ok) {
-      limpiarPendiente(usuario);
-      return { sincronizado: true };
-    }
-    guardarPendiente(usuario, blobStr);
-    return { sincronizado: false };
-  } catch {
-    guardarPendiente(usuario, blobStr);
-    return { sincronizado: false };
-  }
+function crearRegistroColas() {
+  const colas = new Map();
+  return {
+    encolar(usuario, tarea) {
+      const anterior = colas.get(usuario) || Promise.resolve();
+      const operacion = anterior.then(tarea);
+      colas.set(usuario, operacion.catch(() => {}));
+      return operacion;
+    },
+  };
 }
 
-let sincronizando = false;
+function crearColaGuardados(dependencias = {}) {
+  const cifrar = dependencias.cifrar || cifrarConClave;
+  const enviar = dependencias.enviar || guardarGastos;
+  const guardarLocal = dependencias.guardarPendiente || guardarPendiente;
+  const limpiarLocal = dependencias.limpiarPendiente || limpiarPendiente;
+  const registroColas = dependencias.registroColas || crearRegistroColas();
+  const versiones = new Map();
+  return {
+    guardar(usuario, datos, clave, saltB64) {
+      const version = (versiones.get(usuario) || 0) + 1;
+      versiones.set(usuario, version);
+      const operacion = registroColas.encolar(usuario, async () => {
+        const paquete = await cifrar(datos, clave, saltB64);
+        const blobStr = JSON.stringify(paquete);
+        guardarLocal(usuario, blobStr);
+        try {
+          const r = await enviar(usuario, blobStr);
+          if (r.ok) {
+            if (versiones.get(usuario) === version) limpiarLocal(usuario);
+            return { sincronizado: true };
+          }
+        } catch {
+          // queda en la cola local
+        }
+        return { sincronizado: false };
+      });
+      return operacion;
+    },
+  };
+}
 
-async function sincronizarPendiente(usuario) {
-  if (sincronizando || !navigator.onLine) return false;
-  const pendiente = leerPendiente(usuario);
+async function ejecutarSincronizacion(usuario, estado, dependencias) {
+  const estaEnLinea = dependencias.estaEnLinea || (() => navigator.onLine);
+  const leerLocal = dependencias.leerPendiente || leerPendiente;
+  const enviar = dependencias.enviar || guardarGastos;
+  const limpiarLocal = dependencias.limpiarPendiente || limpiarPendiente;
+  if (estado.sincronizando || !estaEnLinea()) return false;
+  const pendiente = leerLocal(usuario);
   if (!pendiente) return false;
-  sincronizando = true;
+  estado.sincronizando = true;
   let ok = false;
   try {
-    const r = await guardarGastos(usuario, pendiente);
-    if (r.ok) {
-      limpiarPendiente(usuario);
+    const r = await enviar(usuario, pendiente);
+    if (r.ok && leerLocal(usuario) === pendiente) {
+      limpiarLocal(usuario);
       ok = true;
     }
   } catch {
     // sigue pendiente, se reintenta después
   }
-  sincronizando = false;
+  estado.sincronizando = false;
   return ok;
 }
 
-function iniciarSincronizacionAutomatica(usuario, alSincronizar) {
+function crearAlmacenSesion(dependencias = {}) {
+  const registroColas = dependencias.registroColas || crearRegistroColas();
+  const colaGuardados = crearColaGuardados({ ...dependencias, registroColas });
+  const estados = new Map();
+  return {
+    guardar: (usuario, datos, clave, saltB64) => colaGuardados.guardar(usuario, datos, clave, saltB64),
+    sincronizarPendiente(usuario, estado = null) {
+      const estadoUsuario = estado || estados.get(usuario) || { sincronizando: false };
+      estados.set(usuario, estadoUsuario);
+      return registroColas.encolar(usuario, () => ejecutarSincronizacion(usuario, estadoUsuario, dependencias));
+    },
+  };
+}
+
+const almacenSesion = crearAlmacenSesion();
+
+function guardar(usuario, datos, clave, saltB64) {
+  return almacenSesion.guardar(usuario, datos, clave, saltB64);
+}
+
+function sincronizarPendiente(usuario, estado = { sincronizando: false }, dependencias) {
+  if (dependencias) return ejecutarSincronizacion(usuario, estado, dependencias);
+  return almacenSesion.sincronizarPendiente(usuario, estado);
+}
+
+function crearSincronizadorAutomatico(dependencias = {}) {
+  const sincronizar = dependencias.sincronizar || ((usuario, estado) => sincronizarPendiente(usuario, estado));
+  const eventTarget = dependencias.eventTarget || globalThis;
+  const scheduler = dependencias.scheduler || globalThis;
+  return function iniciar(usuario, alSincronizar) {
+    const estado = { sincronizando: false };
   const intentar = async () => {
-    const sincronizo = await sincronizarPendiente(usuario);
+      const sincronizo = await sincronizar(usuario, estado);
     if (sincronizo && alSincronizar) alSincronizar();
   };
-  window.addEventListener('online', intentar);
-  setInterval(intentar, 15000);
+    eventTarget.addEventListener('online', intentar);
+    const intervalo = scheduler.setInterval(intentar, 15000);
+    return () => {
+      eventTarget.removeEventListener('online', intentar);
+      scheduler.clearInterval(intervalo);
+    };
+  };
+}
+
+const iniciarSincronizador = crearSincronizadorAutomatico();
+
+function iniciarSincronizacionAutomatica(usuario, alSincronizar) {
+  return iniciarSincronizador(usuario, alSincronizar);
 }
 
 function exportarPaquete(paquete) {
@@ -1310,18 +1694,29 @@ function leerArchivoSubido(archivo) {
   });
 }
 
-  return { existeGastos, cargar, guardar, sincronizarPendiente, iniciarSincronizacionAutomatica, exportarPaquete, leerArchivoSubido };
+  return { crearLecturaApertura, intentarEntradaGuardada, existeGastos, cargar, crearRegistroColas, crearColaGuardados, crearAlmacenSesion, guardar, sincronizarPendiente, crearSincronizadorAutomatico, iniciarSincronizacionAutomatica, exportarPaquete, leerArchivoSubido };
 })();
+const crearLecturaApertura = almacen.crearLecturaApertura;
+const intentarEntradaGuardada = almacen.intentarEntradaGuardada;
 const existeGastos = almacen.existeGastos;
 const cargar = almacen.cargar;
+const crearRegistroColas = almacen.crearRegistroColas;
+const crearColaGuardados = almacen.crearColaGuardados;
+const crearAlmacenSesion = almacen.crearAlmacenSesion;
 const guardar = almacen.guardar;
 const sincronizarPendiente = almacen.sincronizarPendiente;
+const crearSincronizadorAutomatico = almacen.crearSincronizadorAutomatico;
 const iniciarSincronizacionAutomatica = almacen.iniciarSincronizacionAutomatica;
 const exportarPaquete = almacen.exportarPaquete;
 const leerArchivoSubido = almacen.leerArchivoSubido;
 
 // ── gastos/js/ui.js ──────────────────────────────────────────
-// Estado, render y eventos. El único archivo que toca el DOM.
+﻿// Estado, render y eventos. El único archivo que toca el DOM.
+
+api.configurarManejadorAuth(() => {
+  cerrarSesionEnSegundoPlano(() => undefined);
+  location.href = '../index.html';
+});
 
 const E = {
   clave: null, // CryptoKey de la sesión (evita rederivar PBKDF2 en cada guardado)
@@ -1334,6 +1729,9 @@ const E = {
   captura: { tipo: 'gasto', montoStr: '', categoria: null, metodo: 'debito', fecha: hoyISO(), nota: '' },
   filtroMov: { texto: '', categoria: '' },
   deshacerTimeout: null,
+  lecturaApertura: null,
+  reintentandoApertura: false,
+  cleanupSincronizacion: null,
 };
 
 const ICONOS_INSIGHT = {
@@ -1347,10 +1745,6 @@ function fmt(n) {
   return new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }).format(n);
 }
 
-function escapeHTML(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
 function categoriaObj(id) {
   return E.datos.categorias.find((c) => c.id === id);
 }
@@ -1358,7 +1752,7 @@ function categoriaNombre(id) {
   return categoriaObj(id)?.nombre || id;
 }
 function categoriaColor(id) {
-  return categoriaObj(id)?.color || '#999999';
+  return colorSeguro(categoriaObj(id)?.color);
 }
 function metodoLabel(m) {
   return { efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', transferencia: 'Transferencia' }[m] || m;
@@ -1389,6 +1783,8 @@ function toast(msg, esError = false) {
     el.className = 'deshacer-toast';
     document.body.appendChild(el);
   }
+  el.setAttribute('role', esError ? 'alert' : 'status');
+  el.setAttribute('aria-live', esError ? 'assertive' : 'polite');
   el.style.background = esError ? 'var(--peligro)' : 'var(--texto)';
   el.style.color = esError ? '#fff' : 'var(--fondo)';
   el.innerHTML = `<span>${escapeHTML(msg)}</span>`;
@@ -1398,17 +1794,41 @@ function toast(msg, esError = false) {
 
 function abrirModal(html, onMount) {
   const root = document.getElementById('modal-root');
-  root.innerHTML = `<div class="modal-fondo" id="modal-fondo"><div class="modal-caja">
+  root.innerHTML = `<div class="modal-fondo" id="modal-fondo" role="dialog" aria-modal="true" aria-labelledby="modal-titulo"><div class="modal-caja" tabindex="-1">
     <div class="modal-cerrar"><div class="barra"></div></div>
     ${html}
   </div></div>`;
   document.getElementById('modal-fondo').addEventListener('click', (e) => {
     if (e.target.id === 'modal-fondo') cerrarModal();
   });
+  activarDialogoAccesible(document.getElementById('modal-fondo'));
   if (onMount) onMount(root);
 }
 function cerrarModal() {
   document.getElementById('modal-root').innerHTML = '';
+  restaurarFocoDialogo();
+}
+
+let focoAntesDialogo = null;
+let limpiarTecladoDialogo = null;
+function activarDialogoAccesible(dialogo, focoInicial, cerrar = cerrarModal) {
+  focoAntesDialogo = document.activeElement;
+  const enfocables = () => [...dialogo.querySelectorAll('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')].filter((el) => !el.disabled && !el.classList.contains('oculto'));
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cerrar(); return; }
+    if (e.key !== 'Tab') return;
+    const lista = enfocables(); if (!lista.length) return;
+    const primero = lista[0]; const ultimo = lista[lista.length - 1];
+    if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+  };
+  dialogo.addEventListener('keydown', onKey);
+  limpiarTecladoDialogo = () => dialogo.removeEventListener('keydown', onKey);
+  (focoInicial || enfocables()[0] || dialogo.querySelector('.modal-caja'))?.focus();
+}
+function restaurarFocoDialogo() {
+  limpiarTecladoDialogo?.(); limpiarTecladoDialogo = null;
+  focoAntesDialogo?.focus?.(); focoAntesDialogo = null;
 }
 
 // ---------- persistencia ----------
@@ -1451,7 +1871,7 @@ function mostrarPantallaPassword(modo) {
   document.getElementById('password-confirmar').value = '';
   document.getElementById('password-input').focus();
   if (modo === 'entrar') {
-    if (!intentarEntradaAutomatica()) mostrarBotonFaceId();
+    intentarEntradaAutomatica().then((ok) => { if (!ok) mostrarBotonFaceId(); });
   } else {
     document.getElementById('btn-faceid-password').classList.add('oculto');
   }
@@ -1461,13 +1881,49 @@ function mostrarPantallaPassword(modo) {
 // -- sin volver a pedir Face ID aquí. Antes CADA app pedía su propio Face
 // ID por separado, y eso se sentía como "dos Face ID" para una sola entrada
 // a la app. Regresa true si ya quedó resuelto (no hace falta mostrar botón).
-function intentarEntradaAutomatica() {
+async function intentarEntradaAutomatica() {
   const datosCache = candado.leerCandado('gastos', getUsuario());
-  if (!datosCache || !candado.faceIdConfirmadoReciente()) return false;
+  const confirmada = await almacen.intentarEntradaGuardada(
+    datosCache,
+    candado.faceIdConfirmadoReciente(),
+    async (password) => {
+      E.passwordModo = 'entrar';
+      document.getElementById('password-input').value = password;
+      return confirmarPassword();
+    },
+  );
+  if (confirmada) return true;
+  // Todavía no hay Face ID activado para Gastos en este dispositivo: prueba
+  // primero el PIN/contraseña que ya se escribió en el launcher (una sola
+  // contraseña para todo) antes de pedirte la de Gastos por separado. Si no
+  // coincide (cuenta vieja con una contraseña de Gastos distinta) o no hay
+  // sesión guardada, se cae a la pantalla normal sin avisar nada -- el
+  // usuario no escribió nada todavía como para mostrarle un error.
+  return intentarClaveSesion();
+}
+
+async function intentarClaveSesion() {
+  const clave = leerClaveSesion();
+  if (!clave || clave.length < 4) return false;
   E.passwordModo = 'entrar';
-  document.getElementById('password-input').value = datosCache.password;
-  confirmarPassword();
-  return true;
+  mostrarVerificandoPassword(true);
+  try {
+    const { datos, pendienteDeSincronizar, clave: claveCripto, saltB64 } = await almacen.cargar(getUsuario(), clave, E.lecturaApertura);
+    E.clave = claveCripto;
+    E.saltCifrado = saltB64;
+    E.datos = datos;
+    const nuevos = calculos.generarMovimientosRecurrentes(E.datos.recurrentes, E.datos.movimientos, mesActualStr(), generarId);
+    if (nuevos.length) {
+      E.datos.movimientos.push(...nuevos);
+      await persistir();
+    }
+    finalizarConexion(pendienteDeSincronizar);
+    ofrecerActivarFaceId(clave);
+    return true;
+  } catch {
+    mostrarVerificandoPassword(false);
+    return false;
+  }
 }
 
 // Face ID es un candado local por dispositivo (ver shared/passkey.js) que
@@ -1537,7 +1993,7 @@ function mostrarErrorPassword(msg) {
 // quieta sin avisar que sí estaba pasando algo.
 function mostrarVerificandoPassword(verificando) {
   document.getElementById('password-emoji').textContent = verificando ? '⏳' : '🔒';
-  document.getElementById('password-titulo').textContent = verificando ? 'Verificando…' : 'Ingresa tu contraseña';
+  document.getElementById('password-titulo').textContent = verificando ? 'Verificando acceso…' : 'Ingresa tu contraseña';
   document.getElementById('btn-password-confirmar').disabled = verificando;
   document.getElementById('btn-faceid-password').disabled = verificando;
 }
@@ -1547,35 +2003,38 @@ function finalizarConexion(pendienteDeSincronizar) {
   document.getElementById('app').classList.remove('oculto');
   if (pendienteDeSincronizar) toast('Tenías cambios sin sincronizar — se están subiendo.', true);
   render();
-  almacen.iniciarSincronizacionAutomatica(getUsuario(), () => toast('Sincronizado ✓'));
+  E.cleanupSincronizacion?.();
+  E.cleanupSincronizacion = almacen.iniciarSincronizacionAutomatica(getUsuario(), () => toast('Sincronizado ✓'));
 }
 
 async function confirmarPassword() {
   const pass = document.getElementById('password-input').value;
   if (!pass || pass.length < 4) {
     mostrarErrorPassword('La contraseña debe tener al menos 4 caracteres.');
-    return;
+    return false;
   }
   if (E.passwordModo === 'crear') {
     const confirmacion = document.getElementById('password-confirmar').value;
     if (pass !== confirmacion) {
       mostrarErrorPassword('Las contraseñas no coinciden.');
-      return;
+      return false;
     }
     const { clave, saltB64 } = await crearClaveSesion(pass);
     E.clave = clave;
     E.saltCifrado = saltB64;
     E.datos = crearDatosVacios();
     await persistir();
+    guardarClaveSesion(pass); // para que Peso <-> Gastos ya no la vuelva a pedir el resto de la sesión
     finalizarConexion(false);
     ofrecerActivarFaceId(pass);
+    return true;
   } else {
     // Este paso SIEMPRE tarda un poco (baja tus datos de Google + descifra
     // con 250,000 vueltas de PBKDF2, a propósito, por seguridad) -- sin
     // avisar nada aquí, se sentía como que la app se quedó pasmada.
     mostrarVerificandoPassword(true);
     try {
-      const { datos, pendienteDeSincronizar, clave, saltB64 } = await almacen.cargar(getUsuario(), pass);
+      const { datos, pendienteDeSincronizar, clave, saltB64 } = await almacen.cargar(getUsuario(), pass, E.lecturaApertura);
       E.clave = clave;
       E.saltCifrado = saltB64;
       E.datos = datos;
@@ -1584,11 +2043,14 @@ async function confirmarPassword() {
         E.datos.movimientos.push(...nuevos);
         await persistir();
       }
+      guardarClaveSesion(pass); // para que Peso <-> Gastos ya no la vuelva a pedir el resto de la sesión
       finalizarConexion(pendienteDeSincronizar);
       ofrecerActivarFaceId(pass);
+      return true;
     } catch (e) {
       mostrarVerificandoPassword(false);
       mostrarErrorPassword(e.message || 'Contraseña incorrecta');
+      return false;
     }
   }
 }
@@ -1599,7 +2061,11 @@ function cambiarVista(nombre) {
   E.vista = nombre;
   document.querySelectorAll('.vista').forEach((v) => v.classList.remove('activa'));
   document.getElementById(`vista-${nombre}`).classList.add('activa');
-  document.querySelectorAll('.nav-inferior button').forEach((b) => b.classList.toggle('activo', b.dataset.vista === nombre));
+  document.querySelectorAll('.nav-inferior button').forEach((b) => {
+    const activo = b.dataset.vista === nombre;
+    b.classList.toggle('activo', activo);
+    if (activo) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   render();
 }
 
@@ -1650,13 +2116,16 @@ function tecla(t) {
 
 function renderCapturar() {
   document.getElementById('captura-monto').textContent = '$' + (E.captura.montoStr || '0');
-  document.querySelectorAll('.captura-tipo button').forEach((b) => b.classList.toggle('activo', b.dataset.tipo === E.captura.tipo));
+  document.querySelectorAll('.captura-tipo button').forEach((b) => {
+    const activo = b.dataset.tipo === E.captura.tipo;
+    b.classList.toggle('activo', activo); b.setAttribute('aria-pressed', String(activo));
+  });
 
   const cats = E.datos.categorias.filter((c) => c.tipo === E.captura.tipo && c.activo !== false);
   if (!cats.some((c) => c.id === E.captura.categoria)) E.captura.categoria = cats[0]?.id || null;
   document.getElementById('categorias-grid').innerHTML = cats
-    .map((c) => `<button class="categoria-btn ${c.id === E.captura.categoria ? 'activa' : ''}" data-id="${c.id}">
-      <span class="emoji">${c.icono}</span>${escapeHTML(c.nombre)}
+    .map((c) => `<button class="categoria-btn ${c.id === E.captura.categoria ? 'activa' : ''}" data-id="${escapeAtributo(idSeguro(c.id))}" aria-pressed="${c.id === E.captura.categoria}">
+      <span class="emoji">${escapeHTML(c.icono)}</span>${escapeHTML(c.nombre)}
     </button>`)
     .join('');
 
@@ -1664,7 +2133,8 @@ function renderCapturar() {
   document.getElementById('campo-metodo').classList.toggle('oculto', !mostrarMetodo);
   if (!mostrarMetodo) E.captura.metodo = METODOS[0]; // no se pregunta -- valor fijo, sin rastro en pantalla
   document.querySelectorAll('#metodo-grupo button[data-metodo]').forEach((b) => {
-    b.classList.toggle('activo', b.dataset.metodo === E.captura.metodo);
+    const activo = b.dataset.metodo === E.captura.metodo;
+    b.classList.toggle('activo', activo); b.setAttribute('aria-pressed', String(activo));
   });
   document.getElementById('captura-fecha').value = E.captura.fecha;
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
@@ -1724,7 +2194,7 @@ function wireCaptura() {
   document.getElementById('captura-nota').addEventListener('input', (e) => {
     E.captura.nota = e.target.value;
   });
-  document.getElementById('btn-guardar-movimiento').addEventListener('click', guardarMovimientoCaptura);
+  document.getElementById('btn-guardar-movimiento').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarMovimientoCaptura));
 }
 
 // ---------- vista: movimientos ----------
@@ -1742,20 +2212,20 @@ function movimientosFiltrados() {
 function filaMovimientoHTML(m) {
   const cat = categoriaObj(m.categoria);
   const mostrarMetodo = E.datos.config.mostrarMetodo !== false;
-  return `<div class="movimiento-fila" data-id="${m.id}">
-    <div class="emoji-cat" style="background:${(cat?.color || '#999999')}22;">${cat?.icono || '❓'}</div>
+  return `<div class="movimiento-fila" data-id="${escapeAtributo(idSeguro(m.id))}">
+    <div class="emoji-cat" style="background:${colorSeguro(cat?.color)}22;">${escapeHTML(cat?.icono || '❓')}</div>
     <div class="detalle">
       <div class="nombre">${escapeHTML(cat?.nombre || m.categoria)}${m.nota ? ' · ' + escapeHTML(m.nota) : ''}</div>
-      ${mostrarMetodo ? `<div class="sub">${metodoLabel(m.metodo)}</div>` : ''}
+      ${mostrarMetodo ? `<div class="sub">${escapeHTML(metodoLabel(m.metodo))}</div>` : ''}
     </div>
-    <div class="monto ${m.tipo}">${m.tipo === 'gasto' ? '-' : '+'}$${fmt(m.monto)}</div>
+    <div class="monto ${m.tipo === 'ingreso' ? 'ingreso' : 'gasto'}">${m.tipo === 'gasto' ? '-' : '+'}$${fmt(m.monto)}</div>
   </div>`;
 }
 
 function renderMovimientos() {
   const select = document.getElementById('mov-filtro-categoria');
   const valPrevio = select.value;
-  select.innerHTML = '<option value="">Todas</option>' + E.datos.categorias.map((c) => `<option value="${c.id}">${c.icono} ${escapeHTML(c.nombre)}</option>`).join('');
+  select.innerHTML = '<option value="">Todas</option>' + E.datos.categorias.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('');
   select.value = valPrevio;
 
   const movs = movimientosFiltrados();
@@ -1779,7 +2249,7 @@ function renderMovimientos() {
       const totalDiaCent = lista.reduce((acc, m) => acc + (m.tipo === 'gasto' ? -1 : 1) * calculos.aCentavos(m.monto), 0);
       const signo = totalDiaCent < 0 ? '-' : '';
       return `<div class="grupo-dia">
-        <div class="grupo-dia-header"><span>${formatoFechaLarga(fecha)}</span><span>${signo}$${fmt(Math.abs(totalDiaCent) / 100)}</span></div>
+        <div class="grupo-dia-header"><span>${escapeHTML(formatoFechaLarga(fecha))}</span><span>${signo}$${fmt(Math.abs(totalDiaCent) / 100)}</span></div>
         ${lista.map(filaMovimientoHTML).join('')}
       </div>`;
     })
@@ -1807,12 +2277,12 @@ function abrirEditarMovimiento(id) {
   const cats = E.datos.categorias.filter((c) => c.tipo === m.tipo);
   const mostrarMetodo = E.datos.config.mostrarMetodo !== false;
   const html = `
-    <h2>Editar movimiento</h2>
-    <div class="campo"><label>Monto</label><input type="number" step="0.01" min="0.01" id="edit-monto" value="${m.monto}"></div>
-    <div class="campo"><label>Categoría</label><select id="edit-categoria">${cats.map((c) => `<option value="${c.id}" ${c.id === m.categoria ? 'selected' : ''}>${c.icono} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
-    ${mostrarMetodo ? `<div class="campo"><label>Método</label><select id="edit-metodo">${METODOS.map((mm) => `<option value="${mm}" ${mm === m.metodo ? 'selected' : ''}>${metodoLabel(mm)}</option>`).join('')}</select></div>` : ''}
-    <div class="campo"><label>Fecha</label><input type="date" id="edit-fecha" value="${m.fecha}"></div>
-    <div class="campo"><label>Nota</label><input type="text" id="edit-nota" value="${escapeHTML(m.nota)}"></div>
+    <h2 id="modal-titulo">Editar movimiento</h2>
+    <div class="campo"><label for="edit-monto">Monto</label><input type="number" step="0.01" min="0.01" id="edit-monto" value="${escapeAtributo(m.monto)}"></div>
+    <div class="campo"><label for="edit-categoria">Categoría</label><select id="edit-categoria">${cats.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}" ${c.id === m.categoria ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
+    ${mostrarMetodo ? `<div class="campo"><label for="edit-metodo">Método</label><select id="edit-metodo">${METODOS.map((mm) => `<option value="${escapeAtributo(mm)}" ${mm === m.metodo ? 'selected' : ''}>${escapeHTML(metodoLabel(mm))}</option>`).join('')}</select></div>` : ''}
+    <div class="campo"><label for="edit-fecha">Fecha</label><input type="date" id="edit-fecha" value="${escapeAtributo(m.fecha)}"></div>
+    <div class="campo"><label for="edit-nota">Nota</label><input type="text" id="edit-nota" value="${escapeAtributo(m.nota)}"></div>
     <button class="btn-primario" id="btn-guardar-edicion">Guardar cambios</button>
     <button class="btn-secundario btn-peligro" id="btn-eliminar-mov" style="margin-top:8px;">Eliminar</button>
   `;
@@ -1857,6 +2327,8 @@ function mostrarDeshacer(movimiento) {
   el = document.createElement('div');
   el.id = 'deshacer-toast';
   el.className = 'deshacer-toast';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
   el.innerHTML = `<span>Movimiento eliminado</span><button id="btn-deshacer">Deshacer</button>`;
   document.body.appendChild(el);
   document.getElementById('btn-deshacer').addEventListener('click', async () => {
@@ -1915,11 +2387,11 @@ function renderTablero() {
     (variacion !== null ? kpiTexto('Vs. mes anterior', `${variacion >= 0 ? '+' : ''}${variacion.toFixed(0)}%`, variacion > 0 ? 'negativo' : 'positivo') : '');
 
   const porCat = calculos.totalPorCategoria(movimientos, mes, 'gasto');
-  const datosD = porCat.map((c) => ({ label: categoriaNombre(c.categoria), value: c.total, color: categoriaColor(c.categoria) }));
+  const datosD = porCat.map((c) => ({ label: escapeHTML(categoriaNombre(c.categoria)), value: c.total, color: colorSeguro(categoriaColor(c.categoria)) }));
   document.getElementById('grafica-dona').innerHTML = graficas.svgDona(datosD);
   document.getElementById('leyenda-dona').innerHTML = datosD
     .slice(0, 8)
-    .map((d) => `<div class="leyenda-item"><span class="leyenda-punto" style="background:${d.color}"></span>${escapeHTML(d.label)} · $${fmt(d.value)}</div>`)
+    .map((d) => `<div class="leyenda-item"><span class="leyenda-punto" style="background:${colorSeguro(d.color)}"></span>${d.label} · $${fmt(d.value)}</div>`)
     .join('');
 
   const b12 = calculos.totalesPorMes(movimientos, 'gasto', mes, 12);
@@ -1929,7 +2401,7 @@ function renderTablero() {
   const serieAnterior = serieAcumuladaDelMes(movimientos, mesAnterior);
   document.getElementById('grafica-linea').innerHTML = graficas.svgLineaAcumulada(serieActual, serieAnterior);
 
-  const top8 = porCat.slice(0, 8).map((c) => ({ label: categoriaNombre(c.categoria), value: c.total, color: categoriaColor(c.categoria) }));
+  const top8 = porCat.slice(0, 8).map((c) => ({ label: escapeHTML(categoriaNombre(c.categoria)), value: c.total, color: colorSeguro(categoriaColor(c.categoria)) }));
   document.getElementById('grafica-barrash').innerHTML = graficas.svgBarrasHorizontales(top8);
 
   const top5 = calculos.topGastos(movimientos, mes, 5);
@@ -1943,7 +2415,7 @@ function renderTablero() {
         .map(
           (p) => `<div class="presupuesto-fila">
         <div class="cabeza"><span>${escapeHTML(categoriaNombre(p.categoria))}</span><span>$${fmt(p.gastado)} / $${fmt(p.tope)}</span></div>
-        <div class="presupuesto-barra"><div class="relleno ${p.nivel !== 'ok' ? p.nivel : ''}" style="width:${Math.min(p.pct, 1) * 100}%"></div></div>
+        <div class="presupuesto-barra"><div class="relleno ${['alerta', 'excedido'].includes(p.nivel) ? p.nivel : ''}" style="width:${Math.max(0, Math.min(Number(p.pct) || 0, 1)) * 100}%"></div></div>
       </div>`
         )
         .join('')
@@ -1951,7 +2423,7 @@ function renderTablero() {
 
   const insights = generarInsights(E.datos, mes, hoy);
   document.getElementById('lista-insights').innerHTML = insights.length
-    ? insights.map((i) => `<div class="insight ${i.nivel}"><span>${iconoInsight(i.tipo)}</span><span>${escapeHTML(i.texto)}</span></div>`).join('')
+    ? insights.map((i) => `<div class="insight ${['info', 'alerta', 'peligro'].includes(i.nivel) ? i.nivel : 'info'}"><span>${escapeHTML(iconoInsight(i.tipo))}</span><span>${escapeHTML(i.texto)}</span></div>`).join('')
     : '<p style="color:var(--texto-suave);font-size:0.82rem;">Aún no hay suficientes datos para insights este mes.</p>';
 
   const anio = Number(mes.slice(0, 4));
@@ -1970,13 +2442,13 @@ function renderAjustes() {
   document.getElementById('lista-categorias').innerHTML = E.datos.categorias
     .map(
       (c) => `<div class="lista-item ${c.activo === false ? 'inactiva' : ''}">
-      <span>${c.icono} ${escapeHTML(c.nombre)} <span class="badge">${c.tipo}</span></span>
+      <span>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)} <span class="badge">${escapeHTML(c.tipo)}</span></span>
       <span>
         <label class="switch" title="${c.activo === false ? 'Desactivada' : 'Activa'}">
-          <input type="checkbox" data-activar-cat="${c.id}" ${c.activo === false ? '' : 'checked'}>
+          <input type="checkbox" data-activar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`${c.activo === false ? 'Activar' : 'Desactivar'} ${c.nombre}`)}" ${c.activo === false ? '' : 'checked'}>
           <span class="switch-riel"></span>
         </label>
-        <button class="icono" data-editar-cat="${c.id}">✏️</button><button class="icono" data-borrar-cat="${c.id}">🗑️</button>
+        <button class="icono" data-editar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`Editar categoría ${c.nombre}`)}">✏️</button><button class="icono" data-borrar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`Borrar categoría ${c.nombre}`)}">🗑️</button>
       </span>
     </div>`
     )
@@ -1989,8 +2461,8 @@ function renderAjustes() {
   document.getElementById('ajustes-presupuestos').innerHTML = catsGasto
     .map(
       (c) => `<div class="campo">
-      <label>${c.icono} ${escapeHTML(c.nombre)}</label>
-      <input type="number" min="0" step="50" data-presupuesto-cat="${c.id}" value="${topes[c.id] || ''}" placeholder="Sin tope">
+      <label for="presupuesto-${escapeAtributo(idSeguro(c.id))}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</label>
+      <input id="presupuesto-${escapeAtributo(idSeguro(c.id))}" type="number" min="0" step="50" data-presupuesto-cat="${escapeAtributo(idSeguro(c.id))}" value="${escapeAtributo(topes[c.id] || '')}" placeholder="Sin tope">
     </div>`
     )
     .join('');
@@ -1999,8 +2471,8 @@ function renderAjustes() {
     ? E.datos.recurrentes
         .map(
           (r) => `<div class="lista-item">
-        <span>${escapeHTML(r.nombre)} · $${fmt(r.monto)} · día ${r.dia} ${!r.activo ? '<span class="badge">pausado</span>' : ''}</span>
-        <span><button class="icono" data-editar-rec="${r.id}">✏️</button><button class="icono" data-borrar-rec="${r.id}">🗑️</button></span>
+        <span>${escapeHTML(r.nombre)} · $${fmt(r.monto)} · día ${escapeHTML(r.dia)} ${!r.activo ? '<span class="badge">pausado</span>' : ''}</span>
+        <span><button class="icono" data-editar-rec="${escapeAtributo(idSeguro(r.id))}" aria-label="${escapeAtributo(`Editar recurrente ${r.nombre}`)}">✏️</button><button class="icono" data-borrar-rec="${escapeAtributo(idSeguro(r.id))}" aria-label="${escapeAtributo(`Borrar recurrente ${r.nombre}`)}">🗑️</button></span>
       </div>`
         )
         .join('')
@@ -2050,13 +2522,13 @@ function desactivarFaceIdDesdeAjustes() {
 function abrirModalCategoria(id) {
   const existente = id ? categoriaObj(id) : null;
   const html = `
-    <h2>${existente ? 'Editar' : 'Nueva'} categoría</h2>
-    <div class="campo"><label>Nombre</label><input id="cat-nombre" value="${escapeHTML(existente?.nombre || '')}"></div>
+    <h2 id="modal-titulo">${existente ? 'Editar' : 'Nueva'} categoría</h2>
+    <div class="campo"><label for="cat-nombre">Nombre</label><input id="cat-nombre" value="${escapeAtributo(existente?.nombre || '')}"></div>
     <div class="fila">
-      <div class="campo"><label>Ícono (emoji)</label><input id="cat-icono" value="${existente?.icono || '🏷️'}"></div>
-      <div class="campo"><label>Color</label><input type="color" id="cat-color" value="${existente?.color || '#4c5fd5'}"></div>
+      <div class="campo"><label for="cat-icono">Ícono (emoji)</label><input id="cat-icono" value="${escapeAtributo(existente?.icono || '🏷️')}"></div>
+      <div class="campo"><label for="cat-color">Color</label><input type="color" id="cat-color" value="${colorSeguro(existente?.color, '#4c5fd5')}"></div>
     </div>
-    <div class="campo"><label>Tipo</label>
+    <div class="campo"><label for="cat-tipo">Tipo</label>
       <select id="cat-tipo">
         <option value="gasto" ${!existente || existente.tipo === 'gasto' ? 'selected' : ''}>Gasto</option>
         <option value="ingreso" ${existente?.tipo === 'ingreso' ? 'selected' : ''}>Ingreso</option>
@@ -2097,13 +2569,13 @@ function abrirModalRecurrente(id) {
   const existente = id ? E.datos.recurrentes.find((r) => r.id === id) : null;
   const cats = E.datos.categorias.filter((c) => c.tipo === 'gasto');
   const html = `
-    <h2>${existente ? 'Editar' : 'Nuevo'} recurrente</h2>
-    <div class="campo"><label>Nombre</label><input id="rec-nombre" value="${escapeHTML(existente?.nombre || '')}"></div>
+    <h2 id="modal-titulo">${existente ? 'Editar' : 'Nuevo'} recurrente</h2>
+    <div class="campo"><label for="rec-nombre">Nombre</label><input id="rec-nombre" value="${escapeAtributo(existente?.nombre || '')}"></div>
     <div class="fila">
-      <div class="campo"><label>Monto</label><input type="number" step="0.01" min="0.01" id="rec-monto" value="${existente?.monto ?? ''}"></div>
-      <div class="campo"><label>Día del mes</label><input type="number" min="1" max="31" id="rec-dia" value="${existente?.dia ?? 1}"></div>
+      <div class="campo"><label for="rec-monto">Monto</label><input type="number" step="0.01" min="0.01" id="rec-monto" value="${escapeAtributo(existente?.monto ?? '')}"></div>
+      <div class="campo"><label for="rec-dia">Día del mes</label><input type="number" min="1" max="31" id="rec-dia" value="${escapeAtributo(existente?.dia ?? 1)}"></div>
     </div>
-    <div class="campo"><label>Categoría</label><select id="rec-categoria">${cats.map((c) => `<option value="${c.id}" ${existente?.categoria === c.id ? 'selected' : ''}>${c.icono} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
+    <div class="campo"><label for="rec-categoria">Categoría</label><select id="rec-categoria">${cats.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}" ${existente?.categoria === c.id ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
     <div class="campo"><label><input type="checkbox" id="rec-activo" ${!existente || existente.activo ? 'checked' : ''}> Activo</label></div>
     <button class="btn-primario" id="btn-guardar-rec">Guardar</button>
     ${existente ? '<button class="btn-secundario btn-peligro" id="btn-borrar-rec" style="margin-top:8px;">Eliminar</button>' : ''}
@@ -2206,7 +2678,9 @@ function wireAjustes() {
   document.getElementById('btn-faceid-activar').addEventListener('click', activarFaceIdDesdeAjustes);
   document.getElementById('btn-faceid-desactivar').addEventListener('click', desactivarFaceIdDesdeAjustes);
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
-    cerrarSesion();
+    E.cleanupSincronizacion?.();
+    E.cleanupSincronizacion = null;
+    cerrarSesionEnSegundoPlano(api.cerrarSesionServidor);
     location.href = '../index.html';
   });
   document.getElementById('btn-borrar-todo').addEventListener('click', async () => {
@@ -2220,9 +2694,9 @@ function wireAjustes() {
 
 function abrirModalCambiarPassword() {
   const html = `
-    <h2>Cambiar contraseña</h2>
-    <div class="campo"><label>Nueva contraseña</label><input type="password" id="nueva-pass" autocomplete="off"></div>
-    <div class="campo"><label>Confirma la nueva contraseña</label><input type="password" id="nueva-pass-confirmar" autocomplete="off"></div>
+    <h2 id="modal-titulo">Cambiar contraseña</h2>
+    <div class="campo"><label for="nueva-pass">Nueva contraseña</label><input type="password" id="nueva-pass" autocomplete="off"></div>
+    <div class="campo"><label for="nueva-pass-confirmar">Confirma la nueva contraseña</label><input type="password" id="nueva-pass-confirmar" autocomplete="off"></div>
     <button class="btn-primario" id="btn-guardar-nueva-pass">Guardar nueva contraseña</button>
   `;
   abrirModal(html, () => {
@@ -2263,11 +2737,13 @@ function popupFaceId(mensaje, onAceptar) {
     fondo.classList.add('oculto');
     btnSi.removeEventListener('click', onSi);
     btnNo.removeEventListener('click', onNo);
+    restaurarFocoDialogo();
   };
   const onSi = () => { cerrar(); onAceptar(); };
   const onNo = () => cerrar();
   btnSi.addEventListener('click', onSi);
   btnNo.addEventListener('click', onNo);
+  activarDialogoAccesible(fondo, btnNo, cerrar);
 }
 
 function confirmarPopup(mensaje) {
@@ -2281,25 +2757,29 @@ function confirmarPopup(mensaje) {
       fondo.classList.add('oculto');
       btnSi.removeEventListener('click', onSi);
       btnNo.removeEventListener('click', onNo);
+      restaurarFocoDialogo();
       resolve(valor);
     };
     const onSi = () => limpiar(true);
     const onNo = () => limpiar(false);
     btnSi.addEventListener('click', onSi);
     btnNo.addEventListener('click', onNo);
+    activarDialogoAccesible(fondo, btnNo, () => limpiar(false));
   });
 }
 
 // ---------- arranque ----------
 
 function wireGlobal() {
-  document.getElementById('btn-password-confirmar').addEventListener('click', confirmarPassword);
+  document.getElementById('btn-password-confirmar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, () => (
+    E.reintentandoApertura ? abrirGastos() : confirmarPassword()
+  )));
   document.getElementById('btn-faceid-password').addEventListener('click', intentarFaceId);
   document.getElementById('password-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') confirmarPassword();
+    if (e.key === 'Enter') document.getElementById('btn-password-confirmar').click();
   });
   document.getElementById('password-confirmar').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') confirmarPassword();
+    if (e.key === 'Enter') document.getElementById('btn-password-confirmar').click();
   });
   document.getElementById('mes-prev').addEventListener('click', () => cambiarMes(-1));
   document.getElementById('mes-next').addEventListener('click', () => cambiarMes(1));
@@ -2314,8 +2794,10 @@ function wireGlobal() {
   });
   document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
     a.addEventListener('click', (e) => {
+      const pendiente = `${E.captura.montoStr || ''}${E.captura.nota || ''}`;
+      if (!debeConfirmarNavegacion({ valor: pendiente, enviado: false })) return;
       e.preventDefault();
-      confirmarPopup('¿Seguro que quieres ir a Control de Peso?').then((ok) => { if (ok) location.href = a.href; });
+      confirmarPopup('Hay un gasto sin guardar. ¿Quieres salir?').then((ok) => { if (ok) location.href = a.href; });
     });
   });
 }
@@ -2336,6 +2818,28 @@ async function cargarFondoGuardado() {
   }
 }
 
+async function abrirGastos() {
+  const pantallaTitulo = document.getElementById('password-titulo');
+  pantallaTitulo.textContent = 'Abriendo tus gastos…';
+  const boton = document.getElementById('btn-password-confirmar');
+  boton.disabled = true;
+  boton.textContent = 'Abriendo…';
+  E.reintentandoApertura = false;
+  E.lecturaApertura = almacen.crearLecturaApertura(getUsuario());
+  try {
+    const yaExiste = await almacen.existeGastos(getUsuario(), E.lecturaApertura);
+    boton.disabled = false;
+    boton.textContent = 'Entrar';
+    mostrarPantallaPassword(yaExiste ? 'entrar' : 'crear');
+  } catch (e) {
+    pantallaTitulo.textContent = 'No pudimos abrir tus gastos';
+    mostrarErrorPassword((e.message || 'Error de conexión') + ' Intenta de nuevo.');
+    boton.disabled = false;
+    boton.textContent = 'Reintentar';
+    E.reintentandoApertura = true;
+  }
+}
+
 async function init() {
   aplicarTema();
   wireGlobal();
@@ -2346,8 +2850,7 @@ async function init() {
   if (!exigirSesion('../index.html')) return;
 
   cargarFondoGuardado();
-  const yaExiste = await almacen.existeGastos(getUsuario()).catch(() => false);
-  mostrarPantallaPassword(yaExiste ? 'entrar' : 'crear');
+  await abrirGastos();
 }
 
 // Sin esto, un error dentro de una función async sin try/catch (como el bug
@@ -2360,6 +2863,10 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', init);
+window.addEventListener('pagehide', () => {
+  E.cleanupSincronizacion?.();
+  E.cleanupSincronizacion = null;
+});
 
 if ('serviceWorker' in navigator) {
   // Ver comentario igual en js/ui.js (launcher) -- update() fuerza la

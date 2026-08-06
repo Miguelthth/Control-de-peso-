@@ -1,27 +1,6 @@
 :root {
-  --primario: #4c5fd5;
-  --primario-2: #7c6ef2;
-  --acento: #ff6b4a;
-  --exito: #22a06b;
-  --peligro: #e5484d;
-
-  --fondo: #f2f3fb;
-  --superficie: #ffffff;
-  --superficie-alt: #eef0fa;
-  --texto: #1c1e2b;
-  --texto-suave: #6b7080;
-  --borde: #e2e4f0;
-  --sombra: 0 2px 10px rgba(28, 30, 43, 0.06);
-  --anillo: 0 0 0 3px rgba(76, 95, 213, 0.15);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --fondo: #101018; --superficie: #1a1b26; --superficie-alt: #212233;
-    --texto: #eceefb; --texto-suave: #9498ac; --borde: #2a2c3d;
-    --sombra: 0 2px 14px rgba(0, 0, 0, 0.45);
-    --anillo: 0 0 0 3px rgba(124, 110, 242, 0.25);
-  }
+  --peso-gap: var(--space-3);
+  --peso-copy-size: var(--text-sm);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -155,6 +134,11 @@ button, input { font-family: inherit; }
   text-decoration: underline; cursor: pointer; padding: 2px 0; width: 100%; text-align: left;
 }
 #historial-pesos { margin-top: 10px; }
+.lista-acciones { display: flex; gap: 2px; flex: 0 0 auto; }
+.actualizacion-datos { margin: 0 0 12px; }
+.actualizacion-datos div { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
+.actualizacion-datos dt { color: var(--texto-suave); }
+.actualizacion-datos dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 
 .captura-tarjeta { position: relative; text-align: center; }
 /* El video queda DETRÁS del contenido de la tarjeta (z-index 1) -- el resto
@@ -244,7 +228,9 @@ button, input { font-family: inherit; }
   position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: center;
   background: color-mix(in srgb, var(--superficie) 92%, transparent); backdrop-filter: blur(10px);
   border-top: 1px solid var(--borde);
-  padding: 6px max(6px, env(safe-area-inset-bottom)) 6px; z-index: 20;
+  padding: 6px 6px max(6px, env(safe-area-inset-bottom));
+  padding-left: max(6px, env(safe-area-inset-left));
+  padding-right: max(6px, env(safe-area-inset-right)); z-index: 20;
 }
 .nav-inferior .contenedor { display: flex; width: 100%; max-width: 640px; }
 .nav-inferior button {
@@ -326,3 +312,22 @@ svg text.grafica-texto-vacio { font-size: 12px; fill: var(--texto-suave); }
 @media (min-width: 480px) {
   .tarjetas-persona { grid-template-columns: 1fr 1fr; }
 }
+
+/* Armonización con el sistema visual compartido */
+#app { width: 100%; max-width: 520px; padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+.encabezado { min-height: 64px; padding-inline: 16px; background: color-mix(in srgb, var(--fondo) 86%, transparent); backdrop-filter: blur(14px); }
+.nav-apps .icono, .btn-ajustes { min-width: 44px; width: 44px; height: 44px; border-radius: var(--radio-sm); }
+.vista { width: 100%; min-width: 0; padding-inline: 16px; }
+.tarjeta, .kpi, .tarjeta-persona { border-radius: var(--radio-md); box-shadow: var(--sombra); }
+.campo input, .input-fecha { min-height: 48px; border-radius: var(--radio-sm); font-size: 16px; }
+.btn-primario, .btn-secundario { min-height: 48px; }
+.metodo-grupo button, .grafica-tabs button { min-height: 44px; }
+.input-peso-grande { max-width: calc(100vw - 128px); min-height: 64px; }
+.nav-inferior { padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
+.nav-inferior .contenedor { max-width: 520px; }
+.nav-inferior button, .nav-inferior-link { min-width: 0; }
+.popup-caja { border-radius: var(--radio-lg); }
+.fondo-personalizado::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--fondo) 66%, transparent); }
+img, svg, video, canvas { max-width: 100%; }
+@media (max-width: 390px) { .encabezado { padding-inline: 10px; } .tarjetas-persona { grid-template-columns: 1fr; } .grafica-tabs { overflow-x: auto; } .grafica-tabs button { flex: 0 0 auto; padding-inline: 12px; } }
+@media (max-height: 520px) and (orientation: landscape) { .nav-inferior button, .nav-inferior-link { min-height: 48px; padding-block: 4px; } #vista-capturar.vista.activa { min-height: auto; } }

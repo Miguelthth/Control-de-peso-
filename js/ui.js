@@ -1,10 +1,16 @@
-// Launcher: login (URL → usuario → PIN o sin PIN) y los dos botones grandes.
+// Launcher: login (URL → usuario → PIN) y los dos botones grandes.
 
-import { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesion } from '../shared/sesion.js';
+import { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesionEnSegundoPlano, guardarClaveSesion, ejecutarUnaVez, leerToken, sesionAutenticada, accesoFaceIdValido } from '../shared/sesion.js';
 import * as api from '../shared/api.js';
 import * as passkey from '../shared/passkey.js';
 import * as candado from '../shared/candado.js';
 import * as fondo from '../shared/fondo.js';
+import { exigirBackendActual, guardarToken, borrarToken } from '../shared/autorizacion.js';
+
+api.configurarManejadorAuth(() => {
+  cerrarSesionEnSegundoPlano(() => undefined);
+  location.href = 'index.html';
+});
 
 let usuarioTemp = null;
 let rolTemp = null;
@@ -33,21 +39,39 @@ async function renderFaceIdUsuarios() {
 // del toque del usuario. Por eso `verificar`/`registrar` van siempre como lo
 // PRIMERO dentro de un handler de click -- nunca después de un await, un
 // confirm() nativo, ni al cargar la página (ahí las rechaza en seco).
-async function entrarConFaceId(usuario) {
+async function autenticarConFaceId(usuario, mostrarError) {
   try {
     await passkey.verificar(usuario);
   } catch (e) {
-    mostrarErrorUsuario(e.message);
-    return;
+    mostrarError(e.message);
+    return false;
   }
   const datos = candado.leerCandado('launcher', usuario);
   if (!datos) {
-    mostrarErrorUsuario('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
-    return;
+    mostrarError('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
+    return false;
+  }
+  let acceso;
+  try {
+    acceso = await api.validarPin(usuario, datos.pin || '');
+    exigirBackendActual(acceso, { requiereToken: true });
+  } catch (e) {
+    mostrarError('No se pudo validar la sesión: ' + e.message);
+    return false;
+  }
+  if (!accesoFaceIdValido(acceso)) {
+    mostrarError('La sesión expiró. Entra con tu PIN para continuar.');
+    return false;
   }
   candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
-  iniciarSesion(usuario, datos.rol);
+  guardarClaveSesion(datos.pin || ''); // misma idea: Gastos la prueba sola, sin volver a preguntar
+  iniciarSesion(usuario, datos.rol, acceso.token);
   mostrarInicio();
+  return true;
+}
+
+function entrarConFaceId(usuario) {
+  return autenticarConFaceId(usuario, mostrarErrorUsuario);
 }
 
 function mostrarPantallaCandado(usuario) {
@@ -58,20 +82,16 @@ function mostrarPantallaCandado(usuario) {
 
 // Va colgada del botón, NO se dispara sola al abrir: ninguna app web puede
 // lanzar Face ID sin que toques algo primero (Safari lo bloquea).
-async function intentarCandado(usuario) {
-  try {
-    await passkey.verificar(usuario);
-  } catch (e) {
-    document.getElementById('candado-texto').textContent = e.message;
-    return;
-  }
-  candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
-  mostrarInicio();
+function intentarCandado(usuario) {
+  return autenticarConFaceId(usuario, (mensaje) => {
+    document.getElementById('candado-texto').textContent = mensaje;
+  });
 }
 
 // El callback corre DENTRO del click en "Sí, activar" -- ese es el toque que
 // Safari necesita para dejar pasar el registro biométrico.
 function popupFaceId(mensaje, onAceptar) {
+  const focoAnterior = document.activeElement;
   const fondo = document.getElementById('popup-faceid');
   document.getElementById('popup-faceid-mensaje').textContent = mensaje;
   fondo.classList.remove('oculto');
@@ -81,11 +101,20 @@ function popupFaceId(mensaje, onAceptar) {
     fondo.classList.add('oculto');
     btnSi.removeEventListener('click', onSi);
     btnNo.removeEventListener('click', onNo);
+    fondo.removeEventListener('keydown', onKey);
+    focoAnterior?.focus?.();
   };
   const onSi = () => { cerrar(); onAceptar(); };
   const onNo = () => cerrar();
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cerrar(); }
+    if (e.key === 'Tab' && e.shiftKey && document.activeElement === btnNo) { e.preventDefault(); btnSi.focus(); }
+    else if (e.key === 'Tab' && !e.shiftKey && document.activeElement === btnSi) { e.preventDefault(); btnNo.focus(); }
+  };
   btnSi.addEventListener('click', onSi);
   btnNo.addEventListener('click', onNo);
+  fondo.addEventListener('keydown', onKey);
+  btnNo.focus();
 }
 
 // El passkey (registro biométrico) es UNO por usuario y sirve para las dos
@@ -139,9 +168,10 @@ async function activarFaceId() {
     alert('No se puede activar Face ID aquí:\n\n' + motivo);
     return;
   }
-  const pin = prompt('Para activar Face ID, confirma tu PIN actual (vacío si no tienes uno):') || '';
+  const pin = prompt('Para activar Face ID, confirma tu PIN actual:') || '';
   try {
     const r = await api.validarPin(usuario, pin);
+    exigirBackendActual(r, { requiereToken: true });
     if (!r.ok) {
       alert('PIN incorrecto');
       return;
@@ -203,10 +233,10 @@ async function agregarUsuario() {
   const nombreNuevo = prompt('Nombre del usuario nuevo:');
   if (!nombreNuevo || !nombreNuevo.trim()) return;
   const esOtroAdmin = confirm('¿Este usuario también es administrador?\n\nAceptar = sí, administrador.\nCancelar = no, usuario normal.');
-  const pinAdmin = prompt('Tu PIN (vacío si no tienes uno):') || '';
   try {
-    const r = await api.crearUsuario(getUsuario(), pinAdmin, nombreNuevo.trim(), esOtroAdmin ? 'admin' : 'normal');
-    if (r.ok) alert(`Listo, "${nombreNuevo.trim()}" ya puede entrar (sin PIN hasta que decida ponerse uno).`);
+    const r = await api.crearUsuario(nombreNuevo.trim(), esOtroAdmin ? 'admin' : 'normal');
+    exigirBackendActual(r);
+    if (r.ok && r.codigoActivacion) alert(`Usuario creado. Código de activación de un solo uso para ${nombreNuevo.trim()}:\n\n${r.codigoActivacion}\n\nEntrégaselo por un canal privado; no volverá a mostrarse.`);
     else alert(r.error || 'No se pudo crear');
   } catch (e) {
     alert('No se pudo crear: ' + e.message);
@@ -231,6 +261,7 @@ async function continuarUsuario() {
   document.getElementById('usuario-error').classList.add('oculto');
   try {
     const r = await api.validarUsuario(usuario);
+    exigirBackendActual(r);
     if (!r.ok) {
       mostrarErrorUsuario('Usuario incorrecto');
       return;
@@ -244,6 +275,12 @@ async function continuarUsuario() {
       document.getElementById('pin-input').focus();
     } else {
       mostrarPantalla('pantalla-pin-nuevo');
+      document.getElementById('codigo-activacion-input').value = '';
+      document.getElementById('codigo-activacion-input').disabled = false;
+      document.getElementById('activacion-error').classList.add('oculto');
+      document.getElementById('pin-nuevo-input').classList.add('oculto');
+      document.getElementById('btn-pin-nuevo-guardar').classList.add('oculto');
+      document.getElementById('btn-pin-nuevo-mostrar').classList.remove('oculto');
     }
   } catch (e) {
     mostrarErrorUsuario('No se pudo validar (¿la URL es correcta?): ' + e.message);
@@ -254,15 +291,43 @@ async function continuarPin() {
   const pin = document.getElementById('pin-input').value;
   try {
     const r = await api.validarPin(usuarioTemp, pin);
+    exigirBackendActual(r, { requiereToken: true });
     if (!r.ok) {
       mostrarErrorPin('PIN incorrecto');
       return;
     }
-    iniciarSesion(usuarioTemp, rolTemp);
+    iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
+    guardarClaveSesion(pin); // Gastos la prueba sola al abrir, sin volver a preguntar
     mostrarInicio();
     ofrecerFaceId(usuarioTemp, rolTemp, pin);
   } catch (e) {
     mostrarErrorPin('No se pudo validar: ' + e.message);
+  }
+}
+
+async function validarCodigoActivacion() {
+  const codigo = document.getElementById('codigo-activacion-input').value.trim();
+  const error = document.getElementById('activacion-error');
+  error.classList.add('oculto');
+  if (!/^\d{8,}$/.test(codigo)) {
+    error.textContent = 'El código de activación debe tener al menos 8 dígitos.';
+    error.classList.remove('oculto');
+    return;
+  }
+  try {
+    const r = await api.validarActivacion(usuarioTemp, codigo);
+    exigirBackendActual(r, { requiereToken: true });
+    if (!r.ok) throw new Error(r.error || 'Código de activación incorrecto');
+    guardarToken(r.token);
+    document.getElementById('codigo-activacion-input').disabled = true;
+    document.getElementById('pin-nuevo-input').classList.remove('oculto');
+    document.getElementById('btn-pin-nuevo-guardar').classList.remove('oculto');
+    document.getElementById('btn-pin-nuevo-mostrar').classList.add('oculto');
+    document.getElementById('pin-nuevo-input').focus();
+  } catch (e) {
+    borrarToken();
+    error.textContent = e.message;
+    error.classList.remove('oculto');
   }
 }
 
@@ -272,16 +337,13 @@ async function guardarPinNuevo() {
     alert('El PIN debe ser de 4 dígitos');
     return;
   }
-  await api.crearPin(usuarioTemp, pin);
-  iniciarSesion(usuarioTemp, rolTemp);
+  const r = await api.crearPin(usuarioTemp, pin);
+  exigirBackendActual(r, { requiereToken: true });
+  if (!r.ok || !r.token) throw new Error(r.error || 'No se pudo crear el PIN');
+  iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
+  guardarClaveSesion(pin); // Gastos la prueba sola al abrir, sin volver a preguntar
   mostrarInicio();
   ofrecerFaceId(usuarioTemp, rolTemp, pin);
-}
-
-function entrarSinPin() {
-  iniciarSesion(usuarioTemp, rolTemp);
-  mostrarInicio();
-  ofrecerFaceId(usuarioTemp, rolTemp, '');
 }
 
 function wireEventos() {
@@ -292,26 +354,21 @@ function wireEventos() {
     mostrarPantalla('pantalla-usuario');
   });
 
-  document.getElementById('btn-usuario-continuar').addEventListener('click', continuarUsuario);
+  document.getElementById('btn-usuario-continuar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, continuarUsuario));
   document.getElementById('usuario-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') continuarUsuario();
+    if (e.key === 'Enter') document.getElementById('btn-usuario-continuar').click();
   });
 
-  document.getElementById('btn-pin-continuar').addEventListener('click', continuarPin);
+  document.getElementById('btn-pin-continuar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, continuarPin));
   document.getElementById('pin-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') continuarPin();
+    if (e.key === 'Enter') document.getElementById('btn-pin-continuar').click();
   });
 
-  document.getElementById('btn-pin-nuevo-mostrar').addEventListener('click', () => {
-    document.getElementById('pin-nuevo-input').classList.remove('oculto');
-    document.getElementById('btn-pin-nuevo-guardar').classList.remove('oculto');
-    document.getElementById('btn-pin-nuevo-mostrar').classList.add('oculto');
-  });
-  document.getElementById('btn-pin-nuevo-guardar').addEventListener('click', guardarPinNuevo);
-  document.getElementById('btn-sin-pin').addEventListener('click', entrarSinPin);
+  document.getElementById('btn-pin-nuevo-mostrar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, validarCodigoActivacion));
+  document.getElementById('btn-pin-nuevo-guardar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarPinNuevo));
 
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
-    cerrarSesion();
+    cerrarSesionEnSegundoPlano(api.cerrarSesionServidor);
     document.getElementById('usuario-input').value = '';
     mostrarPantalla('pantalla-usuario');
     renderFaceIdUsuarios();
@@ -321,7 +378,7 @@ function wireEventos() {
   document.getElementById('btn-candado-entrar').addEventListener('click', () => intentarCandado(getUsuario()));
   document.getElementById('btn-candado-pin').addEventListener('click', () => {
     const usuario = getUsuario();
-    cerrarSesion();
+    cerrarSesionEnSegundoPlano(api.cerrarSesionServidor);
     document.getElementById('usuario-input').value = usuario;
     mostrarPantalla('pantalla-usuario');
     renderFaceIdUsuarios();
@@ -340,7 +397,7 @@ async function init() {
     mostrarPantalla('pantalla-url');
     return;
   }
-  if (getUsuario()) {
+  if (sesionAutenticada(getUsuario(), leerToken())) {
     // Sesión ya guardada -- si activaste Face ID para este usuario, hay que
     // re-confirmar cada vez que se abre la app (no basta con haber entrado
     // una vez); si no lo activaste, entra directo como siempre. La pantalla

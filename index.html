@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <title>Mis Apps</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#4c5fd5">
@@ -10,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mis Apps">
 <link rel="apple-touch-icon" href="icon-512.png">
+<link rel="stylesheet" href="shared/tema.css">
 <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body>
@@ -17,47 +19,62 @@
 <div id="fondo-personalizado" class="fondo-personalizado oculto"></div>
 
 <div id="pantalla-url" class="pantalla pantalla-centrada">
-  <div class="emoji-grande">🔗</div>
-  <div style="width:100%; max-width:340px;">
-    <input type="text" id="url-input" placeholder="Link del servidor" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--borde); margin-bottom:10px;">
+  <div class="tarjeta-login">
+    <div class="marca-acceso"><img src="icon-512.png" alt=""><div><strong>Mis Apps</strong><span>Tu espacio personal</span></div></div>
+    <p class="texto-suave">Conecta tu espacio para comenzar.</p>
+    <input type="text" id="url-input" aria-label="Link del servidor" placeholder="Link del servidor">
+    <button class="btn-primario" id="btn-url-continuar">Continuar</button>
   </div>
-  <button class="btn-primario" id="btn-url-continuar">Continuar</button>
 </div>
 
 <div id="pantalla-usuario" class="pantalla pantalla-centrada oculto">
-  <div id="faceid-usuarios" class="faceid-lista oculto"></div>
-  <div style="width:100%; max-width:340px;">
-    <input type="text" id="usuario-input" placeholder="Usuario" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--borde); margin-bottom:10px;">
+  <div class="tarjeta-login">
+    <div class="marca-acceso"><img src="icon-512.png" alt=""><div><strong>Mis Apps</strong><span>Bienvenido de nuevo</span></div></div>
+    <div id="faceid-usuarios" class="faceid-lista oculto"></div>
+    <input type="text" id="usuario-input" aria-label="Usuario" placeholder="Usuario" autocomplete="username">
+    <button class="btn-primario" id="btn-usuario-continuar">Continuar</button>
+    <p id="usuario-error" class="oculto texto-error" role="alert" aria-live="assertive"></p>
   </div>
-  <button class="btn-primario" id="btn-usuario-continuar">Continuar</button>
-  <p id="usuario-error" class="oculto texto-error"></p>
 </div>
 
 <div id="pantalla-pin" class="pantalla pantalla-centrada oculto">
-  <input type="password" inputmode="numeric" maxlength="4" id="pin-input" class="input-pin" placeholder="••••">
-  <button class="btn-primario" id="btn-pin-continuar">Entrar</button>
-  <p id="pin-error" class="oculto texto-error"></p>
+  <div class="tarjeta-login">
+    <div class="marca-acceso compacta"><img src="icon-512.png" alt=""><div><strong>Confirma que eres tú</strong><span>Tu PIN protege el acceso</span></div></div>
+    <input type="password" inputmode="numeric" maxlength="4" id="pin-input" aria-label="PIN de cuatro dígitos" class="input-pin" placeholder="••••" autocomplete="current-password">
+    <button class="btn-primario" id="btn-pin-continuar">Entrar</button>
+    <p id="pin-error" class="oculto texto-error" role="alert" aria-live="assertive"></p>
+  </div>
 </div>
 
 <div id="pantalla-pin-nuevo" class="pantalla pantalla-centrada oculto">
-  <p class="texto-suave">¿Poner PIN a tu cuenta? (opcional)</p>
-  <input type="password" inputmode="numeric" maxlength="4" id="pin-nuevo-input" class="input-pin oculto" placeholder="••••">
-  <button class="btn-secundario" id="btn-pin-nuevo-mostrar">Sí, crear PIN</button>
-  <button class="btn-primario oculto" id="btn-pin-nuevo-guardar" style="margin-top:8px;">Guardar PIN</button>
-  <button class="btn-secundario" id="btn-sin-pin">Entrar sin PIN</button>
+  <div class="tarjeta-login">
+    <div class="marca-acceso compacta"><img src="icon-512.png" alt=""><div><strong>Activa tu acceso</strong><span>Este paso se hace una sola vez</span></div></div>
+    <p class="texto-suave">Escribe el código que te entregó el administrador y crea tu PIN.</p>
+    <input type="password" inputmode="numeric" minlength="8" id="codigo-activacion-input" aria-label="Código de activación" class="input-pin" placeholder="Código de activación" autocomplete="one-time-code">
+    <input type="password" inputmode="numeric" maxlength="4" id="pin-nuevo-input" aria-label="Nuevo PIN de cuatro dígitos" class="input-pin oculto" placeholder="••••">
+    <button class="btn-secundario" id="btn-pin-nuevo-mostrar">Validar código</button>
+    <button class="btn-primario oculto" id="btn-pin-nuevo-guardar">Guardar PIN</button>
+    <p id="activacion-error" class="error oculto" role="alert" aria-live="assertive"></p>
+  </div>
 </div>
 
 <div id="pantalla-candado" class="pantalla pantalla-centrada oculto">
-  <div class="emoji-grande">🔒</div>
-  <h1 id="candado-saludo">Hola de nuevo</h1>
-  <p class="texto-suave" id="candado-texto">Confirma que eres tú para entrar.</p>
-  <button class="btn-primario" id="btn-candado-entrar">🔒 Entrar con Face ID</button>
-  <button class="btn-secundario" id="btn-candado-pin">Usar mi PIN en su lugar</button>
+  <div class="tarjeta-login">
+    <div class="marca-acceso compacta"><img src="icon-512.png" alt=""><div><strong id="candado-saludo">Hola de nuevo</strong><span>Tu espacio está protegido</span></div></div>
+    <p class="texto-suave" id="candado-texto">Confirma que eres tú para entrar.</p>
+    <button class="btn-primario" id="btn-candado-entrar">🔒 Entrar con Face ID</button>
+    <button class="btn-secundario" id="btn-candado-pin">Usar mi PIN en su lugar</button>
+  </div>
 </div>
 
 <div id="pantalla-inicio" class="pantalla pantalla-centrada oculto">
-  <div class="emoji-grande">✨</div>
+  <div class="marca-launcher" aria-label="Mis Apps">
+    <img src="icon-512.png" alt="" width="64" height="64">
+    <div><span>Mis Apps</span><small>Tu espacio personal</small></div>
+  </div>
+  <div class="tarjeta-acceso">
   <h1 id="saludo"></h1>
+  <p class="texto-suave subtitulo-launcher">¿Qué quieres abrir?</p>
   <div class="botones-launcher">
     <a href="gastos/index.html" class="btn-launcher">
       <span class="emoji">💰</span>Gastos
@@ -66,6 +83,7 @@
       <span class="emoji">⚖️</span>Control de Peso
     </a>
   </div>
+  </div>
   <button class="btn-secundario" id="btn-cerrar-sesion" style="max-width:200px; margin-top:24px;">Cambiar de usuario</button>
   <button class="btn-secundario oculto" id="btn-agregar-usuario" style="max-width:200px; margin-top:8px;">+ Agregar usuario</button>
   <button class="btn-secundario oculto" id="btn-faceid-activar" style="max-width:280px; margin-top:8px;">🔒 Activar Face ID en este iPhone</button>
@@ -73,7 +91,7 @@
   <p class="texto-suave oculto" id="faceid-motivo" style="max-width:280px; margin-top:10px;"></p>
 </div>
 
-<div id="popup-faceid" class="popup-fondo oculto">
+<div id="popup-faceid" class="popup-fondo oculto" role="dialog" aria-modal="true" aria-labelledby="popup-faceid-mensaje">
   <div class="popup-caja">
     <div style="font-size:2.2rem; margin-bottom:6px;">🔒</div>
     <p id="popup-faceid-mensaje"></p>

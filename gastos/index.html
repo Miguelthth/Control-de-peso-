@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <title>Gastos — Mis Apps</title>
 <meta name="theme-color" content="#4c5fd5">
 <link rel="manifest" href="../manifest.json">
@@ -10,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mis Apps">
 <link rel="apple-touch-icon" href="../icon-512.png">
+<link rel="stylesheet" href="../shared/tema.css">
 <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body>
@@ -25,14 +27,14 @@
   <p class="texto-suave oculto" id="password-o-separador" style="margin:10px 0;">— o con tu contraseña —</p>
   <div style="width:100%; max-width:280px;">
     <div class="campo" style="text-align:left;">
-      <input type="password" id="password-input" placeholder="Contraseña" autocomplete="off">
+      <input type="password" id="password-input" aria-label="Contraseña de Gastos" placeholder="Contraseña" autocomplete="off">
     </div>
     <div class="campo oculto" id="password-confirmar-envoltura" style="text-align:left;">
-      <input type="password" id="password-confirmar" placeholder="Confirma tu contraseña" autocomplete="off">
+      <input type="password" id="password-confirmar" aria-label="Confirmar contraseña de Gastos" placeholder="Confirma tu contraseña" autocomplete="off">
     </div>
   </div>
   <button class="btn-primario" id="btn-password-confirmar">Entrar</button>
-  <p id="password-error" class="oculto" style="color:var(--peligro); font-size:0.8rem; margin-top:14px;"></p>
+  <p id="password-error" class="oculto" role="alert" aria-live="assertive" style="color:var(--peligro); font-size:0.8rem; margin-top:14px;"></p>
   <p id="password-advertencia" class="oculto" style="color:var(--texto-suave); font-size:0.75rem; margin-top:16px;">
     ⚠️ No hay forma de recuperar tus datos si olvidas esta contraseña. Guárdala en un lugar seguro (por ejemplo, un gestor de contraseñas).
   </p>
@@ -44,9 +46,9 @@
       <a href="../index.html" class="icono" title="Mis Apps">🏠</a>
     </div>
     <div class="mes-selector">
-      <button class="icono" id="mes-prev">‹</button>
+      <button class="icono" id="mes-prev" aria-label="Mes anterior">‹</button>
       <span id="mes-label">—</span>
-      <button class="icono" id="mes-next">›</button>
+      <button class="icono" id="mes-next" aria-label="Mes siguiente">›</button>
     </div>
     <button class="icono" id="btn-tema" title="Cambiar tema">🌗</button>
     <button class="icono" data-vista="ajustes" title="Ajustes">⚙️</button>
@@ -61,7 +63,7 @@
       </div>
       <div class="fecha-pill">
         <span id="captura-fecha-texto">Hoy</span>
-        <input type="date" id="captura-fecha">
+        <input type="date" id="captura-fecha" aria-label="Fecha del movimiento">
       </div>
     </div>
 
@@ -78,8 +80,8 @@
     </div>
 
     <div class="campo" id="campo-metodo">
-      <label>Método</label>
-      <div class="metodo-grupo" id="metodo-grupo">
+      <span class="campo-label" id="metodo-label">Método</span>
+      <div class="metodo-grupo" id="metodo-grupo" role="group" aria-labelledby="metodo-label">
         <button data-metodo="efectivo">Efectivo</button>
         <button data-metodo="debito" class="activo">Débito</button>
         <button data-metodo="credito">Crédito</button>
@@ -88,8 +90,8 @@
     </div>
 
     <div class="campo">
-      <label>Nota (opcional)</label>
-      <input type="text" id="captura-nota" placeholder="Ej. OXXO">
+      <label for="captura-nota">Nota (opcional)</label>
+      <input type="text" id="captura-nota" aria-label="Nota opcional" placeholder="Ej. OXXO">
     </div>
 
     <button class="btn-primario" id="btn-guardar-movimiento">Guardar</button>
@@ -100,10 +102,10 @@
     <div class="tarjeta" style="margin-bottom:10px; padding:10px 12px;">
       <div class="fila" style="align-items:center;">
         <div style="flex:2" class="buscador">
-          <input type="text" id="mov-buscar" placeholder="Buscar por nota…">
+          <input type="text" id="mov-buscar" aria-label="Buscar movimientos por nota" placeholder="Buscar por nota…">
         </div>
         <div style="flex:1">
-          <select id="mov-filtro-categoria"><option value="">Todas</option></select>
+          <select id="mov-filtro-categoria" aria-label="Filtrar movimientos por categoría"><option value="">Todas</option></select>
         </div>
       </div>
     </div>
@@ -179,7 +181,7 @@
           <span class="texto-suave">Mostrarlo al capturar y en tus movimientos.</span>
         </div>
         <label class="switch">
-          <input type="checkbox" id="chk-mostrar-metodo" checked>
+          <input type="checkbox" id="chk-mostrar-metodo" aria-label="Mostrar método de pago" checked>
           <span class="switch-riel"></span>
         </label>
       </div>
@@ -221,7 +223,7 @@
         <button class="btn-secundario" id="btn-exportar">Exportar respaldo</button>
         <button class="btn-secundario" id="btn-importar">Importar respaldo</button>
       </div>
-      <input type="file" id="input-importar" accept="application/json" class="oculto">
+      <input type="file" id="input-importar" aria-label="Seleccionar respaldo para importar" accept="application/json" class="oculto">
     </div>
 
     <div class="tarjeta">
@@ -233,7 +235,7 @@
 
   <nav class="nav-inferior">
     <div class="contenedor">
-      <button data-vista="capturar" class="activo"><span class="emoji">➕</span>Capturar</button>
+      <button data-vista="capturar" class="activo" aria-current="page"><span class="emoji">➕</span>Capturar</button>
       <button data-vista="movimientos"><span class="emoji">📋</span>Movs</button>
       <button data-vista="tablero"><span class="emoji">📊</span>Tablero</button>
       <a href="../peso/index.html" class="nav-inferior-link" data-confirmar-salida><span class="emoji">⚖️</span>Peso</a>
@@ -243,7 +245,7 @@
 
 <div id="modal-root"></div>
 
-<div id="popup-confirmar" class="popup-fondo oculto">
+<div id="popup-confirmar" class="popup-fondo oculto" role="dialog" aria-modal="true" aria-labelledby="popup-mensaje">
   <div class="popup-caja">
     <p id="popup-mensaje"></p>
     <div class="popup-botones">
@@ -253,7 +255,7 @@
   </div>
 </div>
 
-<div id="popup-faceid" class="popup-fondo oculto">
+<div id="popup-faceid" class="popup-fondo oculto" role="dialog" aria-modal="true" aria-labelledby="popup-faceid-mensaje">
   <div class="popup-caja">
     <div style="font-size:2.2rem; margin-bottom:6px;">🔒</div>
     <p id="popup-faceid-mensaje"></p>

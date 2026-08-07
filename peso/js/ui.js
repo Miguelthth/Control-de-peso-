@@ -7,7 +7,7 @@ import * as cola from './cola.js';
 import * as api from '../../shared/api.js';
 import * as graficas from './graficas.js';
 import * as actualizacion from './actualizacion.js';
-import * as uiHelpers from './ui_helpers.js';
+import * as ui_helpers from './ui_helpers.js';
 import { hoyISO, validarPeso, kgALb, lbAKg, aKg, normalizarEntradaPeso } from './modelo.js';
 import {
   pesosDeUsuario, ultimoPeso, racha, promedioMovil, avanceMeta, promedioSemanal,
@@ -193,7 +193,7 @@ async function guardarCaptura() {
     const unidad = miUnidad();
     const pesoKg = validarPeso(aKg(E.captura.pesoStr, unidad));
     const fecha = E.captura.fecha;
-    const operaciones = uiHelpers.planificarEdicion(E.captura.editandoFechaOriginal, fecha, pesoKg);
+    const operaciones = ui_helpers.planificarEdicion(E.captura.editandoFechaOriginal, fecha, pesoKg);
     for (const operacion of operaciones) {
       if (operacion.tipo === 'borrar') cola.encolarBorrado(getUsuario(), operacion.fecha);
       else cola.encolarPeso(getUsuario(), operacion.fecha, operacion.pesoKg);
@@ -324,7 +324,7 @@ function conectarAccionesHistorial(cont) {
 function editarRegistroPeso(fecha) {
   const registro = E.datos.pesos.find((p) => p.usuario === getUsuario() && p.fecha === fecha);
   if (!registro) return;
-  E.captura = { ...uiHelpers.prepararEdicion(registro, miUnidad()), fechaOriginal: fecha, editandoFechaOriginal: fecha };
+  E.captura = { ...ui_helpers.prepararEdicion(registro, miUnidad()), fechaOriginal: fecha, editandoFechaOriginal: fecha };
   cambiarVista('capturar');
   const input = document.getElementById('captura-peso-input');
   input.value = E.captura.pesoStr;
@@ -341,7 +341,7 @@ async function borrarRegistroPeso(fecha) {
   cola.encolarBorrado(getUsuario(), fecha);
   E.datos.pesos = E.datos.pesos.filter((p) => !(p.usuario === getUsuario() && p.fecha === fecha));
   const pendientes = cola.leerCola(getUsuario()).length;
-  toast(uiHelpers.mensajeBorrado({ sinConexion: !navigator.onLine || E.sinConexion, pendientes }));
+  toast(ui_helpers.mensajeBorrado({ sinConexion: !navigator.onLine || E.sinConexion, pendientes }));
   actualizarBadgeConexion();
   render();
   cola.sincronizar(getUsuario()).then(() => { actualizarBadgeConexion(); });

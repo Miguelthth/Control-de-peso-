@@ -366,6 +366,20 @@ function leerDatos() {
   return _post({ accion: 'leerDatos' });
 }
 
+// Ejercicio se guarda en la Hoja central; el caché del teléfono es solo una
+// copia de trabajo y se puede reconstruir al entrar de nuevo.
+function leerEjercicio() {
+  return _post({ accion: 'leerEjercicio' });
+}
+
+function guardarEjercicio(datos) {
+  return guardarOperacionEjercicio({ opId: crypto.randomUUID(), tipo: 'reemplazar_documento', entidadId: 'documento', modificadoEn: datos.modificadoEn || new Date().toISOString() }, datos);
+}
+
+function guardarOperacionEjercicio(operacion, datos) {
+  return _post({ accion: 'guardarEjercicio', operacion, datos });
+}
+
 // Consulta barata (no toca Hojas) para saber si algo cambió en Peso antes
 // de pedir 'datos' completo -- se puede llamar seguido sin gastar cuota.
 function leerVersion() {
@@ -428,13 +442,16 @@ function leerGastos(usuario) {
   return _post({ accion: 'leerGastos', usuario });
 }
 
-  return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
+  return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerEjercicio, guardarEjercicio, guardarOperacionEjercicio, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
 const configurarManejadorAuth = api.configurarManejadorAuth;
 const ApiError = api.ApiError;
 const solicitarJson = api.solicitarJson;
 const cerrarSesionServidor = api.cerrarSesionServidor;
 const leerDatos = api.leerDatos;
+const leerEjercicio = api.leerEjercicio;
+const guardarEjercicio = api.guardarEjercicio;
+const guardarOperacionEjercicio = api.guardarOperacionEjercicio;
 const leerVersion = api.leerVersion;
 const guardarFechasReto = api.guardarFechasReto;
 const validarUsuario = api.validarUsuario;
@@ -1199,6 +1216,574 @@ const prepararEdicion = ui_helpers.prepararEdicion;
 const mensajeBorrado = ui_helpers.mensajeBorrado;
 const planificarEdicion = ui_helpers.planificarEdicion;
 
+// ── peso/js/ejercicio_modelo.js ──────────────────────────────────────────
+const ejercicio_modelo = (function () {
+// Reglas puras del módulo Ejercicio: sin DOM, almacenamiento ni red.
+
+const MODALIDADES_CARGA = ['discos', 'niveles', 'PC'];
+const CATEGORIAS_INICIALES = ['Pierna', 'Pecho', 'Bíceps', 'Tríceps', 'Abdomen', 'Espalda'];
+
+const ahoraISO = () => new Date().toISOString();
+const idNuevo = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+function crearDocumentoEjercicio(fecha = ahoraISO()) {
+  return {
+    version: 2,
+    categorias: CATEGORIAS_INICIALES.map((nombre, i) => ({ id: `categoria-${i + 1}`, nombre, activo: true, creadoEn: fecha, modificadoEn: fecha })),
+    ejercicios: [], rutinas: [], sesiones: [], hiits: [], modificadoEn: fecha,
+  };
+}
+
+function calcularDuracionHiit({ vueltas, actividadSeg, descansoSeg }) {
+  const n = Number(vueltas), actividad = Number(actividadSeg), descanso = Number(descansoSeg);
+  if (!Number.isInteger(n) || n < 1 || !Number.isFinite(actividad) || actividad < 1 || !Number.isFinite(descanso) || descanso < 0) throw new Error('Configuración HIIT inválida');
+  return n * actividad + Math.max(0, n - 1) * descanso;
+}
+
+function normalizarEjercicio(ejercicio, fecha = ahoraISO()) {
+  const nombre = String(ejercicio.nombre || '').trim();
+  const categoriaId = String(ejercicio.categoriaId || '').trim();
+  if (!nombre) throw new Error('Nombre de ejercicio requerido');
+  if (!categoriaId) throw new Error('El ejercicio requiere una categoría');
+  if (!MODALIDADES_CARGA.includes(ejercicio.modalidad)) throw new Error('Modalidad inválida');
+  return { ...ejercicio, id: ejercicio.id || idNuevo(), nombre, categoriaId, modalidad: ejercicio.modalidad, activo: ejercicio.activo !== false, creadoEn: ejercicio.creadoEn || fecha, modificadoEn: fecha };
+}
+
+function normalizarDiscos(carga = {}) {
+  const discos = { grande: Number(carga.grande || 0), chico: Number(carga.chico || 0) };
+  if (Object.values(discos).some((n) => !Number.isInteger(n) || n < 0)) throw new Error('Las cantidades de discos deben ser enteros no negativos');
+  return discos;
+}
+
+function normalizarSerie(serie, fecha = ahoraISO()) {
+  const repeticiones = Number(serie.repeticiones);
+  if (!serie.ejercicioId || !Number.isInteger(repeticiones) || repeticiones < 1) throw new Error('Serie inválida');
+  if (!MODALIDADES_CARGA.includes(serie.modalidad)) throw new Error('Modalidad inválida');
+  let carga = null;
+  if (serie.modalidad === 'discos') carga = normalizarDiscos(serie.carga);
+  else if (serie.modalidad !== 'PC') {
+    carga = Number(serie.carga);
+    if (!Number.isFinite(carga) || carga < 0) throw new Error('Carga inválida');
+  }
+  return { ...serie, id: serie.id || idNuevo(), repeticiones, carga, descansoPlaneadoSeg: Math.max(0, Number(serie.descansoPlaneadoSeg || 0)), descansoRealSeg: Math.max(0, Number(serie.descansoRealSeg || 0)), extraSeg: Math.max(0, Number(serie.extraSeg || 0)), creadoEn: serie.creadoEn || fecha, modificadoEn: fecha };
+}
+
+function crearHiit(config, inicioMs = Date.now()) {
+  const planeadoSeg = calcularDuracionHiit(config);
+  return { id: config.id || idNuevo(), nombre: String(config.nombre || '').trim(), vueltas: Number(config.vueltas), actividadSeg: Number(config.actividadSeg), descansoSeg: Number(config.descansoSeg), cuentaRegresivaSeg: Math.max(0, Number(config.cuentaRegresivaSeg || 0)), planeadoSeg, estado: Number(config.cuentaRegresivaSeg || 0) > 0 ? 'cuenta_regresiva' : 'actividad', fase: Number(config.cuentaRegresivaSeg || 0) > 0 ? 'cuenta_regresiva' : 'actividad', vuelta: 1, inicioMs, faseInicioMs: inicioMs, activoAcumuladoMs: 0, pausaInicioMs: null };
+}
+
+function pausarHiit(hiit, ahoraMs = Date.now()) {
+  if (hiit.estado === 'pausado') return hiit;
+  return { ...hiit, estadoAntesPausa: hiit.estado, estado: 'pausado', activoAcumuladoMs: (hiit.activoAcumuladoMs || 0) + Math.max(0, ahoraMs - hiit.faseInicioMs), pausaInicioMs: ahoraMs };
+}
+
+function reanudarHiit(hiit, ahoraMs = Date.now()) {
+  if (hiit.estado !== 'pausado') return hiit;
+  return { ...hiit, estado: hiit.estadoAntesPausa || 'actividad', faseInicioMs: ahoraMs, pausaInicioMs: null };
+}
+
+function finalizarHiit(datos) {
+  const planeado = Number(datos.planeadoSeg);
+  if (!Number.isFinite(planeado) || planeado < 1) throw new Error('Duración planeada inválida');
+  const finMs = Number(datos.finMs);
+  const activoMs = Number.isFinite(datos.activoAcumuladoMs)
+    ? datos.activoAcumuladoMs + (datos.estado === 'pausado' ? 0 : Math.max(0, finMs - Number(datos.faseInicioMs || datos.inicioMs)))
+    : Math.max(0, finMs - Number(datos.inicioMs));
+  const duracionRealSeg = Math.max(0, Math.round(activoMs / 1000));
+  return { duracionRealSeg, porcentaje: datos.detenido ? Math.min(100, Math.round(duracionRealSeg / planeado * 100)) : 100, estado: datos.detenido ? 'detenida' : 'completada' };
+}
+
+function sumarExtensionDescanso(descansoSeg, toques = 1) {
+  return Math.max(0, Number(descansoSeg) || 0) + Math.max(0, Number(toques) || 0) * 5;
+}
+
+function ajustarCantidad(valor, direccion, { minimo = 0, maximo = Number.POSITIVE_INFINITY, paso = 1 } = {}) {
+  const actual = Number(valor) || 0;
+  const siguiente = actual + (direccion < 0 ? -paso : paso);
+  return Math.min(maximo, Math.max(minimo, siguiente));
+}
+
+function sonidosEnSegundo({ tipo, restanteSeg, esInicio = false }) {
+  if (tipo === 'descanso' && esInicio) return ['rapido', 'rapido', 'rapido'];
+  if (tipo === 'cuenta' && restanteSeg >= 1 && restanteSeg <= 3) return ['cuenta'];
+  if (tipo === 'descanso' && restanteSeg >= 1 && restanteSeg <= 3) return ['cuenta'];
+  if (tipo === 'actividad' && esInicio) return ['largo'];
+  if (tipo === 'final') return ['final'];
+  return [];
+}
+
+function normalizarRutina(rutina, fecha = ahoraISO()) {
+  const nombre = String(rutina.nombre || '').trim();
+  if (!nombre) throw new Error('Nombre de rutina requerido');
+  if (!Array.isArray(rutina.entradas) || !rutina.entradas.length) throw new Error('Agrega al menos un ejercicio');
+  const entradas = rutina.entradas.map((e, orden) => {
+    const series = Number(e.series), repeticiones = Number(e.repeticiones), descansoSeg = Number(e.descansoSeg);
+    if (!e.ejercicioId || !Number.isInteger(series) || series < 1 || !Number.isInteger(repeticiones) || repeticiones < 1 || !Number.isFinite(descansoSeg) || descansoSeg < 0) throw new Error('Entrada de rutina inválida');
+    return { ejercicioId: e.ejercicioId, orden, series, repeticiones, descansoSeg };
+  });
+  return { ...rutina, id: rutina.id || idNuevo(), nombre, entradas, ejercicioIds: entradas.map((e) => e.ejercicioId), activo: rutina.activo !== false, creadoEn: rutina.creadoEn || fecha, modificadoEn: fecha };
+}
+
+function siguientePasoRutina(paso, entradas) {
+  const actual = entradas[paso.ejercicioIndice];
+  if (!actual) return { ...paso, terminada: true };
+  if (paso.serieNumero < actual.series) return { ejercicioIndice: paso.ejercicioIndice, serieNumero: paso.serieNumero + 1, terminada: false };
+  if (paso.ejercicioIndice + 1 < entradas.length) return { ejercicioIndice: paso.ejercicioIndice + 1, serieNumero: 1, terminada: false };
+  return { ejercicioIndice: paso.ejercicioIndice, serieNumero: paso.serieNumero, terminada: true };
+}
+
+  return { MODALIDADES_CARGA, CATEGORIAS_INICIALES, crearDocumentoEjercicio, calcularDuracionHiit, normalizarEjercicio, normalizarSerie, crearHiit, pausarHiit, reanudarHiit, finalizarHiit, sumarExtensionDescanso, ajustarCantidad, sonidosEnSegundo, normalizarRutina, siguientePasoRutina };
+})();
+const MODALIDADES_CARGA = ejercicio_modelo.MODALIDADES_CARGA;
+const CATEGORIAS_INICIALES = ejercicio_modelo.CATEGORIAS_INICIALES;
+const crearDocumentoEjercicio = ejercicio_modelo.crearDocumentoEjercicio;
+const calcularDuracionHiit = ejercicio_modelo.calcularDuracionHiit;
+const normalizarEjercicio = ejercicio_modelo.normalizarEjercicio;
+const normalizarSerie = ejercicio_modelo.normalizarSerie;
+const crearHiit = ejercicio_modelo.crearHiit;
+const pausarHiit = ejercicio_modelo.pausarHiit;
+const reanudarHiit = ejercicio_modelo.reanudarHiit;
+const finalizarHiit = ejercicio_modelo.finalizarHiit;
+const sumarExtensionDescanso = ejercicio_modelo.sumarExtensionDescanso;
+const ajustarCantidad = ejercicio_modelo.ajustarCantidad;
+const sonidosEnSegundo = ejercicio_modelo.sonidosEnSegundo;
+const normalizarRutina = ejercicio_modelo.normalizarRutina;
+const siguientePasoRutina = ejercicio_modelo.siguientePasoRutina;
+
+// ── peso/js/ejercicio_almacen.js ──────────────────────────────────────────
+const ejercicio_almacen = (function () {
+const claveDatos = (u) => `cp_ejercicio_datos:${u}`;
+const claveCola = (u) => `cp_ejercicio_cola:${u}`;
+const obtenerStorage = (s) => s || localStorage;
+
+function leerJSON(storage, clave, defecto) {
+  try { return JSON.parse(storage.getItem(clave)) || defecto; } catch { return defecto; }
+}
+
+function leerLocal(usuario, storage) {
+  return leerJSON(obtenerStorage(storage), claveDatos(usuario), crearDocumentoEjercicio());
+}
+
+function guardarLocal(usuario, datos, storage) {
+  obtenerStorage(storage).setItem(claveDatos(usuario), JSON.stringify(datos));
+  return datos;
+}
+
+function leerPendientes(usuario, storage) {
+  return leerJSON(obtenerStorage(storage), claveCola(usuario), []);
+}
+
+function guardarPendientes(usuario, cola, storage) {
+  obtenerStorage(storage).setItem(claveCola(usuario), JSON.stringify(cola));
+}
+
+function mutarLocal(usuario, mutador, { storage, now = () => new Date().toISOString(), uuid = () => crypto.randomUUID(), tipo = 'reemplazar_documento', entidadId = 'documento' } = {}) {
+  const s = obtenerStorage(storage), datos = structuredClone(leerLocal(usuario, s));
+  mutador(datos);
+  const modificadoEn = now();
+  datos.modificadoEn = modificadoEn;
+  guardarLocal(usuario, datos, s);
+  const operacion = { opId: uuid(), tipo, entidadId, modificadoEn };
+  guardarPendientes(usuario, [...leerPendientes(usuario, s), operacion], s);
+  return { datos, operacion };
+}
+
+function confirmarOperacion(usuario, opId, storage) {
+  const s = obtenerStorage(storage);
+  guardarPendientes(usuario, leerPendientes(usuario, s).filter((o) => o.opId !== opId), s);
+}
+
+function mezclarLista(a = [], b = []) {
+  const mapa = new Map();
+  for (const item of [...b, ...a]) {
+    const anterior = mapa.get(item.id);
+    if (!anterior || String(item.modificadoEn || '') >= String(anterior.modificadoEn || '')) mapa.set(item.id, item);
+  }
+  return [...mapa.values()];
+}
+
+function mezclarDocumento(local, remoto) {
+  const base = crearDocumentoEjercicio();
+  const resultado = { ...base, ...remoto, ...local };
+  for (const campo of ['categorias', 'ejercicios', 'rutinas', 'sesiones', 'hiits']) resultado[campo] = mezclarLista(local?.[campo], remoto?.[campo]);
+  resultado.version = 2;
+  resultado.modificadoEn = [local?.modificadoEn, remoto?.modificadoEn].filter(Boolean).sort().at(-1) || base.modificadoEn;
+  return resultado;
+}
+
+async function sincronizarPendientes(usuario, api, { storage, alCambiar } = {}) {
+  const s = obtenerStorage(storage);
+  for (const operacion of leerPendientes(usuario, s)) {
+    const respuesta = await api.guardarOperacionEjercicio(operacion, leerLocal(usuario, s));
+    if (!respuesta?.ok) throw new Error(respuesta?.error || 'No se pudo sincronizar Ejercicio');
+    confirmarOperacion(usuario, operacion.opId, s);
+    alCambiar?.();
+  }
+  return leerPendientes(usuario, s).length;
+}
+
+  return { leerLocal, guardarLocal, leerPendientes, mutarLocal, confirmarOperacion, mezclarDocumento, sincronizarPendientes };
+})();
+const leerLocal = ejercicio_almacen.leerLocal;
+const guardarLocal = ejercicio_almacen.guardarLocal;
+const leerPendientes = ejercicio_almacen.leerPendientes;
+const mutarLocal = ejercicio_almacen.mutarLocal;
+const confirmarOperacion = ejercicio_almacen.confirmarOperacion;
+const mezclarDocumento = ejercicio_almacen.mezclarDocumento;
+const sincronizarPendientes = ejercicio_almacen.sincronizarPendientes;
+
+// ── peso/js/ejercicio_calculos.js ──────────────────────────────────────────
+const ejercicio_calculos = (function () {
+function filtrarPeriodo(registros, periodo = 'total', ahora = new Date()) {
+  if (periodo === 'total') return [...registros];
+  const limite = new Date(ahora);
+  if (periodo === 'semana') limite.setDate(limite.getDate() - 7);
+  else if (periodo === 'mes') limite.setMonth(limite.getMonth() - 1);
+  return registros.filter((r) => new Date(r.fecha || r.inicio || r.creadoEn) >= limite);
+}
+
+function seriesContables(sesiones = []) {
+  return sesiones.filter((s) => s.estado === 'completada').flatMap((s) => s.series || []);
+}
+
+function resumenModalidades(series = []) {
+  const r = { discos: { grande: 0, chico: 0 }, niveles: { mejor: 0, repeticiones: 0 }, PC: { repeticiones: 0, series: 0 } };
+  for (const s of series) {
+    const reps = Number(s.repeticiones || 0);
+    if (s.modalidad === 'discos') for (const tam of ['grande', 'chico']) r.discos[tam] += Number(s.carga?.[tam] || 0) * reps;
+    else if (s.modalidad === 'niveles') { r.niveles.mejor = Math.max(r.niveles.mejor, Number(s.carga || 0)); r.niveles.repeticiones += reps; }
+    else if (s.modalidad === 'PC') { r.PC.repeticiones += reps; r.PC.series += 1; }
+  }
+  return r;
+}
+
+function descansoPromedio(series = []) {
+  const xs = series.map((s) => Number(s.descansoRealSeg)).filter(Number.isFinite);
+  return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
+}
+
+function resumenHiit(hiits = []) {
+  if (!hiits.length) return { minutos: 0, porcentajePromedio: 0, completadas: 0, abandonos: 0 };
+  return { minutos: Math.round(hiits.reduce((n, h) => n + Number(h.duracionRealSeg || 0), 0) / 60), porcentajePromedio: Math.round(hiits.reduce((n, h) => n + Number(h.porcentaje || 0), 0) / hiits.length), completadas: hiits.filter((h) => h.estado === 'completada').length, abandonos: hiits.filter((h) => h.estado === 'detenida').length };
+}
+
+function serieProgreso(sesiones = [], ejercicioId) {
+  return sesiones.filter((s) => s.estado === 'completada').flatMap((s) => (s.series || []).filter((x) => x.ejercicioId === ejercicioId).map((x) => ({ fecha: s.fecha || s.fin, valor: x.modalidad === 'niveles' ? Number(x.carga || 0) : Number(x.repeticiones || 0), unidad: x.modalidad })));
+}
+
+  return { filtrarPeriodo, seriesContables, resumenModalidades, descansoPromedio, resumenHiit, serieProgreso };
+})();
+const filtrarPeriodo = ejercicio_calculos.filtrarPeriodo;
+const seriesContables = ejercicio_calculos.seriesContables;
+const resumenModalidades = ejercicio_calculos.resumenModalidades;
+const descansoPromedio = ejercicio_calculos.descansoPromedio;
+const resumenHiit = ejercicio_calculos.resumenHiit;
+const serieProgreso = ejercicio_calculos.serieProgreso;
+
+// ── peso/js/ejercicio_graficas.js ──────────────────────────────────────────
+const ejercicio_graficas = (function () {
+function svgProgreso(puntos = [], { unidad = '', titulo = 'Progreso' } = {}) {
+  if (!puntos.length) return '<p class="texto-suave">Aún no hay datos para esta gráfica.</p>';
+  const width = Math.max(320, puntos.length * 56), height = 180, pad = 28;
+  const valores = puntos.map((p) => Number(p.valor || 0)), max = Math.max(...valores, 1);
+  const coords = puntos.map((p, i) => `${pad + i * ((width - pad * 2) / Math.max(1, puntos.length - 1))},${height - pad - (Number(p.valor || 0) / max) * (height - pad * 2)}`);
+  return `<svg class="grafica-ejercicio" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHTML(titulo)}"><polyline fill="none" stroke="currentColor" stroke-width="4" points="${coords.join(' ')}"/>${puntos.map((p, i) => { const [x, y] = coords[i].split(','); return `<circle cx="${x}" cy="${y}" r="5"><title>${escapeHTML(`${p.fecha}: ${p.valor} ${unidad}`)}</title></circle>`; }).join('')}</svg>`;
+}
+
+  return { svgProgreso };
+})();
+const svgProgreso = ejercicio_graficas.svgProgreso;
+
+// ── peso/js/ejercicio_ui.js ──────────────────────────────────────────
+const ejercicio_ui = (function () {
+const S = { datos: null, tab: 'entrenar', toast: () => {}, audio: null, intervalo: null, wake: null, hiit: null, entrenamiento: null, descanso: null, rutinaSeleccionada: '', periodo: 'semana', sonidosEmitidos: new Set(), redLista: false };
+const uid = () => crypto.randomUUID();
+const iso = () => new Date().toISOString();
+
+function guardar(mutador, tipo = 'editar', entidadId = 'documento') {
+  const r = mutarLocal(getUsuario(), mutador, { tipo, entidadId });
+  S.datos = r.datos;
+  sincronizar().catch(() => {});
+  return r.datos;
+}
+
+async function sincronizar() {
+  await sincronizarPendientes(getUsuario(), api, { alCambiar: actualizarSync });
+  actualizarSync();
+}
+
+async function refrescarRemoto() {
+  await sincronizar().catch(() => {});
+  const r = await api.leerEjercicio();
+  if (r.ok) { S.datos = mezclarDocumento(S.datos, r.datos); guardarLocal(getUsuario(), S.datos); if (document.getElementById('vista-ejercicio')?.classList.contains('activa')) renderModuloEjercicio(); }
+}
+
+function actualizarSync() {
+  const el = document.getElementById('ejercicio-sync');
+  if (el) el.textContent = leerPendientes(getUsuario()).length ? `${leerPendientes(getUsuario()).length} pendiente(s)` : 'Drive al día';
+}
+
+async function iniciarModuloEjercicio(toast) {
+  S.toast = toast || S.toast;
+  S.datos = leerLocal(getUsuario());
+  if (!S.datos?.version) S.datos = crearDocumentoEjercicio();
+  try { const r = await api.leerEjercicio(); if (r.ok) { S.datos = mezclarDocumento(S.datos, r.datos); guardarLocal(getUsuario(), S.datos); } } catch {}
+  await sincronizar().catch(() => {});
+  if (!S.redLista) { S.redLista = true; addEventListener('online', () => refrescarRemoto().catch(() => {})); document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescarRemoto().catch(() => {}); }); }
+}
+
+function salirModuloEjercicio() { liberarWake(); }
+
+function renderModuloEjercicio() {
+  if (!S.datos) S.datos = leerLocal(getUsuario());
+  const raiz = document.getElementById('ejercicio-contenido');
+  raiz.innerHTML = `<header class="ejercicio-hero"><div><span class="ejercicio-kicker">ENTRENAMIENTO</span><h2>Muévete. Registra. Mejora.</h2></div><small id="ejercicio-sync"></small></header><nav id="ejercicio-tabs" class="ejercicio-tabs" role="tablist"><button role="tab" data-etab="entrenar">Entrenar</button><button role="tab" data-etab="hiit">HIIT</button><button role="tab" data-etab="progreso">Progreso</button></nav><main id="ejercicio-panel"></main><dialog id="ejercicio-modal" class="ejercicio-modal"><div class="modal-ejercicio-contenido"><header><div><small id="modal-kicker">CONFIGURAR</small><h2 id="modal-titulo"></h2></div><button type="button" class="modal-cerrar" aria-label="Cerrar">×</button></header><div id="modal-cuerpo"></div></div></dialog>`;
+  raiz.querySelectorAll('[data-etab]').forEach((b) => { b.setAttribute('aria-selected', String(b.dataset.etab === S.tab)); b.onclick = () => { S.tab = b.dataset.etab; renderModuloEjercicio(); }; });
+  actualizarSync();
+  raiz.querySelector('.modal-cerrar').onclick = cerrarModal;
+  if (S.tab === 'entrenar') renderEntrenar(); else if (S.tab === 'hiit') renderHiit(); else renderProgreso();
+}
+
+function abrirModal(titulo, html, configurar, kicker = 'CONFIGURAR') {
+  const dialog = document.getElementById('ejercicio-modal');
+  document.getElementById('modal-titulo').textContent = titulo;
+  document.getElementById('modal-kicker').textContent = kicker;
+  document.getElementById('modal-cuerpo').innerHTML = html;
+  configurar?.(document.getElementById('modal-cuerpo'), dialog);
+  if (!dialog.open) dialog.showModal();
+}
+
+function cerrarModal() { document.getElementById('ejercicio-modal')?.close(); }
+function opciones(items, seleccionado = '') { return (items || []).filter((x) => x.activo !== false).map((x) => `<option value="${escapeAtributo(x.id)}" ${x.id === seleccionado ? 'selected' : ''}>${escapeHTML(x.nombre)}</option>`).join(''); }
+
+function renderEntrenar() {
+  const p = document.getElementById('ejercicio-panel');
+  if (S.entrenamiento) return renderEntrenamientoActivo();
+  const rutinas = (S.datos.rutinas || []).filter((r) => r.activo !== false);
+  const seleccionada = rutinas.find((r) => r.id === S.rutinaSeleccionada) || rutinas[0];
+  if (seleccionada) S.rutinaSeleccionada = seleccionada.id;
+  p.innerHTML = `<section class="entrenar-portada"><div class="entrenar-icono">⚡</div><h1>${seleccionada ? escapeHTML(seleccionada.nombre) : 'Tu entrenamiento empieza aquí'}</h1><p>${seleccionada ? `${(seleccionada.entradas || []).length} ejercicios · ${seleccionada.entradas?.reduce((n, e) => n + e.series, 0) || 0} series` : 'Crea ejercicios y arma tu primera rutina.'}</p>${rutinas.length ? `<label class="selector-rutina">Rutina<select id="rutina-seleccion">${opciones(rutinas, S.rutinaSeleccionada)}</select></label><div class="resumen-rutina">${(seleccionada.entradas || []).map((e, i) => { const ej = S.datos.ejercicios.find((x) => x.id === e.ejercicioId); return `<div><b>${i + 1}</b><span><strong>${escapeHTML(ej?.nombre || 'Ejercicio')}</strong><small>${e.series} × ${e.repeticiones} · descanso ${e.descansoSeg}s</small></span></div>`; }).join('')}</div><button id="comenzar-entrenamiento" class="btn-entrenar">Comenzar entrenamiento</button>` : '<button id="crear-primer-ejercicio" class="btn-entrenar">Crear primer ejercicio</button>'}<div class="acciones-gestion"><button id="gestionar-ejercicios">Ejercicios</button><button id="gestionar-rutinas">Rutinas</button></div></section>`;
+  p.querySelector('#rutina-seleccion')?.addEventListener('change', (e) => { S.rutinaSeleccionada = e.target.value; renderEntrenar(); });
+  p.querySelector('#comenzar-entrenamiento')?.addEventListener('click', comenzarEntrenamiento);
+  p.querySelector('#crear-primer-ejercicio')?.addEventListener('click', () => abrirEjercicios());
+  p.querySelector('#gestionar-ejercicios').onclick = () => abrirEjercicios();
+  p.querySelector('#gestionar-rutinas').onclick = () => abrirRutinas();
+}
+
+function abrirEjercicios() {
+  const ejercicios = (S.datos.ejercicios || []).filter((e) => e.activo !== false);
+  abrirModal('Ejercicios', `<div class="modal-toolbar"><button type="button" id="nuevo-ejercicio" class="btn-primario">+ Nuevo ejercicio</button><button type="button" id="categorias">Categorías</button></div><div class="lista-modal">${ejercicios.map((e) => `<button type="button" data-ejercicio="${e.id}"><span><b>${escapeHTML(e.nombre)}</b><small>${escapeHTML(S.datos.categorias.find((c) => c.id === e.categoriaId)?.nombre || '')} · ${escapeHTML(e.modalidad)}</small></span><i>Editar</i></button>`).join('') || '<p class="estado-vacio">Todavía no hay ejercicios.</p>'}</div>`, (c) => {
+    c.querySelector('#nuevo-ejercicio').onclick = () => abrirFormularioEjercicio();
+    c.querySelector('#categorias').onclick = abrirCategorias;
+    c.querySelectorAll('[data-ejercicio]').forEach((b) => b.onclick = () => abrirFormularioEjercicio(b.dataset.ejercicio));
+  }, 'CATÁLOGO');
+}
+
+function abrirCategorias() {
+  abrirModal('Categorías', `<form id="form-categoria" class="form-modal"><input type="hidden" id="categoria-id"><label>Nombre<input id="categoria-nombre" required maxlength="40"></label><button class="btn-primario">Guardar categoría</button></form><div class="chips-editables">${S.datos.categorias.filter((c) => c.activo !== false).map((c) => `<button type="button" data-categoria="${c.id}">${escapeHTML(c.nombre)} · Editar</button>`).join('')}</div>`, (c) => {
+    c.querySelectorAll('[data-categoria]').forEach((b) => b.onclick = () => { const cat = S.datos.categorias.find((x) => x.id === b.dataset.categoria); c.querySelector('#categoria-id').value = cat.id; c.querySelector('#categoria-nombre').value = cat.nombre; c.querySelector('#categoria-nombre').focus(); });
+    c.querySelector('#form-categoria').onsubmit = (e) => { e.preventDefault(); const id = c.querySelector('#categoria-id').value, nombre = c.querySelector('#categoria-nombre').value.trim(); if (!nombre) return; guardar((d) => { const x = d.categorias.find((y) => y.id === id); if (x) Object.assign(x, { nombre, modificadoEn: iso() }); else d.categorias.push({ id: uid(), nombre, activo: true, creadoEn: iso(), modificadoEn: iso() }); }, 'guardar_categoria', id || 'nueva'); cerrarModal(); renderEntrenar(); };
+  });
+}
+
+function abrirFormularioEjercicio(id = '') {
+  const actual = S.datos.ejercicios.find((e) => e.id === id);
+  abrirModal(actual ? 'Editar ejercicio' : 'Nuevo ejercicio', `<form id="form-ejercicio" class="form-modal"><label>Nombre<input id="ejercicio-nombre" required maxlength="60" value="${escapeAtributo(actual?.nombre || '')}"></label><label>Categoría<select id="ejercicio-categoria" required>${opciones(S.datos.categorias, actual?.categoriaId)}</select></label><fieldset><legend>Modalidad</legend><label class="opcion-modalidad"><input type="radio" name="modalidad" value="discos" ${!actual || actual.modalidad === 'discos' ? 'checked' : ''}><span>Discos<small>Grande y chico por lado</small></span></label><label class="opcion-modalidad"><input type="radio" name="modalidad" value="niveles" ${actual?.modalidad === 'niveles' ? 'checked' : ''}><span>Niveles<small>Máquina con selector</small></span></label><label class="opcion-modalidad"><input type="radio" name="modalidad" value="PC" ${actual?.modalidad === 'PC' ? 'checked' : ''}><span>PC<small>Peso corporal</small></span></label></fieldset><button class="btn-primario">Guardar ejercicio</button></form>`, (c) => {
+    c.querySelector('#form-ejercicio').onsubmit = (e) => { e.preventDefault(); try { const ejercicio = normalizarEjercicio({ ...actual, id: actual?.id || uid(), nombre: c.querySelector('#ejercicio-nombre').value, categoriaId: c.querySelector('#ejercicio-categoria').value, modalidad: c.querySelector('[name="modalidad"]:checked').value }); guardar((d) => { const i = d.ejercicios.findIndex((x) => x.id === ejercicio.id); if (i >= 0) d.ejercicios[i] = ejercicio; else d.ejercicios.push(ejercicio); }, 'guardar_ejercicio', ejercicio.id); cerrarModal(); renderEntrenar(); } catch (err) { S.toast(err.message, true); } };
+  });
+}
+
+function abrirRutinas() {
+  const rutinas = S.datos.rutinas.filter((r) => r.activo !== false);
+  abrirModal('Rutinas', `<button type="button" id="nueva-rutina" class="btn-primario ancho-completo">+ Nueva rutina</button><div class="lista-modal">${rutinas.map((r) => `<button type="button" data-rutina="${r.id}"><span><b>${escapeHTML(r.nombre)}</b><small>${(r.entradas || []).length} ejercicios</small></span><i>Editar</i></button>`).join('') || '<p class="estado-vacio">Crea una rutina y agrega ejercicios.</p>'}</div>`, (c) => { c.querySelector('#nueva-rutina').onclick = () => abrirConstructorRutina(); c.querySelectorAll('[data-rutina]').forEach((b) => b.onclick = () => abrirConstructorRutina(b.dataset.rutina)); }, 'PLANIFICACIÓN');
+}
+
+function abrirConstructorRutina(id = '') {
+  const actual = S.datos.rutinas.find((r) => r.id === id);
+  const borrador = { id: actual?.id || '', nombre: actual?.nombre || '', entradas: structuredClone(actual?.entradas || []) };
+  const pintar = () => abrirModal(actual ? 'Editar rutina' : 'Nueva rutina', `<form id="form-rutina" class="form-modal"><label>Nombre de la rutina<input id="rutina-nombre" required value="${escapeAtributo(borrador.nombre)}" placeholder="Ej. Pecho y tríceps"></label><div class="constructor-rutina"><div class="constructor-titulo"><b>Ejercicios</b><button type="button" id="agregar-ejercicio">+ Agregar ejercicio</button></div>${borrador.entradas.map((e, i) => { const ej = S.datos.ejercicios.find((x) => x.id === e.ejercicioId); return `<article data-entrada="${i}"><header><span><b>${i + 1}. ${escapeHTML(ej?.nombre || 'Ejercicio')}</b><small>${escapeHTML(ej?.modalidad || '')}</small></span><div><button type="button" data-subir="${i}" aria-label="Subir">↑ Subir</button><button type="button" data-bajar="${i}" aria-label="Bajar">↓ Bajar</button><button type="button" data-quitar="${i}">Quitar</button></div></header><div class="grid-form"><label>Series<input data-campo="series" type="number" min="1" value="${e.series}"></label><label>Repeticiones<input data-campo="repeticiones" type="number" min="1" value="${e.repeticiones}"></label><label>Descanso (s)<input data-campo="descansoSeg" type="number" min="0" value="${e.descansoSeg}"></label></div></article>`; }).join('') || '<p class="estado-vacio">Pulsa “Agregar ejercicio” para construir la rutina.</p>'}</div><button class="btn-primario ancho-completo">Guardar rutina</button></form>`, (c) => {
+      c.querySelector('#rutina-nombre').oninput = (e) => { borrador.nombre = e.target.value; };
+      c.querySelectorAll('[data-entrada]').forEach((art) => art.querySelectorAll('[data-campo]').forEach((inp) => inp.oninput = () => { borrador.entradas[Number(art.dataset.entrada)][inp.dataset.campo] = Number(inp.value); }));
+      c.querySelector('#agregar-ejercicio').onclick = () => abrirSelectorEjercicio(borrador, pintar);
+      c.querySelectorAll('[data-quitar]').forEach((b) => b.onclick = () => { borrador.entradas.splice(Number(b.dataset.quitar), 1); pintar(); });
+      c.querySelectorAll('[data-subir]').forEach((b) => b.onclick = () => { const i = Number(b.dataset.subir); if (i > 0) [borrador.entradas[i - 1], borrador.entradas[i]] = [borrador.entradas[i], borrador.entradas[i - 1]]; pintar(); });
+      c.querySelectorAll('[data-bajar]').forEach((b) => b.onclick = () => { const i = Number(b.dataset.bajar); if (i < borrador.entradas.length - 1) [borrador.entradas[i + 1], borrador.entradas[i]] = [borrador.entradas[i], borrador.entradas[i + 1]]; pintar(); });
+      c.querySelector('#form-rutina').onsubmit = (e) => { e.preventDefault(); try { const rutina = normalizarRutina({ ...actual, id: actual?.id || uid(), nombre: borrador.nombre, entradas: borrador.entradas }); guardar((d) => { const i = d.rutinas.findIndex((x) => x.id === rutina.id); if (i >= 0) d.rutinas[i] = rutina; else d.rutinas.push(rutina); }, 'guardar_rutina', rutina.id); S.rutinaSeleccionada = rutina.id; cerrarModal(); renderEntrenar(); } catch (err) { S.toast(err.message, true); } };
+    }, 'CONSTRUCTOR');
+  pintar();
+}
+
+function abrirSelectorEjercicio(borrador, volver) {
+  abrirModal('Agregar ejercicio', `<label class="filtro-catalogo">Filtrar por categoría<select id="filtro-categoria"><option value="">Todas</option>${opciones(S.datos.categorias)}</select></label><div id="selector-lista" class="lista-modal"></div>`, (c) => {
+    const pintar = () => { const cat = c.querySelector('#filtro-categoria').value; c.querySelector('#selector-lista').innerHTML = S.datos.ejercicios.filter((e) => e.activo !== false && (!cat || e.categoriaId === cat)).map((e) => `<button type="button" data-elegir="${e.id}"><span><b>${escapeHTML(e.nombre)}</b><small>${escapeHTML(e.modalidad)}</small></span><i>Agregar</i></button>`).join('') || '<p class="estado-vacio">No hay ejercicios en esta categoría.</p>'; c.querySelectorAll('[data-elegir]').forEach((b) => b.onclick = () => { borrador.entradas.push({ ejercicioId: b.dataset.elegir, series: 3, repeticiones: 10, descansoSeg: 60 }); volver(); }); };
+    c.querySelector('#filtro-categoria').onchange = pintar; pintar();
+  }, 'CATÁLOGO');
+}
+
+function comenzarEntrenamiento() {
+  const rutina = S.datos.rutinas.find((r) => r.id === S.rutinaSeleccionada); if (!rutina?.entradas?.length) return;
+  S.entrenamiento = { id: uid(), rutinaId: rutina.id, nombre: rutina.nombre, entradas: structuredClone(rutina.entradas), ejercicioIndice: 0, serieNumero: 1, fase: 'cuenta', cuenta: 3, series: [], fecha: iso(), creadoEn: iso(), modificadoEn: iso() };
+  S.sonidosEmitidos.clear();
+  clearInterval(S.intervalo); S.intervalo = setInterval(tickEntrenamiento, 250); S.entrenamiento.cuentaFinMs = Date.now() + 3000; solicitarWake(); renderEntrenamientoActivo();
+}
+
+function tickEntrenamiento() {
+  if (!S.entrenamiento) return;
+  if (S.entrenamiento.fase === 'cuenta') {
+    const n = Math.max(0, Math.ceil((S.entrenamiento.cuentaFinMs - Date.now()) / 1000));
+    emitirUnaVez(`inicio-${n}`, sonidosEnSegundo({ tipo: 'cuenta', restanteSeg: n }));
+    if (n <= 0) { S.entrenamiento.fase = 'serie'; beep('largo'); }
+  } else if (S.entrenamiento.fase === 'descanso') tickDescanso();
+  renderEntrenamientoActivo();
+}
+
+function ejercicioActual() { const entrada = S.entrenamiento?.entradas[S.entrenamiento.ejercicioIndice]; return { entrada, ejercicio: S.datos.ejercicios.find((e) => e.id === entrada?.ejercicioId) }; }
+
+function renderEntrenamientoActivo() {
+  const p = document.getElementById('ejercicio-panel'), t = S.entrenamiento; if (!t) return renderEntrenar();
+  if (t.fase === 'cuenta') { const n = Math.max(1, Math.ceil((t.cuentaFinMs - Date.now()) / 1000)); p.innerHTML = `<section class="cuenta-gigante"><small>PREPÁRATE</small><strong>${n}</strong><span>${escapeHTML(t.nombre)}</span></section>`; return; }
+  if (t.fase === 'confirmar') {
+    const siguienteEntrada = t.entradas[t.pasoSiguiente.ejercicioIndice], siguienteEjercicio = S.datos.ejercicios.find((e) => e.id === siguienteEntrada.ejercicioId);
+    p.innerHTML = `<section class="descanso-pantalla"><small>EJERCICIO COMPLETADO</small><strong>✓</strong><div class="progreso-circular"><span>Siguiente</span><b>${escapeHTML(siguienteEjercicio?.nombre || '')}</b></div><button id="confirmar-siguiente" class="btn-primario">Continuar</button></section>`;
+    p.querySelector('#confirmar-siguiente').onclick = confirmarSiguienteEjercicio;
+    return;
+  }
+  const { entrada, ejercicio } = ejercicioActual(), totalSeries = t.entradas.reduce((n, e) => n + e.series, 0), hechas = t.series.length;
+  if (t.fase === 'descanso') { const restante = Math.max(0, Math.ceil((S.descanso.finMs - Date.now()) / 1000)); p.innerHTML = `<section class="descanso-pantalla"><small>DESCANSO</small><strong>${restante}</strong><div class="progreso-circular"><span>Siguiente</span><b>${escapeHTML(ejercicio?.nombre || '')}</b><small>Serie ${t.serieNumero} de ${entrada.series}</small></div><button id="sumar-cinco">+5 s</button><button id="saltar-descanso">Saltar descanso</button></section>`; p.querySelector('#sumar-cinco').onclick = () => { S.descanso.finMs += 5000; S.descanso.extraSeg += 5; }; p.querySelector('#saltar-descanso').onclick = cerrarDescanso; return; }
+  p.innerHTML = `<section class="entrenamiento-activo"><header><button id="salir-rutina">×</button><div><small>${escapeHTML(t.nombre)}</small><b>${hechas}/${totalSeries} series</b></div><span>${Math.round(hechas / totalSeries * 100)}%</span></header><div class="barra-rutina"><i style="width:${hechas / totalSeries * 100}%"></i></div><article class="tarjeta-ejercicio-actual"><span class="numero-ejercicio">${t.ejercicioIndice + 1}/${t.entradas.length}</span><h1>${escapeHTML(ejercicio?.nombre || 'Ejercicio')}</h1><p>Serie <b>${t.serieNumero}</b> de ${entrada.series} · meta ${entrada.repeticiones} reps</p>${stepperCantidad('serie-reps', 'Repeticiones', entrada.repeticiones, 1)}${cargaEntrenamiento(ejercicio)}<button id="terminar-serie" class="btn-terminar-serie">Terminar serie</button><small>Descanso programado: ${entrada.descansoSeg}s</small>${t.ejercicioIndice + 1 < t.entradas.length ? '<button id="saltar-ejercicio" class="btn-discreto">Saltar este ejercicio</button>' : ''}</article></section>`;
+  conectarSteppers(p);
+  const btnTerminar = p.querySelector('#terminar-serie');
+  const actualizarBotonTerminar = () => { btnTerminar.disabled = Number(p.querySelector('#serie-reps').value) < 1; };
+  p.querySelector('#serie-reps').addEventListener('input', actualizarBotonTerminar);
+  actualizarBotonTerminar();
+  btnTerminar.onclick = terminarSerieGuiada;
+  p.querySelector('#salir-rutina').onclick = salirRutina;
+  p.querySelector('#saltar-ejercicio')?.addEventListener('click', saltarEjercicio);
+}
+
+function salirRutina() {
+  const t = S.entrenamiento;
+  if (!t.series.length) { if (!confirm('¿Terminar esta rutina sin guardarla?')) return; S.entrenamiento = null; clearInterval(S.intervalo); liberarWake(); return renderEntrenar(); }
+  if (!confirm(`¿Salir? Se guardarán ${t.series.length} serie(s) ya completadas como rutina incompleta.`)) return;
+  const sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: 'descartada', series: t.series, creadoEn: t.creadoEn, modificadoEn: iso() };
+  guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id);
+  S.entrenamiento = null; S.descanso = null; clearInterval(S.intervalo); liberarWake(); S.toast('Rutina guardada como incompleta'); renderEntrenar();
+}
+
+function saltarEjercicio() {
+  if (!confirm('¿Saltar este ejercicio? No se registrarán series para él.')) return;
+  const t = S.entrenamiento;
+  Object.assign(t, { ejercicioIndice: t.ejercicioIndice + 1, serieNumero: 1, fase: 'serie' });
+  renderEntrenamientoActivo();
+}
+
+function cargaEntrenamiento(ejercicio) {
+  if (ejercicio?.modalidad === 'discos') return `<div class="carga-discos">${stepperCantidad('carga-grande', 'Grandes / lado', 0, 0)}${stepperCantidad('carga-chico', 'Chicos / lado', 0, 0)}</div>`;
+  if (ejercicio?.modalidad === 'niveles') return stepperCantidad('carga-nivel', 'Nivel de máquina', 1, 0);
+  return '<div class="pc-indicador">PC <small>Peso corporal</small></div>';
+}
+
+function stepperCantidad(id, etiqueta, valor, minimo) {
+  return `<div class="control-cantidad"><span>${escapeHTML(etiqueta)}</span><div><button type="button" data-stepper="menos" data-objetivo="${id}" aria-label="Restar ${escapeAtributo(etiqueta)}">−</button><input id="${id}" type="number" inputmode="numeric" min="${minimo}" value="${valor}" aria-label="${escapeAtributo(etiqueta)}"><button type="button" data-stepper="mas" data-objetivo="${id}" aria-label="Sumar ${escapeAtributo(etiqueta)}">+</button></div></div>`;
+}
+
+function conectarSteppers(contenedor) {
+  contenedor.querySelectorAll('[data-stepper]').forEach((boton) => boton.onclick = () => {
+    const input = contenedor.querySelector(`#${boton.dataset.objetivo}`); if (!input) return;
+    input.value = String(ajustarCantidad(input.value, boton.dataset.stepper === 'menos' ? -1 : 1, { minimo: Number(input.min || 0), paso: Number(input.step || 1) }));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+function terminarSerieGuiada() {
+  const { entrada, ejercicio } = ejercicioActual();
+  let carga = null; if (ejercicio.modalidad === 'discos') carga = { grande: Number(document.getElementById('carga-grande').value), chico: Number(document.getElementById('carga-chico').value) }; else if (ejercicio.modalidad === 'niveles') carga = Number(document.getElementById('carga-nivel').value);
+  try { S.entrenamiento.series.push(normalizarSerie({ ejercicioId: ejercicio.id, repeticiones: Number(document.getElementById('serie-reps').value), modalidad: ejercicio.modalidad, carga, descansoPlaneadoSeg: entrada.descansoSeg })); } catch (err) { return S.toast(err.message, true); }
+  S.entrenamiento.fase = 'descanso'; S.descanso = { inicioMs: Date.now(), finMs: Date.now() + entrada.descansoSeg * 1000, extraSeg: 0 }; S.sonidosEmitidos.clear(); emitirSonidos(['rapido', 'rapido', 'rapido']); renderEntrenamientoActivo();
+}
+
+function tickDescanso() {
+  const restante = Math.max(0, Math.ceil((S.descanso.finMs - Date.now()) / 1000));
+  emitirUnaVez(`descanso-${restante}`, sonidosEnSegundo({ tipo: 'descanso', restanteSeg: restante }));
+  if (restante <= 0) cerrarDescanso();
+}
+
+function cerrarDescanso() {
+  const ultima = S.entrenamiento.series.at(-1); ultima.descansoRealSeg = Math.round((Date.now() - S.descanso.inicioMs) / 1000); ultima.extraSeg = S.descanso.extraSeg;
+  const paso = siguientePasoRutina(S.entrenamiento, S.entrenamiento.entradas);
+  S.descanso = null;
+  if (paso.terminada) return finalizarEntrenamiento();
+  if (paso.ejercicioIndice !== S.entrenamiento.ejercicioIndice) { S.entrenamiento.fase = 'confirmar'; S.entrenamiento.pasoSiguiente = paso; beep('final'); return renderEntrenamientoActivo(); }
+  Object.assign(S.entrenamiento, paso, { fase: 'serie' }); beep('largo'); renderEntrenamientoActivo();
+}
+
+function confirmarSiguienteEjercicio() {
+  Object.assign(S.entrenamiento, S.entrenamiento.pasoSiguiente, { fase: 'serie' }); delete S.entrenamiento.pasoSiguiente; renderEntrenamientoActivo();
+}
+
+function finalizarEntrenamiento() {
+  const t = S.entrenamiento, sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: 'completada', series: t.series, creadoEn: t.creadoEn, modificadoEn: iso() };
+  guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id); S.entrenamiento = null; S.descanso = null; clearInterval(S.intervalo); liberarWake(); beep('final'); S.toast('Rutina completada'); renderEntrenar();
+}
+
+function renderHiit() {
+  const p = document.getElementById('ejercicio-panel');
+  if (S.hiit) return renderHiitActivo();
+  p.innerHTML = `<section class="hiit-config"><div class="hiit-emblema">HIIT</div><h1>Intervalos precisos</h1><p>Actividad intensa, descansos claros y avisos que no tienes que mirar.</p><div class="grid-form"><label>Vueltas<input id="hiit-vueltas" type="number" min="1" value="6"></label><label>Actividad (s)<input id="hiit-actividad" type="number" min="1" value="30"></label><label>Descanso (s)<input id="hiit-descanso" type="number" min="0" value="20"></label></div><button id="hiit-iniciar" class="btn-entrenar">Iniciar HIIT</button></section>`;
+  p.querySelector('#hiit-iniciar').onclick = iniciarHiit;
+}
+
+function iniciarHiit() {
+  const config = { vueltas: Number(document.getElementById('hiit-vueltas').value), actividadSeg: Number(document.getElementById('hiit-actividad').value), descansoSeg: Number(document.getElementById('hiit-descanso').value) };
+  try { calcularDuracionHiit(config); } catch (err) { return S.toast(err.message, true); }
+  S.hiit = { id: uid(), ...config, planeadoSeg: calcularDuracionHiit(config), inicioMs: Date.now(), pausaMs: 0, pausaInicio: null, faseIndice: -1, cuentaFinMs: Date.now() + 3000, estado: 'cuenta', sonidos: new Set() };
+  S.sonidosEmitidos.clear();
+  clearInterval(S.intervalo); S.intervalo = setInterval(tickHiit, 200); solicitarWake(); tickHiit();
+}
+
+function fasesHiit(h) { const xs = []; for (let i = 1; i <= h.vueltas; i++) { xs.push({ tipo: 'actividad', seg: h.actividadSeg, vuelta: i }); if (i < h.vueltas) xs.push({ tipo: 'descanso', seg: h.descansoSeg, vuelta: i }); } return xs; }
+function estadoHiit() { const h = S.hiit, ahora = h.pausaInicio || Date.now(); if (h.estado === 'cuenta') return { tipo: 'cuenta', restante: Math.max(0, Math.ceil((h.cuentaFinMs - ahora) / 1000)), vuelta: 0, transcurrido: 0 }; let t = Math.max(0, Math.floor((ahora - h.actividadInicioMs - h.pausaMs) / 1000)), indice = 0; for (const f of fasesHiit(h)) { if (t < f.seg) return { ...f, restante: f.seg - t, indice, transcurrido: Math.floor((ahora - h.actividadInicioMs - h.pausaMs) / 1000) }; t -= f.seg; indice++; } return { tipo: 'final', restante: 0, transcurrido: h.planeadoSeg }; }
+function tickHiit() { if (!S.hiit || S.hiit.pausaInicio) return renderHiitActivo(); const e = estadoHiit(); if (S.hiit.estado === 'cuenta' && e.restante <= 0) { S.hiit.estado = 'activo'; S.hiit.actividadInicioMs = Date.now(); S.hiit.pausaMs = 0; S.hiit.faseIndice = 0; beep('largo'); } else { const clave = `${e.indice ?? -1}-${e.tipo}-${e.restante}`; if (e.tipo === 'descanso' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; emitirSonidos(['rapido', 'rapido', 'rapido']); } else if (e.tipo === 'actividad' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; beep('largo'); } emitirUnaVez(clave, sonidosEnSegundo({ tipo: e.tipo, restanteSeg: e.restante })); if (e.tipo === 'final') return finalizarHiit(false); } renderHiitActivo(); }
+
+function renderHiitActivo() {
+  const p = document.getElementById('ejercicio-panel'), e = estadoHiit();
+  p.innerHTML = `<section class="hiit-activo ${e.tipo}"><small>${S.hiit.pausaInicio ? 'PAUSADO' : e.tipo === 'cuenta' ? 'PREPÁRATE' : e.tipo.toUpperCase()}</small><strong>${e.restante}</strong><span>${e.vuelta ? `Vuelta ${e.vuelta}/${S.hiit.vueltas}` : 'Comienza en'}</span><div class="acciones"><button id="hiit-pausa">${S.hiit.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="hiit-detener">Detener</button></div></section>`;
+  p.querySelector('#hiit-pausa').onclick = alternarPausaHiit; p.querySelector('#hiit-detener').onclick = () => finalizarHiit(true);
+}
+function alternarPausaHiit() { const h = S.hiit; if (h.pausaInicio) { const pausa = Date.now() - h.pausaInicio; if (h.estado === 'cuenta') h.cuentaFinMs += pausa; else h.pausaMs += pausa; h.pausaInicio = null; solicitarWake(); } else { h.pausaInicio = Date.now(); liberarWake(); } renderHiitActivo(); }
+function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const r = { id: h.id, nombre: 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: detenido ? Math.round(real / h.planeadoSeg * 100) : 100, estado: detenido ? 'detenida' : 'completada', creadoEn: iso(), modificadoEn: iso() }; guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
+
+function beep(tipo) { try { S.audio ||= new AudioContext(); const o = S.audio.createOscillator(), g = S.audio.createGain(); o.frequency.value = tipo === 'rapido' ? 560 : tipo === 'cuenta' ? 760 : tipo === 'largo' ? 980 : 1180; g.gain.value = .1; o.connect(g).connect(S.audio.destination); o.start(); o.stop(S.audio.currentTime + (tipo === 'largo' || tipo === 'final' ? .32 : .12)); } catch {} }
+function emitirSonidos(tipos) { tipos.forEach((tipo, i) => setTimeout(() => beep(tipo), i * 170)); }
+function emitirUnaVez(clave, tipos) { if (!tipos.length || S.sonidosEmitidos.has(clave)) return; S.sonidosEmitidos.add(clave); emitirSonidos(tipos); }
+async function solicitarWake() { try { S.wake = await navigator.wakeLock?.request('screen'); } catch { S.wake = null; } }
+function liberarWake() { S.wake?.release().catch(() => {}); S.wake = null; }
+
+function renderProgreso() {
+  const p = document.getElementById('ejercicio-panel'), sesiones = filtrarPeriodo(S.datos.sesiones || [], S.periodo), hiits = filtrarPeriodo(S.datos.hiits || [], S.periodo), series = seriesContables(sesiones), m = resumenModalidades(series), h = resumenHiit(hiits);
+  p.innerHTML = `<section class="progreso-ejercicio"><header><div><small>TU CONSTANCIA</small><h1>Progreso</h1></div><div class="filtros-periodo"><button data-periodo="semana">Semana</button><button data-periodo="mes">Mes</button><button data-periodo="total">Total</button></div></header><div class="kpis-ejercicio"><div><b>${sesiones.filter((s) => s.estado === 'completada').length}</b><span>Sesiones</span></div><div><b>${series.length}</b><span>Series</span></div><div><b>${descansoPromedio(series)}s</b><span>Descanso promedio</span></div><div><b>${h.minutos}m</b><span>HIIT activo</span></div><div><b>${h.porcentajePromedio}%</b><span>HIIT promedio</span></div><div><b>${h.abandonos}</b><span>Abandonos</span></div></div><article class="tarjeta marca-resumen"><h3>Mejores esfuerzos</h3><p>Discos × reps: grandes ${m.discos.grande}, chicos ${m.discos.chico}</p><p>Nivel máximo ${m.niveles.mejor} · PC ${m.PC.repeticiones} reps</p></article><article class="tarjeta"><h3>Historial</h3><div class="historial-entrenamiento">${[...(S.datos.sesiones || []), ...(S.datos.hiits || [])].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map((r) => `<div><span><b>${escapeHTML(r.nombre || 'Entrenamiento')}</b><small>${escapeHTML(String(r.fecha || '').slice(0, 10))} · ${escapeHTML(r.estado)}</small></span><div><button data-editar-registro="${r.id}">Editar</button><button data-eliminar="${r.id}">Eliminar</button></div></div>`).join('') || '<p class="estado-vacio">Completa una rutina para ver tu historial.</p>'}</div></article></section>`;
+  p.querySelectorAll('[data-periodo]').forEach((b) => b.onclick = () => { S.periodo = b.dataset.periodo; renderProgreso(); });
+  p.querySelectorAll('[data-editar-registro]').forEach((b) => b.onclick = () => abrirEditarRegistro(b.dataset.editarRegistro));
+  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { d.sesiones = d.sesiones.filter((x) => x.id !== b.dataset.eliminar); d.hiits = d.hiits.filter((x) => x.id !== b.dataset.eliminar); }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
+}
+
+function abrirEditarRegistro(id) {
+  const lista = S.datos.sesiones.some((x) => x.id === id) ? 'sesiones' : 'hiits';
+  const registro = structuredClone(S.datos[lista].find((x) => x.id === id));
+  if (lista === 'hiits') {
+    abrirModal('Editar HIIT', `<form id="form-registro" class="form-modal"><label>Nombre<input id="registro-nombre" value="${escapeAtributo(registro.nombre || 'HIIT')}"></label><label>Vueltas<input id="registro-vueltas" type="number" min="1" value="${registro.vueltas}"></label><label>Actividad (s)<input id="registro-actividad" type="number" min="1" value="${registro.actividadSeg}"></label><label>Descanso (s)<input id="registro-descanso" type="number" min="0" value="${registro.descansoSeg}"></label><label>Duración real (s)<input id="registro-real" type="number" min="0" value="${registro.duracionRealSeg}"></label><button class="btn-primario">Guardar cambios</button></form>`, (c) => { c.querySelector('#form-registro').onsubmit = (e) => { e.preventDefault(); Object.assign(registro, { nombre: c.querySelector('#registro-nombre').value.trim(), vueltas: Number(c.querySelector('#registro-vueltas').value), actividadSeg: Number(c.querySelector('#registro-actividad').value), descansoSeg: Number(c.querySelector('#registro-descanso').value), duracionRealSeg: Number(c.querySelector('#registro-real').value), modificadoEn: iso() }); registro.duracionPlaneadaSeg = calcularDuracionHiit(registro); registro.porcentaje = Math.min(100, Math.round(registro.duracionRealSeg / registro.duracionPlaneadaSeg * 100)); guardar((d) => { d.hiits[d.hiits.findIndex((x) => x.id === id)] = registro; }, 'editar_registro', id); cerrarModal(); renderProgreso(); }; }, 'HISTORIAL');
+  } else {
+    abrirModal('Editar entrenamiento', `<form id="form-registro" class="form-modal"><label>Nombre<input id="registro-nombre" value="${escapeAtributo(registro.nombre || '')}"></label><div class="constructor-rutina">${(registro.series || []).map((s, i) => `<article data-serie-historial="${i}"><b>${escapeHTML(S.datos.ejercicios.find((x) => x.id === s.ejercicioId)?.nombre || 'Ejercicio')}</b><div class="grid-form"><label>Reps<input data-historial="repeticiones" type="number" min="1" value="${s.repeticiones}"></label><label>Descanso real<input data-historial="descansoRealSeg" type="number" min="0" value="${s.descansoRealSeg || 0}"></label></div></article>`).join('')}</div><button class="btn-primario">Guardar cambios</button></form>`, (c) => { c.querySelector('#form-registro').onsubmit = (e) => { e.preventDefault(); registro.nombre = c.querySelector('#registro-nombre').value.trim(); c.querySelectorAll('[data-serie-historial]').forEach((art) => art.querySelectorAll('[data-historial]').forEach((inp) => { registro.series[Number(art.dataset.serieHistorial)][inp.dataset.historial] = Number(inp.value); })); registro.modificadoEn = iso(); guardar((d) => { d.sesiones[d.sesiones.findIndex((x) => x.id === id)] = registro; }, 'editar_registro', id); cerrarModal(); renderProgreso(); }; }, 'HISTORIAL');
+  }
+}
+
+  return { iniciarModuloEjercicio, salirModuloEjercicio, renderModuloEjercicio };
+})();
+const iniciarModuloEjercicio = ejercicio_ui.iniciarModuloEjercicio;
+const salirModuloEjercicio = ejercicio_ui.salirModuloEjercicio;
+const renderModuloEjercicio = ejercicio_ui.renderModuloEjercicio;
+
 // ── peso/js/ui.js ──────────────────────────────────────────
 // Estado, render y eventos. El único archivo que toca el DOM.
 // El login (URL, usuario, PIN) ya pasó en el launcher (../index.html) antes
@@ -1293,6 +1878,7 @@ async function iniciarApp() {
   document.getElementById('app').classList.remove('oculto');
   cargarFondoGuardado(); // no bloquea el arranque -- se aplica en cuanto esté lista
   await cargarYRenderizar();
+  await iniciarModuloEjercicio(toast);
   cola.iniciarSincronizacionAutomatica(getUsuario(), () => cargarYRenderizar());
   // Para que el peso que capture Cindy/Miguel le llegue rápido al otro sin
   // recargar a mano: cada 8s se pregunta solo el número de versión (barato,
@@ -1331,6 +1917,7 @@ function actualizarBadgeConexion() {
 }
 
 function cambiarVista(nombre) {
+  if (E.vista === 'ejercicio' && nombre !== 'ejercicio') salirModuloEjercicio();
   E.vista = nombre;
   document.querySelectorAll('.vista').forEach((v) => v.classList.remove('activa'));
   document.getElementById(`vista-${nombre}`).classList.add('activa');
@@ -1347,6 +1934,7 @@ function render() {
   else if (E.vista === 'progreso') renderProgreso();
   else if (E.vista === 'reto') renderReto();
   else if (E.vista === 'ajustes') renderAjustes();
+  else if (E.vista === 'ejercicio') renderModuloEjercicio();
 }
 
 // ---------- capturar ----------

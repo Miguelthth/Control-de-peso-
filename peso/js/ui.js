@@ -15,6 +15,7 @@ import {
 import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
 import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
+import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio } from './ejercicio_ui.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -104,6 +105,7 @@ async function iniciarApp() {
   document.getElementById('app').classList.remove('oculto');
   cargarFondoGuardado(); // no bloquea el arranque -- se aplica en cuanto esté lista
   await cargarYRenderizar();
+  await iniciarModuloEjercicio(toast);
   cola.iniciarSincronizacionAutomatica(getUsuario(), () => cargarYRenderizar());
   // Para que el peso que capture Cindy/Miguel le llegue rápido al otro sin
   // recargar a mano: cada 8s se pregunta solo el número de versión (barato,
@@ -142,6 +144,7 @@ function actualizarBadgeConexion() {
 }
 
 function cambiarVista(nombre) {
+  if (E.vista === 'ejercicio' && nombre !== 'ejercicio') salirModuloEjercicio();
   E.vista = nombre;
   document.querySelectorAll('.vista').forEach((v) => v.classList.remove('activa'));
   document.getElementById(`vista-${nombre}`).classList.add('activa');
@@ -158,6 +161,7 @@ function render() {
   else if (E.vista === 'progreso') renderProgreso();
   else if (E.vista === 'reto') renderReto();
   else if (E.vista === 'ajustes') renderAjustes();
+  else if (E.vista === 'ejercicio') renderModuloEjercicio();
 }
 
 // ---------- capturar ----------

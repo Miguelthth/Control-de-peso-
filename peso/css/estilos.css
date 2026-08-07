@@ -134,6 +134,24 @@ button, input { font-family: inherit; }
   text-decoration: underline; cursor: pointer; padding: 2px 0; width: 100%; text-align: left;
 }
 #historial-pesos { margin-top: 10px; }
+
+/* Ejercicio: componentes deliberadamente compactos para usarse entre series. */
+.ejercicio-cabecera { position: sticky; top: 0; z-index: 4; padding: 8px 0; background: var(--fondo); }
+.ejercicio-cabecera .tabs, .filtros-periodo, .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.ejercicio-cabecera .tabs button[aria-selected="true"] { background: var(--primario); color: #fff; }
+.grid-form, .discos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; }
+.timer-display { min-height: 170px; margin: 16px 0; display: grid; place-content: center; text-align: center; border-radius: 22px; background: var(--superficie); border: 2px solid var(--primario); }
+.timer-display strong { font-size: 1.15rem; letter-spacing: .1em; }
+.timer-display span { display: block; font-size: clamp(3rem, 18vw, 6rem); font-weight: 900; line-height: 1; }
+.catalogo-lista > div, .registro-ejercicio { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--borde); }
+.descanso-reloj { margin: 12px 0; padding: 14px; border-radius: 14px; background: color-mix(in srgb, var(--primario) 12%, var(--superficie)); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.kpis-ejercicio { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; margin: 12px 0; }
+.kpis-ejercicio > div { padding: 12px; border: 1px solid var(--borde); border-radius: 12px; display: grid; }
+.kpis-ejercicio b { font-size: 1.45rem; }
+.kpis-ejercicio span { font-size: .75rem; color: var(--texto-suave); }
+.grafica-ejercicio { width: 100%; min-height: 180px; color: var(--primario); }
+.grafica-ejercicio circle { fill: var(--primario); }
+@media (min-width: 700px) { .kpis-ejercicio { grid-template-columns: repeat(3, 1fr); } }
 .lista-acciones { display: flex; gap: 2px; flex: 0 0 auto; }
 .accion-historial { min-height: 40px; padding: 7px 9px; border: 1px solid var(--borde); border-radius: 9px; background: var(--superficie); color: var(--texto); font-size: .78rem; font-weight: 700; cursor: pointer; }
 .accion-editar { color: var(--primario); }
@@ -335,3 +353,103 @@ svg text.grafica-texto-vacio { font-size: 12px; fill: var(--texto-suave); }
 img, svg, video, canvas { max-width: 100%; }
 @media (max-width: 390px) { .encabezado { padding-inline: 10px; } .tarjetas-persona { grid-template-columns: 1fr; } .grafica-tabs { overflow-x: auto; } .grafica-tabs button { flex: 0 0 auto; padding-inline: 12px; } }
 @media (max-height: 520px) and (orientation: landscape) { .nav-inferior button, .nav-inferior-link { min-height: 48px; padding-block: 4px; } #vista-capturar.vista.activa { min-height: auto; } }
+
+/* Ejercicio v2: comparte tema y densidad con Peso, con foco táctil durante la rutina. */
+#vista-ejercicio { padding-top: 8px; }
+.ejercicio-hero { display: flex; justify-content: space-between; align-items: end; gap: 12px; padding: 8px 2px 14px; }
+.ejercicio-hero h2 { margin: 2px 0 0; font-size: 1.35rem; letter-spacing: -.03em; }
+.ejercicio-kicker, .ejercicio-hero small, .progreso-ejercicio header small { color: var(--primario); font-size: .66rem; font-weight: 900; letter-spacing: .14em; }
+.ejercicio-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 5px; margin-bottom: 16px; background: var(--superficie-alt); border: 1px solid var(--borde); border-radius: 16px; }
+.ejercicio-tabs button { min-height: 42px; border: 0; border-radius: 12px; background: transparent; color: var(--texto-suave); font-weight: 800; }
+.ejercicio-tabs button[aria-selected="true"] { color: #fff; background: linear-gradient(135deg, var(--primario), var(--primario-2)); box-shadow: 0 6px 14px color-mix(in srgb, var(--primario) 30%, transparent); }
+.entrenar-portada, .hiit-config { text-align: center; padding: 22px 4px 8px; }
+.entrenar-icono, .hiit-emblema { width: 72px; height: 72px; margin: 0 auto 14px; display: grid; place-items: center; border-radius: 24px; background: linear-gradient(145deg, var(--primario), var(--acento)); color: #fff; font-size: 2rem; font-weight: 950; box-shadow: 0 18px 35px color-mix(in srgb, var(--primario) 28%, transparent); transform: rotate(-3deg); }
+.hiit-emblema { font-size: 1.05rem; letter-spacing: .08em; }
+.entrenar-portada h1, .hiit-config h1 { margin: 0 0 5px; font-size: 1.65rem; letter-spacing: -.04em; }
+.entrenar-portada > p, .hiit-config > p { margin: 0 auto 18px; max-width: 330px; color: var(--texto-suave); }
+.selector-rutina { display: grid; text-align: left; gap: 6px; margin: 16px 0 12px; color: var(--texto-suave); font-size: .75rem; font-weight: 800; }
+.selector-rutina select, .form-modal input, .form-modal select, .filtro-catalogo select, .grid-form input { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 12px; color: var(--texto); background: var(--superficie); font-size: 16px; }
+.resumen-rutina { margin: 8px 0 16px; display: grid; gap: 8px; text-align: left; }
+.resumen-rutina > div { display: flex; gap: 12px; align-items: center; padding: 11px 12px; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); }
+.resumen-rutina > div > b { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--primario) 13%, var(--superficie)); color: var(--primario); }
+.resumen-rutina span { display: grid; gap: 2px; }
+.resumen-rutina small { color: var(--texto-suave); }
+.btn-entrenar, .btn-terminar-serie { width: 100%; min-height: 58px; border: 0; border-radius: 17px; color: #fff; background: linear-gradient(135deg, var(--primario), var(--acento)); font-size: 1.02rem; font-weight: 900; box-shadow: 0 12px 24px color-mix(in srgb, var(--primario) 28%, transparent); }
+.acciones-gestion { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 12px; }
+.acciones-gestion button, .modal-toolbar button, .constructor-titulo button, .descanso-pantalla button, .hiit-activo button { min-height: 46px; border: 1px solid var(--borde); border-radius: 13px; background: var(--superficie); color: var(--texto); font-weight: 800; }
+.ejercicio-modal { width: min(94vw, 480px); max-height: 88vh; padding: 0; border: 1px solid var(--borde); border-radius: 24px; color: var(--texto); background: var(--superficie); box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+.ejercicio-modal::backdrop { background: rgba(7, 10, 20, .72); backdrop-filter: blur(5px); }
+.modal-ejercicio-contenido { min-height: 100%; }
+.modal-ejercicio-contenido > header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 18px 18px 14px; background: color-mix(in srgb, var(--superficie) 92%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--borde); }
+.modal-ejercicio-contenido header h2 { margin: 2px 0 0; font-size: 1.2rem; }
+.modal-ejercicio-contenido header small { color: var(--primario); font-size: .62rem; font-weight: 900; letter-spacing: .13em; }
+.modal-cerrar { width: 42px; height: 42px; border: 1px solid var(--borde); border-radius: 50%; color: var(--texto); background: var(--superficie-alt); font-size: 1.5rem; }
+#modal-cuerpo { padding: 16px 18px 22px; overflow-y: auto; }
+.modal-toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.lista-modal { display: grid; gap: 8px; }
+.lista-modal > button { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 13px; text-align: left; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie-alt); color: var(--texto); }
+.lista-modal span { display: grid; gap: 3px; }
+.lista-modal small, .lista-modal i { color: var(--texto-suave); font-size: .73rem; }
+.lista-modal i { color: var(--primario); font-style: normal; font-weight: 800; }
+.form-modal { display: grid; gap: 14px; }
+.form-modal > label, .filtro-catalogo { display: grid; gap: 6px; color: var(--texto-suave); font-size: .75rem; font-weight: 800; }
+.form-modal fieldset { display: grid; gap: 8px; padding: 0; border: 0; }
+.form-modal legend { margin-bottom: 7px; font-weight: 800; }
+.opcion-modalidad { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie-alt); }
+.opcion-modalidad input { width: 20px; min-height: auto; }
+.opcion-modalidad span { display: grid; gap: 2px; color: var(--texto); font-weight: 800; }
+.opcion-modalidad small { color: var(--texto-suave); font-weight: 500; }
+.chips-editables { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; }
+.chips-editables button { padding: 9px 11px; border: 1px solid var(--borde); border-radius: 999px; background: var(--superficie-alt); color: var(--texto); }
+.constructor-rutina { display: grid; gap: 10px; }
+.constructor-titulo { display: flex; justify-content: space-between; align-items: center; }
+.constructor-rutina article { padding: 13px; border: 1px solid var(--borde); border-radius: 16px; background: var(--superficie-alt); }
+.constructor-rutina article header { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.constructor-rutina article header span { display: grid; }
+.constructor-rutina article header small { color: var(--texto-suave); }
+.constructor-rutina article header div { display: flex; gap: 4px; flex-wrap: wrap; justify-content: end; }
+.constructor-rutina article header button { padding: 6px; border: 0; color: var(--primario); background: transparent; font-size: .7rem; font-weight: 800; }
+.ancho-completo { width: 100%; max-width: none; }
+.estado-vacio { padding: 20px; text-align: center; color: var(--texto-suave); border: 1px dashed var(--borde); border-radius: 14px; }
+.cuenta-gigante, .descanso-pantalla, .hiit-activo { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center; }
+.cuenta-gigante strong, .descanso-pantalla > strong, .hiit-activo > strong { font-size: clamp(6rem, 30vw, 10rem); line-height: .9; font-weight: 950; color: var(--primario); text-shadow: 0 15px 35px color-mix(in srgb, var(--primario) 25%, transparent); }
+.cuenta-gigante small, .descanso-pantalla > small, .hiit-activo > small { font-size: .75rem; letter-spacing: .18em; font-weight: 950; color: var(--texto-suave); }
+.entrenamiento-activo > header { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 10px; }
+.entrenamiento-activo > header button { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--borde); background: var(--superficie); color: var(--texto); font-size: 1.4rem; }
+.entrenamiento-activo > header div { display: grid; }
+.entrenamiento-activo > header small { color: var(--texto-suave); }
+.entrenamiento-activo > header > span { color: var(--primario); font-weight: 900; }
+.barra-rutina { height: 7px; margin: 12px 0 24px; overflow: hidden; border-radius: 999px; background: var(--superficie-alt); }
+.barra-rutina i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primario), var(--acento)); }
+.tarjeta-ejercicio-actual { position: relative; padding: 26px 18px 18px; text-align: center; border: 1px solid var(--borde); border-radius: 24px; background: linear-gradient(160deg, var(--superficie), var(--superficie-alt)); box-shadow: var(--sombra); }
+.numero-ejercicio { position: absolute; top: 12px; right: 14px; color: var(--primario); font-weight: 900; font-size: .75rem; }
+.tarjeta-ejercicio-actual h1 { margin: 15px 0 4px; font-size: 1.9rem; letter-spacing: -.04em; }
+.control-cantidad { display: grid; gap: 6px; margin: 16px auto; color: var(--texto-suave); font-size: .72rem; font-weight: 800; text-align: center; min-width: 0; }
+.control-cantidad > div { display: grid; grid-template-columns: 40px 1fr 40px; gap: 6px; align-items: stretch; max-width: 210px; margin: 0 auto; }
+.control-cantidad button { min-height: 44px; min-width: 0; padding: 0; border: 1px solid var(--borde); border-radius: 12px; background: var(--superficie-alt); color: var(--primario); font-size: 1.2rem; font-weight: 900; line-height: 1; cursor: pointer; }
+.control-cantidad button:active { transform: scale(0.94); }
+.control-cantidad input { min-width: 0; min-height: 44px; padding: 0 2px; border: 1px solid var(--borde); border-radius: 12px; background: var(--superficie); color: var(--texto); text-align: center; font-size: 1.15rem; font-weight: 900; -moz-appearance: textfield; }
+.control-cantidad input::-webkit-outer-spin-button, .control-cantidad input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.carga-discos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 6px; }
+.carga-discos .control-cantidad { margin: 10px auto; }
+.carga-discos .control-cantidad > div { max-width: 100%; grid-template-columns: 34px 1fr 34px; }
+.pc-indicador { margin: 14px 0; display: grid; color: var(--primario); font-size: 2rem; font-weight: 950; }
+.pc-indicador small { color: var(--texto-suave); font-size: .72rem; }
+.btn-terminar-serie { margin: 8px 0 10px; }
+.descanso-pantalla { background: radial-gradient(circle at center, color-mix(in srgb, var(--primario) 15%, transparent), transparent 62%); }
+.descanso-pantalla .progreso-circular { display: grid; gap: 2px; margin: 10px 0 18px; }
+.descanso-pantalla .progreso-circular span, .descanso-pantalla .progreso-circular small { color: var(--texto-suave); }
+.descanso-pantalla button { width: min(260px, 80vw); }
+.hiit-config .grid-form { margin: 18px 0; text-align: left; }
+.hiit-activo.actividad > strong { color: var(--acento); }
+.hiit-activo.descanso > strong { color: var(--primario); }
+.hiit-activo .acciones { display: grid; grid-template-columns: 1fr 1fr; width: min(320px, 90vw); }
+.progreso-ejercicio > header { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+.progreso-ejercicio h1 { margin: 2px 0 0; }
+.filtros-periodo { display: flex; gap: 4px; }
+.filtros-periodo button { padding: 8px; border: 1px solid var(--borde); border-radius: 9px; color: var(--texto); background: var(--superficie); font-size: .68rem; }
+.historial-entrenamiento > div { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borde); }
+.historial-entrenamiento span { display: grid; }
+.historial-entrenamiento small { color: var(--texto-suave); }
+.historial-entrenamiento button { border: 0; background: transparent; color: var(--peligro); }
+@media (max-width: 370px) { .constructor-rutina article header { display: grid; } .modal-toolbar { grid-template-columns: 1fr; } .carga-discos { grid-template-columns: 1fr; } }

@@ -93,6 +93,20 @@ export function leerDatos() {
   return _post({ accion: 'leerDatos' });
 }
 
+// Ejercicio se guarda en la Hoja central; el caché del teléfono es solo una
+// copia de trabajo y se puede reconstruir al entrar de nuevo.
+export function leerEjercicio() {
+  return _post({ accion: 'leerEjercicio' });
+}
+
+export function guardarEjercicio(datos) {
+  return guardarOperacionEjercicio({ opId: crypto.randomUUID(), tipo: 'reemplazar_documento', entidadId: 'documento', modificadoEn: datos.modificadoEn || new Date().toISOString() }, datos);
+}
+
+export function guardarOperacionEjercicio(operacion, datos) {
+  return _post({ accion: 'guardarEjercicio', operacion, datos });
+}
+
 // Consulta barata (no toca Hojas) para saber si algo cambió en Peso antes
 // de pedir 'datos' completo -- se puede llamar seguido sin gastar cuota.
 export function leerVersion() {

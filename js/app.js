@@ -366,6 +366,20 @@ function leerDatos() {
   return _post({ accion: 'leerDatos' });
 }
 
+// Ejercicio se guarda en la Hoja central; el caché del teléfono es solo una
+// copia de trabajo y se puede reconstruir al entrar de nuevo.
+function leerEjercicio() {
+  return _post({ accion: 'leerEjercicio' });
+}
+
+function guardarEjercicio(datos) {
+  return guardarOperacionEjercicio({ opId: crypto.randomUUID(), tipo: 'reemplazar_documento', entidadId: 'documento', modificadoEn: datos.modificadoEn || new Date().toISOString() }, datos);
+}
+
+function guardarOperacionEjercicio(operacion, datos) {
+  return _post({ accion: 'guardarEjercicio', operacion, datos });
+}
+
 // Consulta barata (no toca Hojas) para saber si algo cambió en Peso antes
 // de pedir 'datos' completo -- se puede llamar seguido sin gastar cuota.
 function leerVersion() {
@@ -428,13 +442,16 @@ function leerGastos(usuario) {
   return _post({ accion: 'leerGastos', usuario });
 }
 
-  return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
+  return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerEjercicio, guardarEjercicio, guardarOperacionEjercicio, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
 const configurarManejadorAuth = api.configurarManejadorAuth;
 const ApiError = api.ApiError;
 const solicitarJson = api.solicitarJson;
 const cerrarSesionServidor = api.cerrarSesionServidor;
 const leerDatos = api.leerDatos;
+const leerEjercicio = api.leerEjercicio;
+const guardarEjercicio = api.guardarEjercicio;
+const guardarOperacionEjercicio = api.guardarOperacionEjercicio;
 const leerVersion = api.leerVersion;
 const guardarFechasReto = api.guardarFechasReto;
 const validarUsuario = api.validarUsuario;

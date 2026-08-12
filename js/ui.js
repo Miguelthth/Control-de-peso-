@@ -471,7 +471,18 @@ if ('serviceWorker' in navigator) {
   // un ?ts= distinto cada vez podía hacer que el navegador tratara cada
   // apertura como "service worker nuevo" aunque no hubiera cambiado nada).
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
+    navigator.serviceWorker.register('sw.js').then((r) => {
+      // El navegador solo revisa sw.js por su cuenta cada ~24h -- una PWA
+      // abierta desde el ícono de inicio (retomada de segundo plano, sin
+      // recarga completa) puede tardar horas o días en notar que hay una
+      // versión nueva si no se le pregunta activamente. Mismo patrón que
+      // COTIZADOR (2.- COTIZADOR/remision.html).
+      const _revisar = () => r.update().catch(() => {});
+      setInterval(_revisar, 5 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _revisar(); });
+      window.addEventListener('online', _revisar);
+      return r.update();
+    }).catch(() => {});
   });
   // En cuanto el service worker NUEVO toma control, recarga la página sola
   // -- así nadie tiene que cerrar y volver a abrir la app a mano. PERO si

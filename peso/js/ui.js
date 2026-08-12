@@ -831,6 +831,15 @@ if ('serviceWorker' in navigator) {
       r.addEventListener('updatefound', () => observarInstalacion(r.installing));
       observarInstalacion(r.installing);
       releerMetadataActualizacion();
+      // El navegador solo revisa sw.js por su cuenta cada ~24h -- una PWA
+      // abierta desde el ícono de inicio (retomada de segundo plano, sin
+      // recarga completa) puede tardar horas o días en notar que hay una
+      // versión nueva si no se le pregunta activamente. Mismo patrón que
+      // COTIZADOR (2.- COTIZADOR/remision.html).
+      const _revisar = () => r.update().catch(() => {});
+      setInterval(_revisar, 5 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _revisar(); });
+      window.addEventListener('online', _revisar);
       return r.update();
     }).catch(() => {});
   });

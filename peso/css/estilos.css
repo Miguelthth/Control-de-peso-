@@ -368,7 +368,8 @@ img, svg, video, canvas { max-width: 100%; }
 .entrenar-portada h1, .hiit-config h1 { margin: 0 0 5px; font-size: 1.65rem; letter-spacing: -.04em; }
 .entrenar-portada > p, .hiit-config > p { margin: 0 auto 18px; max-width: 330px; color: var(--texto-suave); }
 .selector-rutina { display: grid; text-align: left; gap: 6px; margin: 16px 0 12px; color: var(--texto-suave); font-size: .75rem; font-weight: 800; }
-.selector-rutina select, .form-modal input, .form-modal select, .filtro-catalogo select, .grid-form input { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 12px; color: var(--texto); background: var(--superficie); font-size: 16px; }
+.selector-rutina select, .form-modal input, .form-modal select, .form-modal textarea, .filtro-catalogo select, .grid-form input { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 12px; color: var(--texto); background: var(--superficie); font-size: 16px; }
+.form-modal textarea { min-height: 90px; resize: vertical; font-family: inherit; }
 .resumen-rutina { margin: 8px 0 16px; display: grid; gap: 8px; text-align: left; }
 .resumen-rutina > div { display: flex; gap: 12px; align-items: center; padding: 11px 12px; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); }
 .resumen-rutina > div > b { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--primario) 13%, var(--superficie)); color: var(--primario); }
@@ -391,6 +392,14 @@ img, svg, video, canvas { max-width: 100%; }
 .lista-modal span { display: grid; gap: 3px; }
 .lista-modal small, .lista-modal i { color: var(--texto-suave); font-size: .73rem; }
 .lista-modal i { color: var(--primario); font-style: normal; font-weight: 800; }
+.fila-selector-ejercicio { display: flex; gap: 8px; }
+.fila-selector-ejercicio [data-elegir] { flex: 1; display: flex; justify-content: space-between; align-items: center; padding: 13px; text-align: left; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie-alt); color: var(--texto); }
+.fila-selector-ejercicio [data-elegir] span { display: grid; gap: 3px; }
+.fila-selector-ejercicio [data-elegir] small { color: var(--texto-suave); font-size: .73rem; }
+.fila-selector-ejercicio [data-elegir] i { color: var(--primario); font-style: normal; font-weight: 800; }
+.btn-info-ejercicio { flex: 0 0 44px; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie-alt); color: var(--primario); font-size: 1.1rem; font-weight: 800; }
+.detalle-ejercicio img { width: 100%; border-radius: 14px; margin-bottom: 12px; display: block; }
+.detalle-ejercicio p { line-height: 1.5; color: var(--texto); margin-bottom: 14px; }
 .form-modal { display: grid; gap: 14px; }
 .form-modal > label, .filtro-catalogo { display: grid; gap: 6px; color: var(--texto-suave); font-size: .75rem; font-weight: 800; }
 .form-modal fieldset { display: grid; gap: 8px; padding: 0; border: 0; }

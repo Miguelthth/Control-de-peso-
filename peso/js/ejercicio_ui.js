@@ -13,6 +13,7 @@ function guardar(mutador, tipo = 'editar', entidadId = 'documento') {
   const r = mutarLocal(getUsuario(), mutador, { tipo, entidadId });
   S.datos = r.datos;
   sincronizar().catch(() => {});
+  S.toast('Guardado ✓');
   return r.datos;
 }
 
@@ -63,6 +64,17 @@ function abrirModal(titulo, html, configurar, kicker = 'CONFIGURAR') {
 }
 
 function cerrarModal() { document.getElementById('ejercicio-modal')?.close(); }
+
+function abrirDetalleEjercicio(ejercicioId, volver) {
+  const ejercicio = S.datos.ejercicios.find((e) => e.id === ejercicioId);
+  if (!ejercicio) return;
+  const imagenHtml = ejercicio.imagen ? `<img src="${escapeAtributo(ejercicio.imagen)}" alt="${escapeAtributo(ejercicio.nombre)}" loading="lazy">` : '';
+  const descripcionHtml = `<p>${escapeHTML(ejercicio.descripcion || 'Este ejercicio todavía no tiene descripción.')}</p>`;
+  const volverHtml = volver ? '<button type="button" id="detalle-volver" class="btn-primario ancho-completo">← Volver</button>' : '';
+  abrirModal(ejercicio.nombre, `<div class="detalle-ejercicio">${imagenHtml}${descripcionHtml}${volverHtml}</div>`, (c) => {
+    c.querySelector('#detalle-volver')?.addEventListener('click', volver);
+  }, 'EJERCICIO');
+}
 function opciones(items, seleccionado = '') { return (items || []).filter((x) => x.activo !== false).map((x) => `<option value="${escapeAtributo(x.id)}" ${x.id === seleccionado ? 'selected' : ''}>${escapeHTML(x.nombre)}</option>`).join(''); }
 
 function renderEntrenar() {
@@ -97,8 +109,8 @@ function abrirCategorias() {
 
 function abrirFormularioEjercicio(id = '') {
   const actual = S.datos.ejercicios.find((e) => e.id === id);
-  abrirModal(actual ? 'Editar ejercicio' : 'Nuevo ejercicio', `<form id="form-ejercicio" class="form-modal"><label>Nombre<input id="ejercicio-nombre" required maxlength="60" value="${escapeAtributo(actual?.nombre || '')}"></label><label>Categoría<select id="ejercicio-categoria" required>${opciones(S.datos.categorias, actual?.categoriaId)}</select></label><fieldset><legend>Modalidad</legend><label class="opcion-modalidad"><input type="radio" name="modalidad" value="discos" ${!actual || actual.modalidad === 'discos' ? 'checked' : ''}><span>Discos<small>Grande y chico por lado</small></span></label><label class="opcion-modalidad"><input type="radio" name="modalidad" value="niveles" ${actual?.modalidad === 'niveles' ? 'checked' : ''}><span>Niveles<small>Máquina con selector</small></span></label><label class="opcion-modalidad"><input type="radio" name="modalidad" value="PC" ${actual?.modalidad === 'PC' ? 'checked' : ''}><span>PC<small>Peso corporal</small></span></label></fieldset><button class="btn-primario">Guardar ejercicio</button></form>`, (c) => {
-    c.querySelector('#form-ejercicio').onsubmit = (e) => { e.preventDefault(); try { const ejercicio = normalizarEjercicio({ ...actual, id: actual?.id || uid(), nombre: c.querySelector('#ejercicio-nombre').value, categoriaId: c.querySelector('#ejercicio-categoria').value, modalidad: c.querySelector('[name="modalidad"]:checked').value }); guardar((d) => { const i = d.ejercicios.findIndex((x) => x.id === ejercicio.id); if (i >= 0) d.ejercicios[i] = ejercicio; else d.ejercicios.push(ejercicio); }, 'guardar_ejercicio', ejercicio.id); cerrarModal(); renderEntrenar(); } catch (err) { S.toast(err.message, true); } };
+  abrirModal(actual ? 'Editar ejercicio' : 'Nuevo ejercicio', `<form id="form-ejercicio" class="form-modal"><label>Nombre<input id="ejercicio-nombre" required maxlength="60" value="${escapeAtributo(actual?.nombre || '')}"></label><label>Categoría<select id="ejercicio-categoria" required>${opciones(S.datos.categorias, actual?.categoriaId)}</select></label><fieldset><legend>Modalidad</legend><label class="opcion-modalidad"><input type="radio" name="modalidad" value="discos" ${!actual || actual.modalidad === 'discos' ? 'checked' : ''}><span>Discos<small>Grande y chico por lado</small></span></label><label class="opcion-modalidad"><input type="radio" name="modalidad" value="niveles" ${actual?.modalidad === 'niveles' ? 'checked' : ''}><span>Niveles<small>Máquina o mancuerna (un número)</small></span></label><label class="opcion-modalidad"><input type="radio" name="modalidad" value="PC" ${actual?.modalidad === 'PC' ? 'checked' : ''}><span>PC<small>Peso corporal</small></span></label></fieldset><label>Descripción / cómo hacerlo<textarea id="ejercicio-descripcion" rows="4" maxlength="600" placeholder="Posición inicial, ejecución y algún tip técnico">${escapeHTML(actual?.descripcion || '')}</textarea></label><button class="btn-primario">Guardar ejercicio</button></form>`, (c) => {
+    c.querySelector('#form-ejercicio').onsubmit = (e) => { e.preventDefault(); try { const ejercicio = normalizarEjercicio({ ...actual, id: actual?.id || uid(), nombre: c.querySelector('#ejercicio-nombre').value, categoriaId: c.querySelector('#ejercicio-categoria').value, modalidad: c.querySelector('[name="modalidad"]:checked').value, descripcion: c.querySelector('#ejercicio-descripcion').value.trim() }); guardar((d) => { const i = d.ejercicios.findIndex((x) => x.id === ejercicio.id); if (i >= 0) d.ejercicios[i] = ejercicio; else d.ejercicios.push(ejercicio); }, 'guardar_ejercicio', ejercicio.id); cerrarModal(); renderEntrenar(); } catch (err) { S.toast(err.message, true); } };
   });
 }
 
@@ -124,7 +136,12 @@ function abrirConstructorRutina(id = '') {
 
 function abrirSelectorEjercicio(borrador, volver) {
   abrirModal('Agregar ejercicio', `<label class="filtro-catalogo">Filtrar por categoría<select id="filtro-categoria"><option value="">Todas</option>${opciones(S.datos.categorias)}</select></label><div id="selector-lista" class="lista-modal"></div>`, (c) => {
-    const pintar = () => { const cat = c.querySelector('#filtro-categoria').value; c.querySelector('#selector-lista').innerHTML = S.datos.ejercicios.filter((e) => e.activo !== false && (!cat || e.categoriaId === cat)).map((e) => `<button type="button" data-elegir="${e.id}"><span><b>${escapeHTML(e.nombre)}</b><small>${escapeHTML(e.modalidad)}</small></span><i>Agregar</i></button>`).join('') || '<p class="estado-vacio">No hay ejercicios en esta categoría.</p>'; c.querySelectorAll('[data-elegir]').forEach((b) => b.onclick = () => { borrador.entradas.push({ ejercicioId: b.dataset.elegir, series: 3, repeticiones: 10, descansoSeg: 60 }); volver(); }); };
+    const pintar = () => {
+      const cat = c.querySelector('#filtro-categoria').value;
+      c.querySelector('#selector-lista').innerHTML = S.datos.ejercicios.filter((e) => e.activo !== false && (!cat || e.categoriaId === cat)).map((e) => `<div class="fila-selector-ejercicio"><button type="button" data-elegir="${e.id}"><span><b>${escapeHTML(e.nombre)}</b><small>${escapeHTML(e.modalidad)}</small></span><i>Agregar</i></button><button type="button" class="btn-info-ejercicio" data-detalle="${e.id}" aria-label="Ver cómo hacerlo">ⓘ</button></div>`).join('') || '<p class="estado-vacio">No hay ejercicios en esta categoría.</p>';
+      c.querySelectorAll('[data-elegir]').forEach((b) => b.onclick = () => { borrador.entradas.push({ ejercicioId: b.dataset.elegir, series: 3, repeticiones: 10, descansoSeg: 60 }); volver(); });
+      c.querySelectorAll('[data-detalle]').forEach((b) => b.onclick = () => abrirDetalleEjercicio(b.dataset.detalle, pintar));
+    };
     c.querySelector('#filtro-categoria').onchange = pintar; pintar();
   }, 'CATÁLOGO');
 }
@@ -159,13 +176,14 @@ function renderEntrenamientoActivo() {
   }
   const { entrada, ejercicio } = ejercicioActual(), totalSeries = t.entradas.reduce((n, e) => n + e.series, 0), hechas = t.series.length;
   if (t.fase === 'descanso') { const restante = Math.max(0, Math.ceil((S.descanso.finMs - Date.now()) / 1000)); p.innerHTML = `<section class="descanso-pantalla"><small>DESCANSO</small><strong>${restante}</strong><div class="progreso-circular"><span>Siguiente</span><b>${escapeHTML(ejercicio?.nombre || '')}</b><small>Serie ${t.serieNumero} de ${entrada.series}</small></div><button id="sumar-cinco">+5 s</button><button id="saltar-descanso">Saltar descanso</button></section>`; p.querySelector('#sumar-cinco').onclick = () => { S.descanso.finMs += 5000; S.descanso.extraSeg += 5; }; p.querySelector('#saltar-descanso').onclick = cerrarDescanso; return; }
-  p.innerHTML = `<section class="entrenamiento-activo"><header><button id="salir-rutina">×</button><div><small>${escapeHTML(t.nombre)}</small><b>${hechas}/${totalSeries} series</b></div><span>${Math.round(hechas / totalSeries * 100)}%</span></header><div class="barra-rutina"><i style="width:${hechas / totalSeries * 100}%"></i></div><article class="tarjeta-ejercicio-actual"><span class="numero-ejercicio">${t.ejercicioIndice + 1}/${t.entradas.length}</span><h1>${escapeHTML(ejercicio?.nombre || 'Ejercicio')}</h1><p>Serie <b>${t.serieNumero}</b> de ${entrada.series} · meta ${entrada.repeticiones} reps</p>${stepperCantidad('serie-reps', 'Repeticiones', entrada.repeticiones, 1)}${cargaEntrenamiento(ejercicio)}<button id="terminar-serie" class="btn-terminar-serie">Terminar serie</button><small>Descanso programado: ${entrada.descansoSeg}s</small>${t.ejercicioIndice + 1 < t.entradas.length ? '<button id="saltar-ejercicio" class="btn-discreto">Saltar este ejercicio</button>' : ''}</article></section>`;
+  p.innerHTML = `<section class="entrenamiento-activo"><header><button id="salir-rutina">×</button><div><small>${escapeHTML(t.nombre)}</small><b>${hechas}/${totalSeries} series</b></div><span>${Math.round(hechas / totalSeries * 100)}%</span></header><div class="barra-rutina"><i style="width:${hechas / totalSeries * 100}%"></i></div><article class="tarjeta-ejercicio-actual"><span class="numero-ejercicio">${t.ejercicioIndice + 1}/${t.entradas.length}</span><h1>${escapeHTML(ejercicio?.nombre || 'Ejercicio')}</h1><button type="button" id="ver-como-hacerlo" class="btn-discreto">Ver cómo hacerlo</button><p>Serie <b>${t.serieNumero}</b> de ${entrada.series} · meta ${entrada.repeticiones} reps</p>${stepperCantidad('serie-reps', 'Repeticiones', entrada.repeticiones, 1)}${cargaEntrenamiento(ejercicio)}<button id="terminar-serie" class="btn-terminar-serie">Terminar serie</button><small>Descanso programado: ${entrada.descansoSeg}s</small>${t.ejercicioIndice + 1 < t.entradas.length ? '<button id="saltar-ejercicio" class="btn-discreto">Saltar este ejercicio</button>' : ''}</article></section>`;
   conectarSteppers(p);
   const btnTerminar = p.querySelector('#terminar-serie');
   const actualizarBotonTerminar = () => { btnTerminar.disabled = Number(p.querySelector('#serie-reps').value) < 1; };
   p.querySelector('#serie-reps').addEventListener('input', actualizarBotonTerminar);
   actualizarBotonTerminar();
   btnTerminar.onclick = terminarSerieGuiada;
+  p.querySelector('#ver-como-hacerlo').onclick = () => abrirDetalleEjercicio(ejercicio.id);
   p.querySelector('#salir-rutina').onclick = salirRutina;
   p.querySelector('#saltar-ejercicio')?.addEventListener('click', saltarEjercicio);
 }
@@ -188,7 +206,7 @@ function saltarEjercicio() {
 
 function cargaEntrenamiento(ejercicio) {
   if (ejercicio?.modalidad === 'discos') return `<div class="carga-discos">${stepperCantidad('carga-grande', 'Grandes / lado', 0, 0)}${stepperCantidad('carga-chico', 'Chicos / lado', 0, 0)}</div>`;
-  if (ejercicio?.modalidad === 'niveles') return stepperCantidad('carga-nivel', 'Nivel de máquina', 1, 0);
+  if (ejercicio?.modalidad === 'niveles') return stepperCantidad('carga-nivel', 'Peso / nivel', 1, 0);
   return '<div class="pc-indicador">PC <small>Peso corporal</small></div>';
 }
 
@@ -262,7 +280,8 @@ function renderHiitActivo() {
 function alternarPausaHiit() { const h = S.hiit; if (h.pausaInicio) { const pausa = Date.now() - h.pausaInicio; if (h.estado === 'cuenta') h.cuentaFinMs += pausa; else h.pausaMs += pausa; h.pausaInicio = null; solicitarWake(); } else { h.pausaInicio = Date.now(); liberarWake(); } renderHiitActivo(); }
 function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const r = { id: h.id, nombre: 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: detenido ? Math.round(real / h.planeadoSeg * 100) : 100, estado: detenido ? 'detenida' : 'completada', creadoEn: iso(), modificadoEn: iso() }; guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
 
-function beep(tipo) { try { S.audio ||= new AudioContext(); const o = S.audio.createOscillator(), g = S.audio.createGain(); o.frequency.value = tipo === 'rapido' ? 560 : tipo === 'cuenta' ? 760 : tipo === 'largo' ? 980 : 1180; g.gain.value = .1; o.connect(g).connect(S.audio.destination); o.start(); o.stop(S.audio.currentTime + (tipo === 'largo' || tipo === 'final' ? .32 : .12)); } catch {} }
+const SONIDOS = { rapido: 'audio/rapido.mp3', cuenta: 'audio/cuenta.mp3', largo: 'audio/largo.mp3', final: 'audio/final.mp3' };
+function beep(tipo) { try { const a = new Audio(SONIDOS[tipo]); a.volume = .6; a.play().catch(() => {}); } catch {} }
 function emitirSonidos(tipos) { tipos.forEach((tipo, i) => setTimeout(() => beep(tipo), i * 170)); }
 function emitirUnaVez(clave, tipos) { if (!tipos.length || S.sonidosEmitidos.has(clave)) return; S.sonidosEmitidos.add(clave); emitirSonidos(tipos); }
 async function solicitarWake() { try { S.wake = await navigator.wakeLock?.request('screen'); } catch { S.wake = null; } }

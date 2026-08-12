@@ -15,6 +15,7 @@ import {
 import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
 import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
+import { pinNuevoValido } from '../../shared/autorizacion.js';
 import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio } from './ejercicio_ui.js';
 
 api.configurarManejadorAuth(() => {
@@ -626,17 +627,17 @@ async function cambiarUnidadAjustes(unidad) {
 }
 
 async function cambiarPinAjustes() {
-  const actual = prompt('Tu PIN actual:') || '';
-  const nuevo = prompt('Nuevo PIN (4 dígitos):');
+  const actual = prompt('Tu contraseña actual:') || '';
+  const nuevo = prompt('Nueva contraseña (mínimo 6 caracteres):');
   if (nuevo === null) return;
-  if (!/^\d{4}$/.test(nuevo)) {
-    toast('El PIN nuevo debe ser de 4 dígitos', true);
+  if (!pinNuevoValido(nuevo)) {
+    toast('La contraseña nueva debe tener al menos 6 caracteres', true);
     return;
   }
   try {
     const r = await api.cambiarPin(getUsuario(), actual, nuevo);
-    if (r.ok) toast('PIN actualizado ✓');
-    else toast(r.error || 'PIN actual incorrecto', true);
+    if (r.ok) toast('Contraseña actualizada ✓');
+    else toast(r.error || 'Contraseña actual incorrecta', true);
   } catch (e) {
     toast('No se pudo cambiar (¿sin conexión?): ' + e.message, true);
   }

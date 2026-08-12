@@ -87,9 +87,11 @@ export function debeConfirmarNavegacion({ valor, enviado }) {
 
 export async function ejecutarUnaVez(boton, accion) {
   if (boton.disabled) return undefined;
+  const textoOriginal = boton.textContent;
   boton.disabled = true;
+  boton.textContent = 'Guardando…';
   try { return await accion(); }
-  finally { boton.disabled = false; }
+  finally { boton.disabled = false; boton.textContent = textoOriginal; }
 }
 
 export function sesionAutenticada(usuario, token) {

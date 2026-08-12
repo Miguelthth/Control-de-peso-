@@ -61,7 +61,7 @@ function siguienteBloqueoPin(intentosAnteriores, ahora = Date.now()) {
   return { intentos, hasta: ahora + demora };
 }
 
-function pinNuevoValido(pin) { return /^\d{4}$/.test(String(pin)); }
+function pinNuevoValido(pin) { return String(pin).length >= 6; }
 
 function usuarioValido(usuario) {
   return /^[\p{L}\p{N} _.-]{1,64}$/u.test(String(usuario || '')) && !String(usuario).includes('..');
@@ -208,9 +208,11 @@ function debeConfirmarNavegacion({ valor, enviado }) {
 
 async function ejecutarUnaVez(boton, accion) {
   if (boton.disabled) return undefined;
+  const textoOriginal = boton.textContent;
   boton.disabled = true;
+  boton.textContent = 'Guardando…';
   try { return await accion(); }
-  finally { boton.disabled = false; }
+  finally { boton.disabled = false; boton.textContent = textoOriginal; }
 }
 
 function sesionAutenticada(usuario, token) {
@@ -1115,8 +1117,8 @@ async function validarCodigoActivacion() {
 
 async function guardarPinNuevo() {
   const pin = document.getElementById('pin-nuevo-input').value;
-  if (!/^\d{4}$/.test(pin)) {
-    alert('El PIN debe ser de 4 dígitos');
+  if (!pinNuevoValido(pin)) {
+    alert('La contraseña debe tener al menos 6 caracteres');
     return;
   }
   const r = await api.crearPin(usuarioTemp, pin);

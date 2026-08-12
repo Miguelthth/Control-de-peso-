@@ -5,7 +5,7 @@ import * as calculos from './calculos.js';
 import * as graficas from './graficas.js';
 import { generarInsights } from './insights.js';
 import { generarId, validarMovimiento, mesActualStr, hoyISO, mesDeFecha, METODOS, crearDatosVacios, normalizarDatos } from './modelo.js';
-import { descifrar, cifrarConClave, crearClaveSesion, esPaqueteCifrado } from '../../shared/cifrado.js';
+import { descifrar, cifrarConClave, crearClaveSesion, esPaqueteCifrado, necesitaMigrarClave } from '../../shared/cifrado.js';
 import { getUsuario, exigirSesion, leerClaveSesion, guardarClaveSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
 import * as api from '../../shared/api.js';
 import * as passkey from '../../shared/passkey.js';
@@ -343,9 +343,24 @@ async function confirmarPassword() {
         E.datos.movimientos.push(...nuevos);
         await persistir();
       }
-      guardarClaveSesion(pass); // para que Peso <-> Gastos ya no la vuelva a pedir el resto de la sesión
+      // Cuenta vieja con dos contraseñas distintas: la de sesión (la que ya
+      // escribió en el launcher) no fue la que acaba de descifrar sus datos
+      // aquí. Se lee ANTES de guardarClaveSesion(pass) de abajo, que si no
+      // se ejecutara primero pisaría este valor con la contraseña vieja.
+      const claveSesionActual = leerClaveSesion();
+      if (necesitaMigrarClave(claveSesionActual, pass)) {
+        const { clave: claveNueva, saltB64: saltNuevo } = await crearClaveSesion(claveSesionActual);
+        E.clave = claveNueva;
+        E.saltCifrado = saltNuevo;
+        await persistir();
+        if (candado.leerCandado('gastos', getUsuario())) {
+          candado.guardarCandado('gastos', getUsuario(), { password: claveSesionActual });
+        }
+        toast('Tu contraseña de Gastos ya quedó unificada con tu contraseña de acceso ✓');
+      }
+      guardarClaveSesion(claveSesionActual || pass); // para que Peso <-> Gastos ya no la vuelva a pedir el resto de la sesión
       finalizarConexion(pendienteDeSincronizar);
-      ofrecerActivarFaceId(pass);
+      ofrecerActivarFaceId(claveSesionActual || pass);
       return true;
     } catch (e) {
       mostrarVerificandoPassword(false);

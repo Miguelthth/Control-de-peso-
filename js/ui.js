@@ -5,7 +5,7 @@ import * as api from '../shared/api.js';
 import * as passkey from '../shared/passkey.js';
 import * as candado from '../shared/candado.js';
 import * as fondo from '../shared/fondo.js';
-import { exigirBackendActual, guardarToken, borrarToken } from '../shared/autorizacion.js';
+import { exigirBackendActual, guardarToken, borrarToken, pinNuevoValido } from '../shared/autorizacion.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -361,8 +361,8 @@ async function validarCodigoActivacion() {
 
 async function guardarPinNuevo() {
   const pin = document.getElementById('pin-nuevo-input').value;
-  if (!/^\d{4}$/.test(pin)) {
-    alert('El PIN debe ser de 4 dígitos');
+  if (!pinNuevoValido(pin)) {
+    alert('La contraseña debe tener al menos 6 caracteres');
     return;
   }
   const r = await api.crearPin(usuarioTemp, pin);

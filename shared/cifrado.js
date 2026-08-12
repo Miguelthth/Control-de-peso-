@@ -100,3 +100,12 @@ export async function descifrarConClave(paquete, clave) {
 export function esPaqueteCifrado(obj) {
   return !!obj && typeof obj === 'object' && obj.cifrado === true && typeof obj.salt === 'string' && typeof obj.iv === 'string' && typeof obj.datos === 'string';
 }
+
+// Gastos intenta primero la contraseña de sesión del launcher
+// (ver gastos/js/ui.js::intentarClaveSesion) antes de pedir la suya propia.
+// Si el usuario terminó tecleando una contraseña DISTINTA a mano y sí
+// funcionó, es una cuenta vieja con dos contraseñas separadas -- hay que
+// volver a cifrar con la de sesión para que la próxima vez ya no pregunte.
+export function necesitaMigrarClave(claveSesion, claveUsada) {
+  return !!claveSesion && claveSesion !== claveUsada;
+}

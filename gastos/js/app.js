@@ -61,7 +61,7 @@ function siguienteBloqueoPin(intentosAnteriores, ahora = Date.now()) {
   return { intentos, hasta: ahora + demora };
 }
 
-function pinNuevoValido(pin) { return /^\d{4}$/.test(String(pin)); }
+function pinNuevoValido(pin) { return String(pin).length >= 6; }
 
 function usuarioValido(usuario) {
   return /^[\p{L}\p{N} _.-]{1,64}$/u.test(String(usuario || '')) && !String(usuario).includes('..');
@@ -208,9 +208,11 @@ function debeConfirmarNavegacion({ valor, enviado }) {
 
 async function ejecutarUnaVez(boton, accion) {
   if (boton.disabled) return undefined;
+  const textoOriginal = boton.textContent;
   boton.disabled = true;
+  boton.textContent = 'Guardando…';
   try { return await accion(); }
-  finally { boton.disabled = false; }
+  finally { boton.disabled = false; boton.textContent = textoOriginal; }
 }
 
 function sesionAutenticada(usuario, token) {
@@ -573,7 +575,16 @@ function esPaqueteCifrado(obj) {
   return !!obj && typeof obj === 'object' && obj.cifrado === true && typeof obj.salt === 'string' && typeof obj.iv === 'string' && typeof obj.datos === 'string';
 }
 
-  return { cifrar, descifrar, crearClaveSesion, cifrarConClave, descifrarConClave, esPaqueteCifrado };
+// Gastos intenta primero la contraseña de sesión del launcher
+// (ver gastos/js/ui.js::intentarClaveSesion) antes de pedir la suya propia.
+// Si el usuario terminó tecleando una contraseña DISTINTA a mano y sí
+// funcionó, es una cuenta vieja con dos contraseñas separadas -- hay que
+// volver a cifrar con la de sesión para que la próxima vez ya no pregunte.
+function necesitaMigrarClave(claveSesion, claveUsada) {
+  return !!claveSesion && claveSesion !== claveUsada;
+}
+
+  return { cifrar, descifrar, crearClaveSesion, cifrarConClave, descifrarConClave, esPaqueteCifrado, necesitaMigrarClave };
 })();
 const cifrar = cifrado.cifrar;
 const descifrar = cifrado.descifrar;
@@ -581,6 +592,7 @@ const crearClaveSesion = cifrado.crearClaveSesion;
 const cifrarConClave = cifrado.cifrarConClave;
 const descifrarConClave = cifrado.descifrarConClave;
 const esPaqueteCifrado = cifrado.esPaqueteCifrado;
+const necesitaMigrarClave = cifrado.necesitaMigrarClave;
 
 // ── shared/passkey.js ──────────────────────────────────────────
 const passkey = (function () {
@@ -2085,9 +2097,24 @@ async function confirmarPassword() {
         E.datos.movimientos.push(...nuevos);
         await persistir();
       }
-      guardarClaveSesion(pass); // para que Peso <-> Gastos ya no la vuelva a pedir el resto de la sesión
+      // Cuenta vieja con dos contraseñas distintas: la de sesión (la que ya
+      // escribió en el launcher) no fue la que acaba de descifrar sus datos
+      // aquí. Se lee ANTES de guardarClaveSesion(pass) de abajo, que si no
+      // se ejecutara primero pisaría este valor con la contraseña vieja.
+      const claveSesionActual = leerClaveSesion();
+      if (necesitaMigrarClave(claveSesionActual, pass)) {
+        const { clave: claveNueva, saltB64: saltNuevo } = await crearClaveSesion(claveSesionActual);
+        E.clave = claveNueva;
+        E.saltCifrado = saltNuevo;
+        await persistir();
+        if (candado.leerCandado('gastos', getUsuario())) {
+          candado.guardarCandado('gastos', getUsuario(), { password: claveSesionActual });
+        }
+        toast('Tu contraseña de Gastos ya quedó unificada con tu contraseña de acceso ✓');
+      }
+      guardarClaveSesion(claveSesionActual || pass); // para que Peso <-> Gastos ya no la vuelva a pedir el resto de la sesión
       finalizarConexion(pendienteDeSincronizar);
-      ofrecerActivarFaceId(pass);
+      ofrecerActivarFaceId(claveSesionActual || pass);
       return true;
     } catch (e) {
       mostrarVerificandoPassword(false);

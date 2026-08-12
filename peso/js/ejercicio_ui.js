@@ -33,20 +33,31 @@ function actualizarSync() {
   if (el) el.textContent = leerPendientes(getUsuario()).length ? `${leerPendientes(getUsuario()).length} pendiente(s)` : 'Drive al día';
 }
 
+// Rellena por NOMBRE lo que falte del catálogo inicial (categorías y
+// ejercicios), sin tocar rutinas/sesiones/hiits. A propósito NO depende de
+// cuántos ejercicios ya haya -- un solo ejercicio de prueba bastaba para
+// que una versión anterior de este arreglo (que solo actuaba con 0) se
+// saltara por completo y nunca rellenara el resto. Exportada para que
+// tanto el arranque del módulo como el botón "Buscar actualización" de
+// Ajustes (peso/js/ui.js) puedan llamarla -- un usuario no debería
+// necesitar un botón aparte para "arreglar mi catálogo".
+export function rellenarCatalogoFaltante(datos) {
+  const base = crearDocumentoEjercicio();
+  const nombresCategoria = new Set((datos.categorias || []).map((c) => c.nombre));
+  const faltanCategorias = base.categorias.filter((c) => !nombresCategoria.has(c.nombre));
+  const nombresEjercicio = new Set((datos.ejercicios || []).map((e) => e.nombre));
+  const faltanEjercicios = base.ejercicios.filter((e) => !nombresEjercicio.has(e.nombre));
+  if (!faltanCategorias.length && !faltanEjercicios.length) return false;
+  datos.categorias = [...(datos.categorias || []), ...faltanCategorias];
+  datos.ejercicios = [...(datos.ejercicios || []), ...faltanEjercicios];
+  return true;
+}
+
 export async function iniciarModuloEjercicio(toast) {
   S.toast = toast || S.toast;
   S.datos = leerLocal(getUsuario());
   if (!S.datos?.version) S.datos = crearDocumentoEjercicio();
-  else if (!S.datos.ejercicios?.length) {
-    // Documento ya existía (de antes del catálogo por defecto) pero sin
-    // ejercicios propios todavía -- se rellena con el catálogo inicial sin
-    // tocar rutinas/sesiones/hiits que ya hubiera. Si el usuario ya tiene
-    // aunque sea un ejercicio propio, esto no se toca nunca.
-    const base = crearDocumentoEjercicio();
-    S.datos.categorias = base.categorias;
-    S.datos.ejercicios = base.ejercicios;
-    guardarLocal(getUsuario(), S.datos);
-  }
+  else if (rellenarCatalogoFaltante(S.datos)) guardarLocal(getUsuario(), S.datos);
   try { const r = await api.leerEjercicio(); if (r.ok) { S.datos = mezclarDocumento(S.datos, r.datos); guardarLocal(getUsuario(), S.datos); } } catch {}
   await sincronizar().catch(() => {});
   if (!S.redLista) { S.redLista = true; addEventListener('online', () => refrescarRemoto().catch(() => {})); document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescarRemoto().catch(() => {}); }); }

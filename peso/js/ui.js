@@ -16,8 +16,8 @@ import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, debeConf
 import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
 import { pinNuevoValido } from '../../shared/autorizacion.js';
-import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio } from './ejercicio_ui.js';
-import { mutarLocal } from './ejercicio_almacen.js';
+import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio, rellenarCatalogoFaltante } from './ejercicio_ui.js';
+import { mutarLocal, leerLocal, guardarLocal } from './ejercicio_almacen.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -523,6 +523,14 @@ async function buscarActualizacionManual() {
   } catch (e) {
     E.actualizacion.buscando = false;
     toast(e.message, true);
+  }
+  // No solo revisa si hay código nuevo -- también rellena el catálogo de
+  // ejercicios si algo faltara (mismo relleno que corre al abrir la app).
+  // Así "Buscar actualización" es el único botón que hace falta tocar.
+  const datosEjercicio = leerLocal(getUsuario());
+  if (datosEjercicio?.version && rellenarCatalogoFaltante(datosEjercicio)) {
+    guardarLocal(getUsuario(), datosEjercicio);
+    toast('Catálogo de ejercicios actualizado ✓');
   }
   renderAjustes();
 }

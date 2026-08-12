@@ -1595,6 +1595,16 @@ async function iniciarModuloEjercicio(toast) {
   S.toast = toast || S.toast;
   S.datos = leerLocal(getUsuario());
   if (!S.datos?.version) S.datos = crearDocumentoEjercicio();
+  else if (!S.datos.ejercicios?.length) {
+    // Documento ya existía (de antes del catálogo por defecto) pero sin
+    // ejercicios propios todavía -- se rellena con el catálogo inicial sin
+    // tocar rutinas/sesiones/hiits que ya hubiera. Si el usuario ya tiene
+    // aunque sea un ejercicio propio, esto no se toca nunca.
+    const base = crearDocumentoEjercicio();
+    S.datos.categorias = base.categorias;
+    S.datos.ejercicios = base.ejercicios;
+    guardarLocal(getUsuario(), S.datos);
+  }
   try { const r = await api.leerEjercicio(); if (r.ok) { S.datos = mezclarDocumento(S.datos, r.datos); guardarLocal(getUsuario(), S.datos); } } catch {}
   await sincronizar().catch(() => {});
   if (!S.redLista) { S.redLista = true; addEventListener('online', () => refrescarRemoto().catch(() => {})); document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescarRemoto().catch(() => {}); }); }
@@ -1650,11 +1660,21 @@ function renderEntrenar() {
 }
 
 function abrirEjercicios() {
-  const ejercicios = (S.datos.ejercicios || []).filter((e) => e.activo !== false);
-  abrirModal('Ejercicios', `<div class="modal-toolbar"><button type="button" id="nuevo-ejercicio" class="btn-primario">+ Nuevo ejercicio</button><button type="button" id="categorias">Categorías</button></div><div class="lista-modal">${ejercicios.map((e) => `<button type="button" data-ejercicio="${e.id}"><span><b>${escapeHTML(e.nombre)}</b><small>${escapeHTML(S.datos.categorias.find((c) => c.id === e.categoriaId)?.nombre || '')} · ${escapeHTML(e.modalidad)}</small></span><i>Editar</i></button>`).join('') || '<p class="estado-vacio">Todavía no hay ejercicios.</p>'}</div>`, (c) => {
+  const pintar = (c) => {
+    const ejercicios = (S.datos.ejercicios || []).filter((e) => e.activo !== false);
+    c.querySelector('#lista-ejercicios').innerHTML = ejercicios.map((e) => `<div class="fila-selector-ejercicio"><button type="button" data-ejercicio="${e.id}"><span><b>${escapeHTML(e.nombre)}</b><small>${escapeHTML(S.datos.categorias.find((cat) => cat.id === e.categoriaId)?.nombre || '')} · ${escapeHTML(e.modalidad)}</small></span><i>Editar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-ejercicio="${e.id}" aria-label="Borrar ${escapeAtributo(e.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Todavía no hay ejercicios.</p>';
+    c.querySelectorAll('[data-ejercicio]').forEach((b) => b.onclick = () => abrirFormularioEjercicio(b.dataset.ejercicio));
+    c.querySelectorAll('[data-borrar-ejercicio]').forEach((b) => b.onclick = () => {
+      const ejercicio = S.datos.ejercicios.find((x) => x.id === b.dataset.borrarEjercicio);
+      if (!confirm(`¿Borrar "${ejercicio.nombre}"? Las rutinas que ya lo usan lo conservan en tu historial, pero ya no lo podrás agregar a rutinas nuevas.`)) return;
+      guardar((d) => { const x = d.ejercicios.find((y) => y.id === ejercicio.id); if (x) x.activo = false; }, 'borrar_ejercicio', ejercicio.id);
+      pintar(c);
+    });
+  };
+  abrirModal('Ejercicios', `<div class="modal-toolbar"><button type="button" id="nuevo-ejercicio" class="btn-primario">+ Nuevo ejercicio</button><button type="button" id="categorias">Categorías</button></div><div id="lista-ejercicios" class="lista-modal"></div>`, (c) => {
     c.querySelector('#nuevo-ejercicio').onclick = () => abrirFormularioEjercicio();
     c.querySelector('#categorias').onclick = abrirCategorias;
-    c.querySelectorAll('[data-ejercicio]').forEach((b) => b.onclick = () => abrirFormularioEjercicio(b.dataset.ejercicio));
+    pintar(c);
   }, 'CATÁLOGO');
 }
 
@@ -2321,6 +2341,8 @@ function renderAjustes() {
     b.classList.toggle('activo', activo); b.setAttribute('aria-pressed', String(activo));
   });
   document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
+  document.getElementById('tarjeta-borrar-ejercicios').classList.toggle('oculto', !esAdmin());
+  document.getElementById('tarjeta-borrar-rutinas').classList.toggle('oculto', !esAdmin());
   document.getElementById('tarjeta-fechas-reto').classList.toggle('oculto', !esAdmin());
   asignarCampoAjuste('reto-fecha-inicio', E.datos.retoInicio || '');
   asignarCampoAjuste('reto-fecha-fin', E.datos.retoFin || '');
@@ -2562,6 +2584,18 @@ function wireAjustes() {
     } catch (e) {
       toast('No se pudo borrar (¿sin conexión?): ' + e.message, true);
     }
+  });
+  document.getElementById('btn-borrar-ejercicios').addEventListener('click', () => {
+    const confirmacion = prompt('Esto borra TODOS tus ejercicios (los del catálogo por defecto y los que hayas creado). Tus rutinas y tu historial se quedan igual. Escribe BORRAR para confirmar:');
+    if (confirmacion !== 'BORRAR') return;
+    mutarLocal(getUsuario(), (d) => { d.ejercicios = []; }, { tipo: 'borrar_ejercicios' });
+    toast('Tus ejercicios fueron borrados');
+  });
+  document.getElementById('btn-borrar-rutinas').addEventListener('click', () => {
+    const confirmacion = prompt('Esto borra tus rutinas armadas y tu historial de entrenamientos/HIIT. Tu catálogo de ejercicios se queda igual. Escribe BORRAR para confirmar:');
+    if (confirmacion !== 'BORRAR') return;
+    mutarLocal(getUsuario(), (d) => { d.rutinas = []; d.sesiones = []; d.hiits = []; }, { tipo: 'borrar_rutinas' });
+    toast('Tus rutinas y entrenamientos fueron borrados');
   });
 }
 

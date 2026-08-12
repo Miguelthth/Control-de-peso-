@@ -17,6 +17,7 @@ import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
 import { pinNuevoValido } from '../../shared/autorizacion.js';
 import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio } from './ejercicio_ui.js';
+import { mutarLocal } from './ejercicio_almacen.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -464,6 +465,8 @@ function renderAjustes() {
     b.classList.toggle('activo', activo); b.setAttribute('aria-pressed', String(activo));
   });
   document.getElementById('tarjeta-borrar-datos').classList.toggle('oculto', !esAdmin());
+  document.getElementById('tarjeta-borrar-ejercicios').classList.toggle('oculto', !esAdmin());
+  document.getElementById('tarjeta-borrar-rutinas').classList.toggle('oculto', !esAdmin());
   document.getElementById('tarjeta-fechas-reto').classList.toggle('oculto', !esAdmin());
   asignarCampoAjuste('reto-fecha-inicio', E.datos.retoInicio || '');
   asignarCampoAjuste('reto-fecha-fin', E.datos.retoFin || '');
@@ -705,6 +708,18 @@ function wireAjustes() {
     } catch (e) {
       toast('No se pudo borrar (¿sin conexión?): ' + e.message, true);
     }
+  });
+  document.getElementById('btn-borrar-ejercicios').addEventListener('click', () => {
+    const confirmacion = prompt('Esto borra TODOS tus ejercicios (los del catálogo por defecto y los que hayas creado). Tus rutinas y tu historial se quedan igual. Escribe BORRAR para confirmar:');
+    if (confirmacion !== 'BORRAR') return;
+    mutarLocal(getUsuario(), (d) => { d.ejercicios = []; }, { tipo: 'borrar_ejercicios' });
+    toast('Tus ejercicios fueron borrados');
+  });
+  document.getElementById('btn-borrar-rutinas').addEventListener('click', () => {
+    const confirmacion = prompt('Esto borra tus rutinas armadas y tu historial de entrenamientos/HIIT. Tu catálogo de ejercicios se queda igual. Escribe BORRAR para confirmar:');
+    if (confirmacion !== 'BORRAR') return;
+    mutarLocal(getUsuario(), (d) => { d.rutinas = []; d.sesiones = []; d.hiits = []; }, { tipo: 'borrar_rutinas' });
+    toast('Tus rutinas y entrenamientos fueron borrados');
   });
 }
 

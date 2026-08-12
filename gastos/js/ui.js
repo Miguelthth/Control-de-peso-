@@ -12,6 +12,7 @@ import * as passkey from '../../shared/passkey.js';
 import * as candado from '../../shared/candado.js';
 import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro } from '../../shared/ui_seguridad.js';
+import { leerMetadataActualizacion, formatearFechaActualizacion, obtenerEstadoActualizacion, buscarActualizacion } from '../../shared/actualizacion.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -32,6 +33,7 @@ const E = {
   lecturaApertura: null,
   reintentandoApertura: false,
   cleanupSincronizacion: null,
+  actualizacion: { metadata: null, buscando: false, preparada: false },
 };
 
 const ICONOS_INSIGHT = {
@@ -73,6 +75,7 @@ function formatoFechaCorta(fecha) {
   return fecha === hoyISO() ? `Hoy · ${capitalizada}` : capitalizada;
 }
 
+let registroSW = null;
 let toastTimeout;
 function toast(msg, esError = false) {
   clearTimeout(toastTimeout);
@@ -795,6 +798,46 @@ function renderAjustes() {
 
   document.getElementById('ajustes-info').textContent = `${E.datos.movimientos.length} movimientos registrados · ${E.datos.categorias.length} categorías.`;
   actualizarBotonesFaceIdAjustes();
+
+  const meta = E.actualizacion.metadata;
+  document.getElementById('actualizacion-version').textContent = meta?.version || '—';
+  document.getElementById('actualizacion-fecha').textContent = meta
+    ? formatearFechaActualizacion(meta.installedAt) : 'Sin información';
+  document.getElementById('actualizacion-estado').textContent = obtenerEstadoActualizacion({
+    soportado: 'serviceWorker' in navigator, metadata: meta,
+    buscando: E.actualizacion.buscando, preparada: E.actualizacion.preparada,
+  });
+}
+
+async function releerMetadataActualizacion() {
+  E.actualizacion.metadata = await leerMetadataActualizacion();
+  if (E.vista === 'ajustes') renderAjustes();
+}
+
+function observarInstalacionSW(worker) {
+  if (!worker) return;
+  worker.addEventListener('statechange', () => {
+    if (worker.state === 'installed') {
+      E.actualizacion.preparada = true;
+      E.actualizacion.buscando = false;
+      if (E.vista === 'ajustes') renderAjustes();
+    }
+  });
+}
+
+async function buscarActualizacionManual() {
+  E.actualizacion.buscando = true;
+  E.actualizacion.preparada = false;
+  renderAjustes();
+  try {
+    await buscarActualizacion(registroSW);
+    observarInstalacionSW(registroSW.installing);
+    if (!registroSW.installing) E.actualizacion.buscando = false;
+  } catch (e) {
+    E.actualizacion.buscando = false;
+    toast(e.message, true);
+  }
+  renderAjustes();
 }
 
 async function actualizarBotonesFaceIdAjustes() {
@@ -992,6 +1035,7 @@ function wireAjustes() {
   document.getElementById('btn-cambiar-password').addEventListener('click', abrirModalCambiarPassword);
   document.getElementById('btn-faceid-activar').addEventListener('click', activarFaceIdDesdeAjustes);
   document.getElementById('btn-faceid-desactivar').addEventListener('click', desactivarFaceIdDesdeAjustes);
+  document.getElementById('btn-buscar-actualizacion').addEventListener('click', buscarActualizacionManual);
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
     E.cleanupSincronizacion?.();
     E.cleanupSincronizacion = null;
@@ -1187,7 +1231,13 @@ if ('serviceWorker' in navigator) {
   // Ver comentario igual en js/ui.js (launcher) -- update() fuerza la
   // revisión sin cambiar la URL del service worker en cada carga.
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('../sw.js').then((r) => r.update()).catch(() => {});
+    navigator.serviceWorker.register('../sw.js').then((r) => {
+      registroSW = r;
+      r.addEventListener('updatefound', () => observarInstalacionSW(r.installing));
+      observarInstalacionSW(r.installing);
+      releerMetadataActualizacion();
+      return r.update();
+    }).catch(() => {});
   });
   // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
   // control un service worker nuevo, pero no si hay un campo con texto sin

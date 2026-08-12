@@ -6,7 +6,7 @@
 import * as cola from './cola.js';
 import * as api from '../../shared/api.js';
 import * as graficas from './graficas.js';
-import * as actualizacion from './actualizacion.js';
+import * as actualizacion from './actualizacion_peso.js';
 import * as ui_helpers from './ui_helpers.js';
 import { hoyISO, validarPeso, kgALb, lbAKg, aKg, normalizarEntradaPeso } from './modelo.js';
 import {

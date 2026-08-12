@@ -593,6 +593,58 @@ const idSeguro = ui_seguridad.idSeguro;
 const urlLocalSegura = ui_seguridad.urlLocalSegura;
 const colorSeguro = ui_seguridad.colorSeguro;
 
+// ── shared/actualizacion.js ──────────────────────────────────────────
+const actualizacion = (function () {
+const URL_METADATA = '../__app_meta__.json';
+
+function normalizarMetadata(valor) {
+  if (!valor || typeof valor !== 'object') return null;
+  const version = String(valor.version || '').trim();
+  const installedAt = String(valor.installedAt || '').trim();
+  if (!version || !installedAt || Number.isNaN(Date.parse(installedAt))) return null;
+  return { version, installedAt: new Date(installedAt).toISOString() };
+}
+
+function formatearFechaActualizacion(installedAt, zonaHoraria = 'America/Tijuana') {
+  const fecha = new Date(installedAt);
+  if (Number.isNaN(fecha.getTime())) return 'Sin información';
+  const opciones = {
+    dateStyle: 'long', timeStyle: 'short', hour12: false,
+    ...(zonaHoraria ? { timeZone: zonaHoraria } : {}),
+  };
+  try { return new Intl.DateTimeFormat('es-MX', opciones).format(fecha); }
+  catch { return new Intl.DateTimeFormat('es-MX', { dateStyle: 'long', timeStyle: 'short' }).format(fecha); }
+}
+
+function obtenerEstadoActualizacion({ soportado, buscando = false, preparada = false, metadata = null }) {
+  if (!soportado) return 'No disponible';
+  if (buscando) return 'Buscando actualización…';
+  if (preparada) return 'Actualización preparada';
+  return metadata ? 'Actualizada' : 'Sin información';
+}
+
+async function leerMetadataActualizacion(fetchFn = fetch) {
+  try {
+    const respuesta = await fetchFn(URL_METADATA, { cache: 'no-store' });
+    if (!respuesta.ok) return null;
+    return normalizarMetadata(await respuesta.json());
+  } catch { return null; }
+}
+
+async function buscarActualizacion(registro) {
+  if (!registro?.update) throw new Error('Actualizaciones no disponibles');
+  await registro.update();
+  return registro;
+}
+
+  return { normalizarMetadata, formatearFechaActualizacion, obtenerEstadoActualizacion, leerMetadataActualizacion, buscarActualizacion };
+})();
+const normalizarMetadata = actualizacion.normalizarMetadata;
+const formatearFechaActualizacion = actualizacion.formatearFechaActualizacion;
+const obtenerEstadoActualizacion = actualizacion.obtenerEstadoActualizacion;
+const leerMetadataActualizacion = actualizacion.leerMetadataActualizacion;
+const buscarActualizacion = actualizacion.buscarActualizacion;
+
 // ── peso/js/modelo.js ──────────────────────────────────────────
 const modelo = (function () {
 // Forma de los datos y validación. Sin DOM, sin red.
@@ -1117,49 +1169,14 @@ const hayCambiosRemotos = cola.hayCambiosRemotos;
 const sincronizar = cola.sincronizar;
 const iniciarSincronizacionAutomatica = cola.iniciarSincronizacionAutomatica;
 
-// ── peso/js/actualizacion.js ──────────────────────────────────────────
-const actualizacion = (function () {
-const URL_METADATA = '../__app_meta__.json';
-
-function normalizarMetadata(valor) {
-  if (!valor || typeof valor !== 'object') return null;
-  const version = String(valor.version || '').trim();
-  const installedAt = String(valor.installedAt || '').trim();
-  if (!version || !installedAt || Number.isNaN(Date.parse(installedAt))) return null;
-  return { version, installedAt: new Date(installedAt).toISOString() };
-}
-
-function formatearFechaActualizacion(installedAt, zonaHoraria = 'America/Tijuana') {
-  const fecha = new Date(installedAt);
-  if (Number.isNaN(fecha.getTime())) return 'Sin información';
-  const opciones = {
-    dateStyle: 'long', timeStyle: 'short', hour12: false,
-    ...(zonaHoraria ? { timeZone: zonaHoraria } : {}),
-  };
-  try { return new Intl.DateTimeFormat('es-MX', opciones).format(fecha); }
-  catch { return new Intl.DateTimeFormat('es-MX', { dateStyle: 'long', timeStyle: 'short' }).format(fecha); }
-}
-
-function obtenerEstadoActualizacion({ soportado, buscando = false, preparada = false, metadata = null }) {
-  if (!soportado) return 'No disponible';
-  if (buscando) return 'Buscando actualización…';
-  if (preparada) return 'Actualización preparada';
-  return metadata ? 'Actualizada' : 'Sin información';
-}
-
-async function leerMetadataActualizacion(fetchFn = fetch) {
-  try {
-    const respuesta = await fetchFn(URL_METADATA, { cache: 'no-store' });
-    if (!respuesta.ok) return null;
-    return normalizarMetadata(await respuesta.json());
-  } catch { return null; }
-}
-
-async function buscarActualizacion(registro) {
-  if (!registro?.update) throw new Error('Actualizaciones no disponibles');
-  await registro.update();
-  return registro;
-}
+// ── peso/js/actualizacion_peso.js ──────────────────────────────────────────
+const actualizacion_peso = (function () {
+// Las funciones genéricas de "hay una versión nueva" viven en
+// shared/actualizacion.js (las usan Peso y Gastos por igual). Aquí solo se
+// re-exportan, junto con las que sí son específicas de Peso (abajo). El
+// import + export por separado (no "export {...} from") es a propósito:
+// build.py solo sabe borrar en el bundle un "export { nombre };" suelto,
+// no la sintaxis combinada con "from".
 
 function hayCapturaPesoPendiente(captura) {
   if (!captura) return false;
@@ -1181,16 +1198,11 @@ function esCampoAjusteDiferible(id, type) {
   return type !== 'file' && CAMPOS_AJUSTE_DIFERIBLES.has(String(id || ''));
 }
 
-  return { normalizarMetadata, formatearFechaActualizacion, obtenerEstadoActualizacion, leerMetadataActualizacion, buscarActualizacion, hayCapturaPesoPendiente, decidirRecargaActualizacion, esCampoAjusteDiferible };
+  return { hayCapturaPesoPendiente, decidirRecargaActualizacion, esCampoAjusteDiferible };
 })();
-const normalizarMetadata = actualizacion.normalizarMetadata;
-const formatearFechaActualizacion = actualizacion.formatearFechaActualizacion;
-const obtenerEstadoActualizacion = actualizacion.obtenerEstadoActualizacion;
-const leerMetadataActualizacion = actualizacion.leerMetadataActualizacion;
-const buscarActualizacion = actualizacion.buscarActualizacion;
-const hayCapturaPesoPendiente = actualizacion.hayCapturaPesoPendiente;
-const decidirRecargaActualizacion = actualizacion.decidirRecargaActualizacion;
-const esCampoAjusteDiferible = actualizacion.esCampoAjusteDiferible;
+const hayCapturaPesoPendiente = actualizacion_peso.hayCapturaPesoPendiente;
+const decidirRecargaActualizacion = actualizacion_peso.decidirRecargaActualizacion;
+const esCampoAjusteDiferible = actualizacion_peso.esCampoAjusteDiferible;
 
 // ── peso/js/ui_helpers.js ──────────────────────────────────────────
 const ui_helpers = (function () {

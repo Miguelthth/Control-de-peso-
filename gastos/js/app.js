@@ -921,6 +921,58 @@ const idSeguro = ui_seguridad.idSeguro;
 const urlLocalSegura = ui_seguridad.urlLocalSegura;
 const colorSeguro = ui_seguridad.colorSeguro;
 
+// ── shared/actualizacion.js ──────────────────────────────────────────
+const actualizacion = (function () {
+const URL_METADATA = '../__app_meta__.json';
+
+function normalizarMetadata(valor) {
+  if (!valor || typeof valor !== 'object') return null;
+  const version = String(valor.version || '').trim();
+  const installedAt = String(valor.installedAt || '').trim();
+  if (!version || !installedAt || Number.isNaN(Date.parse(installedAt))) return null;
+  return { version, installedAt: new Date(installedAt).toISOString() };
+}
+
+function formatearFechaActualizacion(installedAt, zonaHoraria = 'America/Tijuana') {
+  const fecha = new Date(installedAt);
+  if (Number.isNaN(fecha.getTime())) return 'Sin información';
+  const opciones = {
+    dateStyle: 'long', timeStyle: 'short', hour12: false,
+    ...(zonaHoraria ? { timeZone: zonaHoraria } : {}),
+  };
+  try { return new Intl.DateTimeFormat('es-MX', opciones).format(fecha); }
+  catch { return new Intl.DateTimeFormat('es-MX', { dateStyle: 'long', timeStyle: 'short' }).format(fecha); }
+}
+
+function obtenerEstadoActualizacion({ soportado, buscando = false, preparada = false, metadata = null }) {
+  if (!soportado) return 'No disponible';
+  if (buscando) return 'Buscando actualización…';
+  if (preparada) return 'Actualización preparada';
+  return metadata ? 'Actualizada' : 'Sin información';
+}
+
+async function leerMetadataActualizacion(fetchFn = fetch) {
+  try {
+    const respuesta = await fetchFn(URL_METADATA, { cache: 'no-store' });
+    if (!respuesta.ok) return null;
+    return normalizarMetadata(await respuesta.json());
+  } catch { return null; }
+}
+
+async function buscarActualizacion(registro) {
+  if (!registro?.update) throw new Error('Actualizaciones no disponibles');
+  await registro.update();
+  return registro;
+}
+
+  return { normalizarMetadata, formatearFechaActualizacion, obtenerEstadoActualizacion, leerMetadataActualizacion, buscarActualizacion };
+})();
+const normalizarMetadata = actualizacion.normalizarMetadata;
+const formatearFechaActualizacion = actualizacion.formatearFechaActualizacion;
+const obtenerEstadoActualizacion = actualizacion.obtenerEstadoActualizacion;
+const leerMetadataActualizacion = actualizacion.leerMetadataActualizacion;
+const buscarActualizacion = actualizacion.buscarActualizacion;
+
 // ── gastos/js/modelo.js ──────────────────────────────────────────
 const modelo = (function () {
 // Forma de los datos, valores por defecto y validación. Sin DOM, sin storage.
@@ -1786,6 +1838,7 @@ const E = {
   lecturaApertura: null,
   reintentandoApertura: false,
   cleanupSincronizacion: null,
+  actualizacion: { metadata: null, buscando: false, preparada: false },
 };
 
 const ICONOS_INSIGHT = {
@@ -1827,6 +1880,7 @@ function formatoFechaCorta(fecha) {
   return fecha === hoyISO() ? `Hoy · ${capitalizada}` : capitalizada;
 }
 
+let registroSW = null;
 let toastTimeout;
 function toast(msg, esError = false) {
   clearTimeout(toastTimeout);
@@ -2549,6 +2603,46 @@ function renderAjustes() {
 
   document.getElementById('ajustes-info').textContent = `${E.datos.movimientos.length} movimientos registrados · ${E.datos.categorias.length} categorías.`;
   actualizarBotonesFaceIdAjustes();
+
+  const meta = E.actualizacion.metadata;
+  document.getElementById('actualizacion-version').textContent = meta?.version || '—';
+  document.getElementById('actualizacion-fecha').textContent = meta
+    ? formatearFechaActualizacion(meta.installedAt) : 'Sin información';
+  document.getElementById('actualizacion-estado').textContent = obtenerEstadoActualizacion({
+    soportado: 'serviceWorker' in navigator, metadata: meta,
+    buscando: E.actualizacion.buscando, preparada: E.actualizacion.preparada,
+  });
+}
+
+async function releerMetadataActualizacion() {
+  E.actualizacion.metadata = await leerMetadataActualizacion();
+  if (E.vista === 'ajustes') renderAjustes();
+}
+
+function observarInstalacionSW(worker) {
+  if (!worker) return;
+  worker.addEventListener('statechange', () => {
+    if (worker.state === 'installed') {
+      E.actualizacion.preparada = true;
+      E.actualizacion.buscando = false;
+      if (E.vista === 'ajustes') renderAjustes();
+    }
+  });
+}
+
+async function buscarActualizacionManual() {
+  E.actualizacion.buscando = true;
+  E.actualizacion.preparada = false;
+  renderAjustes();
+  try {
+    await buscarActualizacion(registroSW);
+    observarInstalacionSW(registroSW.installing);
+    if (!registroSW.installing) E.actualizacion.buscando = false;
+  } catch (e) {
+    E.actualizacion.buscando = false;
+    toast(e.message, true);
+  }
+  renderAjustes();
 }
 
 async function actualizarBotonesFaceIdAjustes() {
@@ -2746,6 +2840,7 @@ function wireAjustes() {
   document.getElementById('btn-cambiar-password').addEventListener('click', abrirModalCambiarPassword);
   document.getElementById('btn-faceid-activar').addEventListener('click', activarFaceIdDesdeAjustes);
   document.getElementById('btn-faceid-desactivar').addEventListener('click', desactivarFaceIdDesdeAjustes);
+  document.getElementById('btn-buscar-actualizacion').addEventListener('click', buscarActualizacionManual);
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
     E.cleanupSincronizacion?.();
     E.cleanupSincronizacion = null;
@@ -2941,7 +3036,13 @@ if ('serviceWorker' in navigator) {
   // Ver comentario igual en js/ui.js (launcher) -- update() fuerza la
   // revisión sin cambiar la URL del service worker en cada carga.
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('../sw.js').then((r) => r.update()).catch(() => {});
+    navigator.serviceWorker.register('../sw.js').then((r) => {
+      registroSW = r;
+      r.addEventListener('updatefound', () => observarInstalacionSW(r.installing));
+      observarInstalacionSW(r.installing);
+      releerMetadataActualizacion();
+      return r.update();
+    }).catch(() => {});
   });
   // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
   // control un service worker nuevo, pero no si hay un campo con texto sin

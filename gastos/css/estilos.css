@@ -82,6 +82,10 @@ button, input, select, textarea { font-family: inherit; }
 }
 .tarjeta h2 { font-size: 0.95rem; margin: 0 0 10px; }
 .tarjeta h3 { font-size: 0.85rem; margin: 0 0 8px; color: var(--texto-suave); font-weight: 600; }
+.actualizacion-datos { margin: 0 0 12px; }
+.actualizacion-datos div { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
+.actualizacion-datos dt { color: var(--texto-suave); }
+.actualizacion-datos dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 
 /* ---- Captura ---- */
 .captura-monto {

@@ -421,6 +421,9 @@ img, svg, video, canvas { max-width: 100%; }
 .ancho-completo { width: 100%; max-width: none; }
 .estado-vacio { padding: 20px; text-align: center; color: var(--texto-suave); border: 1px dashed var(--borde); border-radius: 14px; }
 .cuenta-gigante, .descanso-pantalla, .hiit-activo { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center; }
+.hiit-ejercicio-actual { display: grid; justify-items: center; gap: 6px; }
+.hiit-ejercicio-actual img { width: 140px; height: 140px; object-fit: cover; border-radius: 16px; }
+.hiit-ejercicio-actual b { font-size: 1.1rem; }
 .cuenta-gigante strong, .descanso-pantalla > strong, .hiit-activo > strong { font-size: clamp(6rem, 30vw, 10rem); line-height: .9; font-weight: 950; color: var(--primario); text-shadow: 0 15px 35px color-mix(in srgb, var(--primario) 25%, transparent); }
 .cuenta-gigante small, .descanso-pantalla > small, .hiit-activo > small { font-size: .75rem; letter-spacing: .18em; font-weight: 950; color: var(--texto-suave); }
 .entrenamiento-activo > header { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 10px; }
@@ -448,6 +451,8 @@ img, svg, video, canvas { max-width: 100%; }
 .descanso-pantalla { background: radial-gradient(circle at center, color-mix(in srgb, var(--primario) 15%, transparent), transparent 62%); }
 .descanso-pantalla .progreso-circular { display: grid; gap: 2px; margin: 10px 0 18px; }
 .descanso-pantalla .progreso-circular span, .descanso-pantalla .progreso-circular small { color: var(--texto-suave); }
+.coaching-descanso { background: var(--superficie-alt); border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; }
+.coaching-descanso p { margin: 4px 0; }
 .descanso-pantalla button { width: min(260px, 80vw); }
 .hiit-config .grid-form { margin: 18px 0; text-align: left; }
 .hiit-activo.actividad > strong { color: var(--acento); }
@@ -457,8 +462,10 @@ img, svg, video, canvas { max-width: 100%; }
 .progreso-ejercicio h1 { margin: 2px 0 0; }
 .filtros-periodo { display: flex; gap: 4px; }
 .filtros-periodo button { padding: 8px; border: 1px solid var(--borde); border-radius: 9px; color: var(--texto); background: var(--superficie); font-size: .68rem; }
+.filtros-periodo button.activo { border-color: transparent; color: #fff; background: linear-gradient(135deg, var(--primario), var(--primario-2)); font-weight: 700; }
 .historial-entrenamiento > div { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borde); }
 .historial-entrenamiento span { display: grid; }
 .historial-entrenamiento small { color: var(--texto-suave); }
 .historial-entrenamiento button { border: 0; background: transparent; color: var(--peligro); }
+.historial-entrenamiento .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; background: var(--superficie-alt); color: var(--texto-suave); font-size: .68rem; font-weight: 700; }
 @media (max-width: 370px) { .constructor-rutina article header { display: grid; } .modal-toolbar { grid-template-columns: 1fr; } .carga-discos { grid-template-columns: 1fr; } }

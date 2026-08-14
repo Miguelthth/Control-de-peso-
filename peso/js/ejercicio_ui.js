@@ -1,9 +1,14 @@
 import * as api from '../../shared/api.js';
 import { getUsuario } from '../../shared/sesion.js';
 import { escapeHTML, escapeAtributo } from '../../shared/ui_seguridad.js';
-import { ajustarCantidad, calcularDuracionHiit, crearDocumentoEjercicio, normalizarEjercicio, normalizarRutina, normalizarSerie, siguientePasoRutina, sonidosEnSegundo } from './ejercicio_modelo.js';
+import { ajustarCantidad, calcularDuracionHiit, crearDocumentoEjercicio, normalizarEjercicio, normalizarRutina, normalizarRutinaHiit, normalizarSerie, siguientePasoRutina, sonidosEnSegundo, BANCO_EJERCICIOS_HIIT } from './ejercicio_modelo.js';
 import { guardarLocal, leerLocal, leerPendientes, mezclarDocumento, mutarLocal, sincronizarPendientes } from './ejercicio_almacen.js';
-import { descansoPromedio, filtrarPeriodo, resumenHiit, resumenModalidades, seriesContables } from './ejercicio_calculos.js';
+import {
+  descansoPromedio, filtrarPeriodo, resumenHiit, resumenModalidades, seriesContables,
+  volumenPorGrupo, frecuenciaPorGrupo, balancePatron, balanceSuperiorInferior, musculosAtrasados,
+  mejorSerieHistorica, detectarEstancamiento, zonaRepeticiones, descansoRealVsProgramado,
+  ratioTrabajoDescansoHiit, constancia, ultimaMarcaEjercicio, consejoRepeticiones,
+} from './ejercicio_calculos.js';
 
 const S = { datos: null, tab: 'entrenar', toast: () => {}, audio: null, intervalo: null, wake: null, hiit: null, entrenamiento: null, descanso: null, rutinaSeleccionada: '', periodo: 'semana', sonidosEmitidos: new Set(), redLista: false };
 const uid = () => crypto.randomUUID();
@@ -47,9 +52,12 @@ export function rellenarCatalogoFaltante(datos) {
   const faltanCategorias = base.categorias.filter((c) => !nombresCategoria.has(c.nombre));
   const nombresEjercicio = new Set((datos.ejercicios || []).map((e) => e.nombre));
   const faltanEjercicios = base.ejercicios.filter((e) => !nombresEjercicio.has(e.nombre));
-  if (!faltanCategorias.length && !faltanEjercicios.length) return false;
+  const nombresRutinaHiit = new Set((datos.rutinasHiit || []).map((r) => r.nombre));
+  const faltanRutinasHiit = base.rutinasHiit.filter((r) => !nombresRutinaHiit.has(r.nombre));
+  if (!faltanCategorias.length && !faltanEjercicios.length && !faltanRutinasHiit.length) return false;
   datos.categorias = [...(datos.categorias || []), ...faltanCategorias];
   datos.ejercicios = [...(datos.ejercicios || []), ...faltanEjercicios];
+  datos.rutinasHiit = [...(datos.rutinasHiit || []), ...faltanRutinasHiit];
   return true;
 }
 
@@ -206,7 +214,25 @@ function renderEntrenamientoActivo() {
     return;
   }
   const { entrada, ejercicio } = ejercicioActual(), totalSeries = t.entradas.reduce((n, e) => n + e.series, 0), hechas = t.series.length;
-  if (t.fase === 'descanso') { const restante = Math.max(0, Math.ceil((S.descanso.finMs - Date.now()) / 1000)); p.innerHTML = `<section class="descanso-pantalla"><small>DESCANSO</small><strong>${restante}</strong><div class="progreso-circular"><span>Siguiente</span><b>${escapeHTML(ejercicio?.nombre || '')}</b><small>Serie ${t.serieNumero} de ${entrada.series}</small></div><button id="sumar-cinco">+5 s</button><button id="saltar-descanso">Saltar descanso</button></section>`; p.querySelector('#sumar-cinco').onclick = () => { S.descanso.finMs += 5000; S.descanso.extraSeg += 5; }; p.querySelector('#saltar-descanso').onclick = cerrarDescanso; return; }
+  if (t.fase === 'descanso') {
+    const restante = Math.max(0, Math.ceil((S.descanso.finMs - Date.now()) / 1000));
+    // Coaching en vivo (Fase 4): qué hiciste la vez pasada en este ejercicio,
+    // si en esta sesión vas mejor/igual/peor, y un consejo de zona de reps
+    // según lo que buscas hacer. Todo con datos que la app ya guardaba.
+    const marcaAnterior = ejercicio ? ultimaMarcaEjercicio(S.datos.sesiones || [], ejercicio.id) : null;
+    const ultimaHoy = ejercicio ? t.series.filter((s) => s.ejercicioId === ejercicio.id).at(-1) : null;
+    let comparacion = '';
+    if (marcaAnterior && ultimaHoy) {
+      const valorHoy = ultimaHoy.modalidad === 'niveles' ? Number(ultimaHoy.carga || 0) : Number(ultimaHoy.repeticiones || 0);
+      comparacion = valorHoy > marcaAnterior.valor ? '📈 Vas mejorando' : valorHoy === marcaAnterior.valor ? '➡️ Vas igual que la vez pasada' : '📉 Por debajo de tu marca anterior';
+    }
+    const consejo = consejoRepeticiones(entrada.repeticiones);
+    const coachingHtml = (marcaAnterior || consejo) ? `<div class="coaching-descanso">${marcaAnterior ? `<p>La vez pasada: <b>${marcaAnterior.valor} ${marcaAnterior.unidad === 'niveles' ? 'nivel' : 'reps'}</b>${comparacion ? ` · ${comparacion}` : ''}</p>` : ''}${consejo ? `<p class="texto-suave">${escapeHTML(consejo)}</p>` : ''}</div>` : '';
+    p.innerHTML = `<section class="descanso-pantalla"><small>DESCANSO</small><strong>${restante}</strong><div class="progreso-circular"><span>Siguiente</span><b>${escapeHTML(ejercicio?.nombre || '')}</b><small>Serie ${t.serieNumero} de ${entrada.series}</small></div>${coachingHtml}<button id="sumar-cinco">+5 s</button><button id="saltar-descanso">Saltar descanso</button></section>`;
+    p.querySelector('#sumar-cinco').onclick = () => { S.descanso.finMs += 5000; S.descanso.extraSeg += 5; };
+    p.querySelector('#saltar-descanso').onclick = cerrarDescanso;
+    return;
+  }
   p.innerHTML = `<section class="entrenamiento-activo"><header><button id="salir-rutina">×</button><div><small>${escapeHTML(t.nombre)}</small><b>${hechas}/${totalSeries} series</b></div><span>${Math.round(hechas / totalSeries * 100)}%</span></header><div class="barra-rutina"><i style="width:${hechas / totalSeries * 100}%"></i></div><article class="tarjeta-ejercicio-actual"><span class="numero-ejercicio">${t.ejercicioIndice + 1}/${t.entradas.length}</span><h1>${escapeHTML(ejercicio?.nombre || 'Ejercicio')}</h1><button type="button" id="ver-como-hacerlo" class="btn-discreto">Ver cómo hacerlo</button><p>Serie <b>${t.serieNumero}</b> de ${entrada.series} · meta ${entrada.repeticiones} reps</p>${stepperCantidad('serie-reps', 'Repeticiones', entrada.repeticiones, 1)}${cargaEntrenamiento(ejercicio)}<button id="terminar-serie" class="btn-terminar-serie">Terminar serie</button><small>Descanso programado: ${entrada.descansoSeg}s</small>${t.ejercicioIndice + 1 < t.entradas.length ? '<button id="saltar-ejercicio" class="btn-discreto">Saltar este ejercicio</button>' : ''}</article></section>`;
   conectarSteppers(p);
   const btnTerminar = p.querySelector('#terminar-serie');
@@ -287,14 +313,68 @@ function finalizarEntrenamiento() {
 function renderHiit() {
   const p = document.getElementById('ejercicio-panel');
   if (S.hiit) return renderHiitActivo();
-  p.innerHTML = `<section class="hiit-config"><div class="hiit-emblema">HIIT</div><h1>Intervalos precisos</h1><p>Actividad intensa, descansos claros y avisos que no tienes que mirar.</p><div class="grid-form"><label>Vueltas<input id="hiit-vueltas" type="number" min="1" value="6"></label><label>Actividad (s)<input id="hiit-actividad" type="number" min="1" value="30"></label><label>Descanso (s)<input id="hiit-descanso" type="number" min="0" value="20"></label></div><button id="hiit-iniciar" class="btn-entrenar">Iniciar HIIT</button></section>`;
-  p.querySelector('#hiit-iniciar').onclick = iniciarHiit;
+  p.innerHTML = `<section class="hiit-config"><div class="hiit-emblema">HIIT</div><h1>Intervalos precisos</h1><p>Actividad intensa, descansos claros y avisos que no tienes que mirar.</p><button type="button" id="hiit-rutinas" class="btn-discreto">📋 Rutinas HIIT</button><div class="grid-form"><label>Vueltas<input id="hiit-vueltas" type="number" min="1" value="6"></label><label>Actividad (s)<input id="hiit-actividad" type="number" min="1" value="30"></label><label>Descanso (s)<input id="hiit-descanso" type="number" min="0" value="20"></label></div><button id="hiit-iniciar" class="btn-entrenar">Iniciar HIIT (manual)</button></section>`;
+  p.querySelector('#hiit-iniciar').onclick = () => iniciarHiit();
+  p.querySelector('#hiit-rutinas').onclick = abrirRutinasHiit;
 }
 
-function iniciarHiit() {
-  const config = { vueltas: Number(document.getElementById('hiit-vueltas').value), actividadSeg: Number(document.getElementById('hiit-actividad').value), descansoSeg: Number(document.getElementById('hiit-descanso').value) };
+// Catálogo de rutinas HIIT (Fase 5): presets + las que Miguel/Cindy hayan
+// creado -- cada usuario tiene el suyo porque S.datos ya es por usuario
+// (leerLocal(getUsuario())). Tocar "Usar esta" arranca el HIIT directo con
+// esa configuración y su lista de ejercicios, sin pasar por el formulario
+// manual.
+function abrirRutinasHiit() {
+  const rutinas = (S.datos.rutinasHiit || []).filter((r) => r.activo !== false);
+  abrirModal('Rutinas HIIT', `<button type="button" id="nueva-rutina-hiit" class="btn-primario ancho-completo">+ Nueva rutina</button><div class="lista-modal">${rutinas.map((r) => `<div class="fila-selector-ejercicio"><button type="button" data-usar-hiit="${r.id}"><span><b>${escapeHTML(r.nombre)}</b><small>${r.vueltas} vueltas · ${r.actividadSeg}s/${r.descansoSeg}s · ${r.ejercicios.length} ejercicios</small></span><i>Usar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-hiit="${r.id}" aria-label="Borrar ${escapeAtributo(r.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Sin rutinas todavía.</p>'}</div>`, (c) => {
+    c.querySelector('#nueva-rutina-hiit').onclick = () => abrirFormularioRutinaHiit();
+    c.querySelectorAll('[data-usar-hiit]').forEach((b) => b.onclick = () => { cerrarModal(); iniciarHiit(S.datos.rutinasHiit.find((r) => r.id === b.dataset.usarHiit)); });
+    c.querySelectorAll('[data-borrar-hiit]').forEach((b) => b.onclick = () => {
+      if (!confirm('¿Borrar esta rutina de HIIT?')) return;
+      guardar((d) => { const x = d.rutinasHiit.find((y) => y.id === b.dataset.borrarHiit); if (x) x.activo = false; }, 'borrar_rutina_hiit', b.dataset.borrarHiit);
+      abrirRutinasHiit();
+    });
+  }, 'HIIT');
+}
+
+function abrirFormularioRutinaHiit() {
+  const seleccionados = new Set();
+  const marcado = (n) => seleccionados.has(n) ? 'checked' : '';
+  abrirModal('Nueva rutina HIIT', `<form id="form-rutina-hiit" class="form-modal">
+    <label>Nombre<input id="hiit-rutina-nombre" required maxlength="40"></label>
+    <label>Descripción (opcional)<textarea id="hiit-rutina-descripcion" rows="2" maxlength="200"></textarea></label>
+    <div class="grid-form"><label>Vueltas<input id="hiit-rutina-vueltas" type="number" min="1" value="8"></label><label>Actividad (s)<input id="hiit-rutina-actividad" type="number" min="1" value="30"></label><label>Descanso (s)<input id="hiit-rutina-descanso" type="number" min="0" value="20"></label></div>
+    <fieldset><legend>Ejercicios (elige el orden en que quieres que roten)</legend><div id="hiit-rutina-ejercicios">${BANCO_EJERCICIOS_HIIT.map((e) => `<label class="opcion-modalidad"><input type="checkbox" data-ejercicio-hiit="${escapeAtributo(e.nombre)}" ${marcado(e.nombre)}><span>${escapeHTML(e.nombre)}${e.imagen ? '' : ' <small>(sin foto)</small>'}</span></label>`).join('')}</div></fieldset>
+    <button class="btn-primario">Guardar rutina</button>
+  </form>`, (c) => {
+    c.querySelector('#form-rutina-hiit').onsubmit = (e) => {
+      e.preventDefault();
+      const elegidos = [...c.querySelectorAll('[data-ejercicio-hiit]:checked')].map((chk) => BANCO_EJERCICIOS_HIIT.find((ej) => ej.nombre === chk.dataset.ejercicioHiit));
+      try {
+        const rutina = normalizarRutinaHiit({
+          nombre: c.querySelector('#hiit-rutina-nombre').value,
+          descripcion: c.querySelector('#hiit-rutina-descripcion').value,
+          vueltas: c.querySelector('#hiit-rutina-vueltas').value,
+          actividadSeg: c.querySelector('#hiit-rutina-actividad').value,
+          descansoSeg: c.querySelector('#hiit-rutina-descanso').value,
+          ejercicios: elegidos,
+        });
+        guardar((d) => { d.rutinasHiit = d.rutinasHiit || []; d.rutinasHiit.push(rutina); }, 'guardar_rutina_hiit', rutina.id);
+        abrirRutinasHiit();
+      } catch (err) { S.toast(err.message, true); }
+    };
+  }, 'HIIT');
+}
+
+function iniciarHiit(rutina) {
+  const config = rutina
+    ? { vueltas: rutina.vueltas, actividadSeg: rutina.actividadSeg, descansoSeg: rutina.descansoSeg }
+    : { vueltas: Number(document.getElementById('hiit-vueltas').value), actividadSeg: Number(document.getElementById('hiit-actividad').value), descansoSeg: Number(document.getElementById('hiit-descanso').value) };
   try { calcularDuracionHiit(config); } catch (err) { return S.toast(err.message, true); }
-  S.hiit = { id: uid(), ...config, planeadoSeg: calcularDuracionHiit(config), inicioMs: Date.now(), pausaMs: 0, pausaInicio: null, faseIndice: -1, cuentaFinMs: Date.now() + 3000, estado: 'cuenta', sonidos: new Set() };
+  S.hiit = {
+    id: uid(), ...config, planeadoSeg: calcularDuracionHiit(config), inicioMs: Date.now(), pausaMs: 0, pausaInicio: null,
+    faseIndice: -1, cuentaFinMs: Date.now() + 3000, estado: 'cuenta', sonidos: new Set(),
+    nombre: rutina?.nombre || '', ejercicios: rutina?.ejercicios || null,
+  };
   S.sonidosEmitidos.clear();
   clearInterval(S.intervalo); S.intervalo = setInterval(tickHiit, 200); solicitarWake(); tickHiit();
 }
@@ -305,11 +385,16 @@ function tickHiit() { if (!S.hiit || S.hiit.pausaInicio) return renderHiitActivo
 
 function renderHiitActivo() {
   const p = document.getElementById('ejercicio-panel'), e = estadoHiit();
-  p.innerHTML = `<section class="hiit-activo ${e.tipo}"><small>${S.hiit.pausaInicio ? 'PAUSADO' : e.tipo === 'cuenta' ? 'PREPÁRATE' : e.tipo.toUpperCase()}</small><strong>${e.restante}</strong><span>${e.vuelta ? `Vuelta ${e.vuelta}/${S.hiit.vueltas}` : 'Comienza en'}</span><div class="acciones"><button id="hiit-pausa">${S.hiit.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="hiit-detener">Detener</button></div></section>`;
+  // Fase 5: qué ejercicio toca en esta vuelta, rotando la lista de la
+  // rutina elegida. Solo aplica en fase 'actividad' y si el HIIT arrancó
+  // desde una rutina (el manual/sin rutina no tiene ejercicios que mostrar).
+  const ejercicioActual = (e.tipo === 'actividad' && S.hiit.ejercicios?.length) ? S.hiit.ejercicios[(e.vuelta - 1) % S.hiit.ejercicios.length] : null;
+  const ejercicioHtml = ejercicioActual ? `<div class="hiit-ejercicio-actual">${ejercicioActual.imagen ? `<img src="${escapeAtributo(ejercicioActual.imagen)}" alt="${escapeAtributo(ejercicioActual.nombre)}" loading="lazy">` : ''}<b>${escapeHTML(ejercicioActual.nombre)}</b></div>` : '';
+  p.innerHTML = `<section class="hiit-activo ${e.tipo}"><small>${S.hiit.pausaInicio ? 'PAUSADO' : e.tipo === 'cuenta' ? 'PREPÁRATE' : e.tipo.toUpperCase()}</small><strong>${e.restante}</strong><span>${e.vuelta ? `Vuelta ${e.vuelta}/${S.hiit.vueltas}` : 'Comienza en'}</span>${ejercicioHtml}<div class="acciones"><button id="hiit-pausa">${S.hiit.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="hiit-detener">Detener</button></div></section>`;
   p.querySelector('#hiit-pausa').onclick = alternarPausaHiit; p.querySelector('#hiit-detener').onclick = () => finalizarHiit(true);
 }
 function alternarPausaHiit() { const h = S.hiit; if (h.pausaInicio) { const pausa = Date.now() - h.pausaInicio; if (h.estado === 'cuenta') h.cuentaFinMs += pausa; else h.pausaMs += pausa; h.pausaInicio = null; solicitarWake(); } else { h.pausaInicio = Date.now(); liberarWake(); } renderHiitActivo(); }
-function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const r = { id: h.id, nombre: 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: detenido ? Math.round(real / h.planeadoSeg * 100) : 100, estado: detenido ? 'detenida' : 'completada', creadoEn: iso(), modificadoEn: iso() }; guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
+function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const r = { id: h.id, nombre: h.nombre || 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: detenido ? Math.round(real / h.planeadoSeg * 100) : 100, estado: detenido ? 'detenida' : 'completada', creadoEn: iso(), modificadoEn: iso() }; guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
 
 const SONIDOS = { rapido: 'audio/rapido.mp3', cuenta: 'audio/cuenta.mp3', largo: 'audio/largo.mp3', final: 'audio/final.mp3' };
 function beep(tipo) { try { const a = new Audio(SONIDOS[tipo]); a.volume = .6; a.play().catch(() => {}); } catch {} }
@@ -320,10 +405,71 @@ function liberarWake() { S.wake?.release().catch(() => {}); S.wake = null; }
 
 function renderProgreso() {
   const p = document.getElementById('ejercicio-panel'), sesiones = filtrarPeriodo(S.datos.sesiones || [], S.periodo), hiits = filtrarPeriodo(S.datos.hiits || [], S.periodo), series = seriesContables(sesiones), m = resumenModalidades(series), h = resumenHiit(hiits);
-  p.innerHTML = `<section class="progreso-ejercicio"><header><div><small>TU CONSTANCIA</small><h1>Progreso</h1></div><div class="filtros-periodo"><button data-periodo="semana">Semana</button><button data-periodo="mes">Mes</button><button data-periodo="total">Total</button></div></header><div class="kpis-ejercicio"><div><b>${sesiones.filter((s) => s.estado === 'completada').length}</b><span>Sesiones</span></div><div><b>${series.length}</b><span>Series</span></div><div><b>${descansoPromedio(series)}s</b><span>Descanso promedio</span></div><div><b>${h.minutos}m</b><span>HIIT activo</span></div><div><b>${h.porcentajePromedio}%</b><span>HIIT promedio</span></div><div><b>${h.abandonos}</b><span>Abandonos</span></div></div><article class="tarjeta marca-resumen"><h3>Mejores esfuerzos</h3><p>Discos × reps: grandes ${m.discos.grande}, chicos ${m.discos.chico}</p><p>Nivel máximo ${m.niveles.mejor} · PC ${m.PC.repeticiones} reps</p></article><article class="tarjeta"><h3>Historial</h3><div class="historial-entrenamiento">${[...(S.datos.sesiones || []), ...(S.datos.hiits || [])].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map((r) => `<div><span><b>${escapeHTML(r.nombre || 'Entrenamiento')}</b><small>${escapeHTML(String(r.fecha || '').slice(0, 10))} · ${escapeHTML(r.estado)}</small></span><div><button data-editar-registro="${r.id}">Editar</button><button data-eliminar="${r.id}">Eliminar</button></div></div>`).join('') || '<p class="estado-vacio">Completa una rutina para ver tu historial.</p>'}</div></article></section>`;
+  p.innerHTML = `<section class="progreso-ejercicio"><header><div><small>TU CONSTANCIA</small><h1>Progreso</h1></div><div class="filtros-periodo"><button data-periodo="semana" class="${S.periodo === 'semana' ? 'activo' : ''}" aria-pressed="${S.periodo === 'semana'}">Semana</button><button data-periodo="mes" class="${S.periodo === 'mes' ? 'activo' : ''}" aria-pressed="${S.periodo === 'mes'}">Mes</button><button data-periodo="total" class="${S.periodo === 'total' ? 'activo' : ''}" aria-pressed="${S.periodo === 'total'}">Total</button></div></header><button type="button" id="ver-analisis-completo" class="btn-discreto">📊 Ver análisis completo</button><div class="kpis-ejercicio"><div><b>${sesiones.filter((s) => s.estado === 'completada').length}</b><span>Sesiones</span></div><div><b>${series.length}</b><span>Series</span></div><div><b>${descansoPromedio(series)}s</b><span>Descanso promedio</span></div><div><b>${h.minutos}m</b><span>HIIT activo</span></div><div><b>${h.porcentajePromedio}%</b><span>HIIT promedio</span></div><div><b>${h.abandonos}</b><span>Abandonos</span></div></div><article class="tarjeta marca-resumen"><h3>Mejores esfuerzos</h3><p>Discos × reps: grandes ${m.discos.grande}, chicos ${m.discos.chico}</p><p>Nivel máximo ${m.niveles.mejor} · PC ${m.PC.repeticiones} reps</p></article><article class="tarjeta"><h3>Historial</h3><div class="historial-entrenamiento">${[...sesiones, ...hiits].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map((r) => `<div><span><b>${escapeHTML(r.nombre || 'Entrenamiento')}</b><small>${escapeHTML(String(r.fecha || '').slice(0, 10))} · ${escapeHTML(r.estado)}</small></span><div><button data-editar-registro="${r.id}">Editar</button><button data-eliminar="${r.id}">Eliminar</button></div></div>`).join('') || '<p class="estado-vacio">Sin registros en este periodo.</p>'}</div></article></section>`;
   p.querySelectorAll('[data-periodo]').forEach((b) => b.onclick = () => { S.periodo = b.dataset.periodo; renderProgreso(); });
+  p.querySelector('#ver-analisis-completo').onclick = abrirAnalisisCompleto;
   p.querySelectorAll('[data-editar-registro]').forEach((b) => b.onclick = () => abrirEditarRegistro(b.dataset.editarRegistro));
   p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { d.sesiones = d.sesiones.filter((x) => x.id !== b.dataset.eliminar); d.hiits = d.hiits.filter((x) => x.id !== b.dataset.eliminar); }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
+}
+
+// Análisis deportivo completo: volumen semanal por músculo, balance,
+// progreso por ejercicio, zona de repeticiones, descansos y HIIT. Se abre
+// como modal (igual que el catálogo) en vez de una vista nueva, para no
+// tocar la pantalla de Progreso que ya funciona bien.
+function abrirAnalisisCompleto() {
+  const todasSesiones = S.datos.sesiones || [], todosHiits = S.datos.hiits || [], categorias = (S.datos.categorias || []).filter((c) => c.activo !== false), ejercicios = S.datos.ejercicios || [];
+  const sesionesSemana = filtrarPeriodo(todasSesiones, 'semana');
+  const volumen = volumenPorGrupo(sesionesSemana, ejercicios, categorias);
+  const frecuencia = frecuenciaPorGrupo(sesionesSemana, ejercicios, categorias);
+  const patron = balancePatron(sesionesSemana, ejercicios);
+  const superiorInferior = balanceSuperiorInferior(sesionesSemana, ejercicios);
+  const atrasados = musculosAtrasados(todasSesiones, ejercicios, categorias);
+  const seriesTodas = seriesContables(todasSesiones);
+  const zonas = zonaRepeticiones(seriesTodas);
+  const descanso = descansoRealVsProgramado(seriesTodas);
+  const ratioHiit = ratioTrabajoDescansoHiit(todosHiits);
+  const rachaInfo = constancia(todasSesiones, todosHiits);
+
+  const idsEntrenados = [...new Set(todasSesiones.flatMap((s) => (s.series || []).map((x) => x.ejercicioId)))];
+  const filasEjercicio = idsEntrenados.map((id) => {
+    const ej = ejercicios.find((e) => e.id === id);
+    if (!ej) return '';
+    const mejor = mejorSerieHistorica(todasSesiones, id);
+    const estancado = detectarEstancamiento(todasSesiones, id);
+    return `<div><span><b>${escapeHTML(ej.nombre)}</b><small>Mejor: ${mejor ? `${mejor.valor} ${mejor.unidad === 'niveles' ? 'nivel' : 'reps'}` : '—'}${estancado ? ' · sin mejora en 4 semanas' : ''}</small></span></div>`;
+  }).filter(Boolean).join('') || '<p class="estado-vacio">Todavía no hay ejercicios entrenados.</p>';
+
+  const html = `
+    <article class="tarjeta"><h3>Volumen semanal por músculo</h3><p class="texto-suave" style="margin-top:0">Referencia: 10-20 series por semana por músculo.</p>
+      <div class="historial-entrenamiento">${volumen.map((v) => `<div><span><b>${escapeHTML(v.nombre)}</b><small>${v.series} series · ${frecuencia.find((f) => f.nombre === v.nombre)?.dias || 0} día(s)/semana</small></span><span class="badge">${v.etiqueta === 'bajo' ? 'Bajo' : v.etiqueta === 'alto' ? 'Alto' : 'En rango'}</span></div>`).join('')}</div>
+    </article>
+    <article class="tarjeta"><h3>Balance y riesgo</h3>
+      <p>Empuje ${patron.empuje} · Tirón ${patron.tiron} · Pierna ${patron.pierna} · Core ${patron.core}</p>
+      <p>${escapeHTML(patron.mensaje)}</p>
+      <p>${escapeHTML(superiorInferior.mensaje)} (superior ${superiorInferior.superior} · pierna ${superiorInferior.inferior})</p>
+    </article>
+    <article class="tarjeta"><h3>Músculos atrasados</h3>
+      <div class="historial-entrenamiento">${atrasados.map((a) => `<div><span><b>${escapeHTML(a.nombre)}</b><small>${a.dias == null ? 'sin entrenar todavía' : `hace ${a.dias} día(s)${a.recuperado ? '' : ' · aún en recuperación'}`}</small></span></div>`).join('')}</div>
+    </article>
+    <article class="tarjeta"><h3>Progreso por ejercicio</h3>
+      <div class="historial-entrenamiento">${filasEjercicio}</div>
+    </article>
+    <article class="tarjeta"><h3>Zona de repeticiones</h3>
+      <p>Fuerza (1-5): ${zonas.fuerza} · Hipertrofia (6-12): ${zonas.hipertrofia} · Resistencia (13+): ${zonas.resistencia}</p>
+      <p>${zonas.dominante ? `Entrenas sobre todo en zona de <b>${escapeHTML(zonas.dominante)}</b>.` : 'Sin series registradas todavía.'}</p>
+    </article>
+    <article class="tarjeta"><h3>Descansos</h3>
+      <p>Real ${descanso.real}s vs. programado ${descanso.planeado}s (${descanso.cumplimientoPct}% de cumplimiento).</p>
+      <p class="texto-suave" style="margin-top:0">Menos de 90s favorece hipertrofia/metabólico · 2-5 min favorece fuerza.</p>
+    </article>
+    <article class="tarjeta"><h3>HIIT</h3>
+      ${ratioHiit ? `<p>Trabajo ${ratioHiit.actividadProm}s / descanso ${ratioHiit.descansoProm}s (ratio ${ratioHiit.ratio}:1).</p><p>${escapeHTML(ratioHiit.sistema)}</p>` : '<p class="estado-vacio">Sin HIIT registrado todavía.</p>'}
+    </article>
+    <article class="tarjeta"><h3>Constancia</h3>
+      <p>Racha actual: ${rachaInfo.rachaDias} día(s) · Completadas ${rachaInfo.completadas} · Descartadas ${rachaInfo.descartadas} · Días activos ${rachaInfo.diasActivos}</p>
+    </article>
+  `;
+  abrirModal('Análisis completo', html, () => {}, 'ANÁLISIS');
 }
 
 function abrirEditarRegistro(id) {

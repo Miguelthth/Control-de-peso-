@@ -1238,54 +1238,87 @@ const MODALIDADES_CARGA = ['discos', 'niveles', 'PC'];
 const CATEGORIAS_INICIALES = ['Pierna', 'Pecho', 'Bíceps', 'Tríceps', 'Abdomen', 'Espalda', 'Hombro'];
 
 const EJERCICIOS_INICIALES = [
-  // Pecho (categoria-2)
-  { nombre: 'Press de banca con barra', categoriaId: 'categoria-2', modalidad: 'discos', imagen: 'imagenes/pecho-press-banca-barra.jpg', descripcion: 'Acuéstate en el banco con los pies firmes en el piso y agarra la barra un poco más ancho que los hombros. Baja controlado hasta rozar el pecho y empuja hacia arriba sin bloquear de golpe los codos. Mantén los omóplatos retraídos contra el banco durante todo el movimiento.' },
-  { nombre: 'Press inclinado con mancuerna', categoriaId: 'categoria-2', modalidad: 'niveles', imagen: 'imagenes/pecho-press-inclinado-mancuerna.jpg', descripcion: 'En un banco inclinado 30-45°, sube las mancuernas desde la altura del pecho hasta extender los brazos sin chocarlas arriba. Baja controlado sintiendo el estiramiento en la parte alta del pectoral. Evita arquear demasiado la espalda baja.' },
-  { nombre: 'Aperturas con mancuerna', categoriaId: 'categoria-2', modalidad: 'niveles', imagen: 'imagenes/pecho-aperturas-mancuerna.jpg', descripcion: 'Acostado en banco plano, con los codos ligeramente flexionados, abre los brazos en arco hasta sentir el estiramiento del pecho y cierra juntando las mancuernas arriba como abrazando un tronco. Es un movimiento de aislamiento: usa poco peso y controla la bajada.' },
-  { nombre: 'Press de pecho en polea (Marcy)', categoriaId: 'categoria-2', modalidad: 'niveles', imagen: 'imagenes/pecho-press-polea-marcy.jpg', descripcion: 'Ajusta las poleas a la altura del pecho, un pie adelantado para estabilidad, y empuja ambos mangos al frente hasta extender los brazos. Regresa controlado sin dejar que las poleas te jalen de golpe. Bueno para trabajar al fallo con seguridad porque no hay barra que se pueda caer.' },
-  { nombre: 'Fondos (dips) para pecho', categoriaId: 'categoria-2', modalidad: 'PC', imagen: 'imagenes/pecho-fondos.jpg', descripcion: 'En las paralelas, inclina el torso hacia adelante y los codos ligeramente hacia afuera para enfatizar pectoral inferior. Baja hasta que el hombro quede a la altura del codo y empuja de regreso. Si es muy exigente, apoya los pies en el piso para restar peso corporal.' },
-  { nombre: 'Flexiones (push-ups)', categoriaId: 'categoria-2', modalidad: 'PC', imagen: 'imagenes/pecho-flexiones.jpg', descripcion: 'Manos un poco más anchas que los hombros, cuerpo en línea recta de cabeza a talones. Baja el pecho casi hasta tocar el piso y empuja de regreso sin que la cadera se hunda. Sirve como calentamiento o accesorio de alto volumen.' },
+  // Pecho (categoria-2) -- sin banco: se quitó press de banca, press inclinado y aperturas
+  { nombre: 'Press de pecho en polea (Marcy)', categoriaId: 'categoria-2', modalidad: 'niveles', imagen: 'imagenes/pecho-press-polea-marcy.jpg', patron: 'empuje', equipo: ['marcy'], gruposSecundarios: ['Hombro', 'Tríceps'], descripcion: 'Ajusta las poleas a la altura del pecho, un pie adelantado para estabilidad, y empuja ambos mangos al frente hasta extender los brazos. Regresa controlado sin dejar que las poleas te jalen de golpe. Bueno para trabajar al fallo con seguridad porque no hay barra que se pueda caer.' },
+  { nombre: 'Fondos (dips) para pecho', categoriaId: 'categoria-2', modalidad: 'PC', imagen: 'imagenes/pecho-fondos.jpg', patron: 'empuje', equipo: ['fondos'], gruposSecundarios: ['Tríceps', 'Hombro'], descripcion: 'En las paralelas, inclina el torso hacia adelante y los codos ligeramente hacia afuera para enfatizar pectoral inferior. Baja hasta que el hombro quede a la altura del codo y empuja de regreso. Si es muy exigente, apoya los pies en el piso para restar peso corporal.' },
+  { nombre: 'Flexiones (push-ups)', categoriaId: 'categoria-2', modalidad: 'PC', imagen: 'imagenes/pecho-flexiones.jpg', patron: 'empuje', equipo: ['PC'], gruposSecundarios: ['Tríceps', 'Hombro'], descripcion: 'Manos un poco más anchas que los hombros, cuerpo en línea recta de cabeza a talones. Baja el pecho casi hasta tocar el piso y empuja de regreso sin que la cadera se hunda. Sirve como calentamiento o accesorio de alto volumen.' },
+  { nombre: 'Press de piso con mancuerna', categoriaId: 'categoria-2', modalidad: 'niveles', imagen: 'imagenes/pecho-press-piso-mancuerna.jpg', patron: 'empuje', equipo: ['mancuerna'], gruposSecundarios: ['Tríceps', 'Hombro'], descripcion: 'Acostado en el piso (no en banco), rodillas flexionadas y pies apoyados, empuja las mancuernas hacia arriba desde el pecho hasta casi extender los brazos. El piso frena el recorrido a la altura del codo, así que hay menos riesgo de sobrecargar el hombro que en banco. Sustituto directo del press de banca sin necesitar uno.' },
+  { nombre: 'Butterfly (pec deck) en la Marcy', categoriaId: 'categoria-2', modalidad: 'niveles', imagen: 'imagenes/pecho-butterfly-marcy.jpg', patron: 'empuje', equipo: ['marcy'], gruposSecundarios: ['Hombro'], descripcion: 'Sentado frente a las poleas a la altura del pecho, junta ambos brazos al frente en arco, casi extendidos, apretando el pectoral en el centro. Regresa controlado sintiendo el estiramiento. Es de aislamiento: úsalo después de un ejercicio de empuje más pesado, no como el primero de tu rutina.' },
   // Espalda (categoria-6)
-  { nombre: 'Peso muerto con barra', categoriaId: 'categoria-6', modalidad: 'discos', imagen: 'imagenes/espalda-peso-muerto-barra.jpg', descripcion: 'Pies al ancho de cadera, barra pegada a las espinillas, espalda neutra y pecho arriba. Empuja el piso con las piernas mientras la barra sube pegada al cuerpo, terminando con cadera y rodillas extendidas. Es el ejercicio base de fuerza de toda la cadena posterior: prioriza técnica sobre peso.' },
-  { nombre: 'Remo con barra', categoriaId: 'categoria-6', modalidad: 'discos', imagen: 'imagenes/espalda-remo-barra.jpg', descripcion: 'Con el torso inclinado unos 45°, espalda recta, jala la barra hacia el abdomen apretando los omóplatos al final del recorrido. Baja controlado sin dejar que la espalda se redondee. Aporta densidad y grosor a la espalda media.' },
-  { nombre: 'Jalón al pecho en polea alta (Marcy)', categoriaId: 'categoria-6', modalidad: 'niveles', imagen: 'imagenes/espalda-jalon-pecho-marcy.jpg', descripcion: 'Agarre ancho en la barra alta, jala hacia la parte alta del pecho llevando los codos hacia abajo y atrás, sin usar impulso del torso. Sustituye a la dominada mientras construyes fuerza para hacerla sin ayuda. Controla la subida en vez de dejar que el peso te jale los brazos.' },
-  { nombre: 'Remo bajo en polea (Marcy)', categoriaId: 'categoria-6', modalidad: 'niveles', imagen: 'imagenes/espalda-remo-bajo-marcy.jpg', descripcion: 'Sentado, rodillas ligeramente flexionadas, jala el mango hacia el abdomen manteniendo la espalda recta y apretando omóplatos. Deja que el torso se incline un poco adelante al soltar para aumentar el rango. Trabaja trapecio medio y romboides.' },
-  { nombre: 'Remo con mancuerna a una mano', categoriaId: 'categoria-6', modalidad: 'niveles', imagen: 'imagenes/espalda-remo-mancuerna-una-mano.jpg', descripcion: 'Apoya una rodilla y una mano en el banco, espalda paralela al piso, y jala la mancuerna hacia la cadera llevando el codo pegado al cuerpo. Trabajar un lado a la vez ayuda a corregir desbalances entre tu lado dominante y el no dominante.' },
-  { nombre: 'Superman', categoriaId: 'categoria-6', modalidad: 'PC', imagen: 'imagenes/espalda-superman.jpg', descripcion: 'Boca abajo en el piso, levanta al mismo tiempo brazos, pecho y piernas unos centímetros, apretando la zona lumbar y glúteos. Sostén 1-2 segundos arriba y baja controlado. Fortalece la zona lumbar y mejora la estabilidad de tronco sin necesidad de equipo.' },
+  { nombre: 'Peso muerto con barra', categoriaId: 'categoria-6', modalidad: 'discos', imagen: 'imagenes/espalda-peso-muerto-barra.jpg', patron: 'tiron', equipo: ['barra'], gruposSecundarios: ['Pierna'], descripcion: 'Pies al ancho de cadera, barra pegada a las espinillas, espalda neutra y pecho arriba. Empuja el piso con las piernas mientras la barra sube pegada al cuerpo, terminando con cadera y rodillas extendidas. Es el ejercicio base de fuerza de toda la cadena posterior: prioriza técnica sobre peso.' },
+  { nombre: 'Remo con barra', categoriaId: 'categoria-6', modalidad: 'discos', imagen: 'imagenes/espalda-remo-barra.jpg', patron: 'tiron', equipo: ['barra'], gruposSecundarios: ['Bíceps'], descripcion: 'Con el torso inclinado unos 45°, espalda recta, jala la barra hacia el abdomen apretando los omóplatos al final del recorrido. Baja controlado sin dejar que la espalda se redondee. Aporta densidad y grosor a la espalda media.' },
+  { nombre: 'Jalón al pecho en polea alta (Marcy)', categoriaId: 'categoria-6', modalidad: 'niveles', imagen: 'imagenes/espalda-jalon-pecho-marcy.jpg', patron: 'tiron', equipo: ['marcy'], gruposSecundarios: ['Bíceps'], descripcion: 'Agarre ancho en la barra alta, jala hacia la parte alta del pecho llevando los codos hacia abajo y atrás, sin usar impulso del torso. Sustituye a la dominada mientras construyes fuerza para hacerla sin ayuda. Controla la subida en vez de dejar que el peso te jale los brazos.' },
+  { nombre: 'Remo bajo en polea (Marcy)', categoriaId: 'categoria-6', modalidad: 'niveles', imagen: 'imagenes/espalda-remo-bajo-marcy.jpg', patron: 'tiron', equipo: ['marcy'], gruposSecundarios: ['Bíceps'], descripcion: 'Sentado, rodillas ligeramente flexionadas, jala el mango hacia el abdomen manteniendo la espalda recta y apretando omóplatos. Deja que el torso se incline un poco adelante al soltar para aumentar el rango. Trabaja trapecio medio y romboides.' },
+  { nombre: 'Remo con mancuerna a una mano', categoriaId: 'categoria-6', modalidad: 'niveles', imagen: 'imagenes/espalda-remo-mancuerna-una-mano.jpg', patron: 'tiron', equipo: ['mancuerna'], gruposSecundarios: ['Bíceps'], descripcion: 'Apoya una rodilla y una mano en el banco, espalda paralela al piso, y jala la mancuerna hacia la cadera llevando el codo pegado al cuerpo. Trabajar un lado a la vez ayuda a corregir desbalances entre tu lado dominante y el no dominante.' },
+  { nombre: 'Superman', categoriaId: 'categoria-6', modalidad: 'PC', imagen: 'imagenes/espalda-superman.jpg', patron: 'core', equipo: ['PC'], gruposSecundarios: [], descripcion: 'Boca abajo en el piso, levanta al mismo tiempo brazos, pecho y piernas unos centímetros, apretando la zona lumbar y glúteos. Sostén 1-2 segundos arriba y baja controlado. Fortalece la zona lumbar y mejora la estabilidad de tronco sin necesidad de equipo.' },
+  { nombre: 'Dominadas', categoriaId: 'categoria-6', modalidad: 'PC', imagen: 'imagenes/espalda-dominadas.jpg', patron: 'tiron', equipo: ['dominadas'], gruposSecundarios: ['Bíceps'], descripcion: 'Cuelga de la barra con agarre prono (palmas viendo hacia adelante) un poco más ancho que los hombros, y jala hasta que la barbilla pase la barra. Baja controlado hasta extensión completa del brazo, sin balancear el cuerpo. El mejor ejercicio de espalda que existe; si aún no puedes hacer una completa, empieza con negativas (bájate despacio desde arriba).' },
+  { nombre: 'Encogimientos con barra', categoriaId: 'categoria-6', modalidad: 'discos', imagen: 'imagenes/espalda-encogimientos-barra.jpg', patron: 'tiron', equipo: ['barra'], gruposSecundarios: [], descripcion: 'De pie, barra sujeta con ambas manos al frente de los muslos, sube los hombros lo más que puedas directo hacia arriba (sin rodarlos hacia adelante ni atrás) y sostén un segundo arriba. Baja controlado. Es el ejercicio directo para el trapecio, que ningún otro de la rutina trabaja de lleno.' },
   // Hombro (categoria-7)
-  { nombre: 'Press militar con barra', categoriaId: 'categoria-7', modalidad: 'discos', imagen: 'imagenes/hombro-press-militar-barra.jpg', descripcion: 'Sentado o de pie, barra a la altura de los hombros, empuja hacia arriba hasta extender los brazos sin arquear en exceso la espalda baja. Baja controlado hasta la altura de la barbilla. Es el ejercicio de empuje vertical más completo para deltoides.' },
-  { nombre: 'Press de hombro con mancuerna', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-press-mancuerna.jpg', descripcion: 'Mancuernas a la altura de los hombros con las palmas al frente, empuja hacia arriba hasta casi juntar las mancuernas sin bloquear los codos de golpe. El mayor rango de movimiento respecto a la barra ayuda a activar más fibra del deltoides.' },
-  { nombre: 'Elevación lateral con mancuerna', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-elevacion-lateral.jpg', descripcion: 'De pie, mancuernas a los costados, sube los brazos hacia los lados hasta la altura del hombro con un ligero quiebre en el codo. Sube y baja controlado, sin usar impulso de la cadera. Es el ejercicio clave para dar la forma de "V" al hombro (deltoides medio).' },
-  { nombre: 'Elevación frontal con mancuerna', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-elevacion-frontal.jpg', descripcion: 'De pie, sube una mancuerna (o ambas) al frente hasta la altura del hombro con el brazo casi extendido, y baja controlado. Aísla el deltoides anterior; no balancees el torso para generar impulso.' },
-  { nombre: 'Face pull en polea (Marcy)', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-face-pull-marcy.jpg', descripcion: 'Con la polea a la altura de la cara y cuerda o mango doble, jala hacia tu rostro separando las manos y llevando los codos hacia atrás y arriba. Trabaja el deltoides posterior y los rotadores externos, clave para la salud del hombro si entrenas mucho press.' },
-  { nombre: 'Flexión de pica contra pared', categoriaId: 'categoria-7', modalidad: 'PC', imagen: 'imagenes/hombro-flexion-pica.jpg', descripcion: 'Con los pies apoyados en una pared y el cuerpo casi vertical (o en posición de pica con cadera elevada si eres principiante), baja la cabeza hacia el piso doblando los codos y empuja de regreso. Es la versión de peso corporal más exigente para el deltoides; progresa gradualmente.' },
+  { nombre: 'Press militar con barra', categoriaId: 'categoria-7', modalidad: 'discos', imagen: 'imagenes/hombro-press-militar-barra.jpg', patron: 'empuje', equipo: ['barra'], gruposSecundarios: ['Tríceps'], descripcion: 'Sentado o de pie, barra a la altura de los hombros, empuja hacia arriba hasta extender los brazos sin arquear en exceso la espalda baja. Baja controlado hasta la altura de la barbilla. Es el ejercicio de empuje vertical más completo para deltoides.' },
+  { nombre: 'Press de hombro con mancuerna', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-press-mancuerna.jpg', patron: 'empuje', equipo: ['mancuerna'], gruposSecundarios: ['Tríceps'], descripcion: 'Mancuernas a la altura de los hombros con las palmas al frente, empuja hacia arriba hasta casi juntar las mancuernas sin bloquear los codos de golpe. El mayor rango de movimiento respecto a la barra ayuda a activar más fibra del deltoides.' },
+  { nombre: 'Elevación lateral con mancuerna', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-elevacion-lateral.jpg', patron: 'empuje', equipo: ['mancuerna'], gruposSecundarios: [], descripcion: 'De pie, mancuernas a los costados, sube los brazos hacia los lados hasta la altura del hombro con un ligero quiebre en el codo. Sube y baja controlado, sin usar impulso de la cadera. Es el ejercicio clave para dar la forma de "V" al hombro (deltoides medio).' },
+  { nombre: 'Elevación frontal con mancuerna', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-elevacion-frontal.jpg', patron: 'empuje', equipo: ['mancuerna'], gruposSecundarios: [], descripcion: 'De pie, sube una mancuerna (o ambas) al frente hasta la altura del hombro con el brazo casi extendido, y baja controlado. Aísla el deltoides anterior; no balancees el torso para generar impulso.' },
+  { nombre: 'Face pull en polea (Marcy)', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-face-pull-marcy.jpg', patron: 'tiron', equipo: ['marcy'], gruposSecundarios: ['Espalda'], descripcion: 'Con la polea a la altura de la cara y cuerda o mango doble, jala hacia tu rostro separando las manos y llevando los codos hacia atrás y arriba. Trabaja el deltoides posterior y los rotadores externos, clave para la salud del hombro si entrenas mucho press.' },
+  { nombre: 'Flexión de pica contra pared', categoriaId: 'categoria-7', modalidad: 'PC', imagen: 'imagenes/hombro-flexion-pica.jpg', patron: 'empuje', equipo: ['PC'], gruposSecundarios: ['Tríceps'], descripcion: 'Con los pies apoyados en una pared y el cuerpo casi vertical (o en posición de pica con cadera elevada si eres principiante), baja la cabeza hacia el piso doblando los codos y empuja de regreso. Es la versión de peso corporal más exigente para el deltoides; progresa gradualmente.' },
+  { nombre: 'Remo al mentón con mancuerna', categoriaId: 'categoria-7', modalidad: 'niveles', imagen: 'imagenes/hombro-remo-menton-mancuerna.jpg', patron: 'tiron', equipo: ['mancuerna'], gruposSecundarios: ['Espalda'], descripcion: 'De pie, mancuernas al frente de los muslos, jala hacia arriba llevando los codos por encima de las manos hasta que las mancuernas lleguen casi a la altura del mentón. Baja controlado. Trabaja deltoides lateral y trapecio; si sientes pellizco en el hombro, sube menos alto.' },
   // Bíceps (categoria-3)
-  { nombre: 'Curl de bíceps con barra', categoriaId: 'categoria-3', modalidad: 'discos', imagen: 'imagenes/biceps-curl-barra.jpg', descripcion: 'De pie, agarre supino al ancho de hombros, sube la barra flexionando el codo sin mover los hombros ni balancear la cadera. Baja controlado hasta extensión casi completa. El básico para construir grosor de bíceps.' },
-  { nombre: 'Curl martillo con mancuerna', categoriaId: 'categoria-3', modalidad: 'niveles', imagen: 'imagenes/biceps-curl-martillo.jpg', descripcion: 'Con las mancuernas en agarre neutro (pulgares arriba), sube alternando o al mismo tiempo sin girar la muñeca. Trabaja bíceps y braquial, y ayuda al grosor del antebrazo.' },
-  { nombre: 'Curl predicador en banco Scott (Marcy)', categoriaId: 'categoria-3', modalidad: 'niveles', imagen: 'imagenes/biceps-curl-predicador-marcy.jpg', descripcion: 'Con el brazo apoyado sobre el banco inclinado del predicador, sube el peso sin despegar el tríceps del acolchado. Al fijar el brazo se elimina el impulso, aislando por completo el bíceps.' },
-  { nombre: 'Curl en polea baja (Marcy)', categoriaId: 'categoria-3', modalidad: 'niveles', imagen: 'imagenes/biceps-curl-polea-marcy.jpg', descripcion: 'De pie frente a la polea baja, sube el mango flexionando el codo sin mover el torso. La polea mantiene tensión constante en el músculo durante todo el recorrido, a diferencia de la mancuerna o barra.' },
-  { nombre: 'Curl concentrado con mancuerna', categoriaId: 'categoria-3', modalidad: 'niveles', imagen: 'imagenes/biceps-curl-concentrado.jpg', descripcion: 'Sentado, apoya el codo en la cara interna del muslo y sube la mancuerna flexionando solo el codo, sin mover el hombro. Es el ejercicio de mayor aislamiento para el pico del bíceps.' },
-  // Tríceps (categoria-4)
-  { nombre: 'Press francés con barra (skullcrusher)', categoriaId: 'categoria-4', modalidad: 'discos', imagen: 'imagenes/triceps-press-frances-barra.jpg', descripcion: 'Acostado en banco, baja la barra hacia la frente doblando solo los codos, manteniendo los brazos superiores quietos y perpendiculares al piso. Extiende de regreso sin abrir los codos hacia afuera. Trabaja las tres cabezas del tríceps con buen estiramiento.' },
-  { nombre: 'Extensión de tríceps en polea alta (Marcy)', categoriaId: 'categoria-4', modalidad: 'niveles', imagen: 'imagenes/triceps-extension-polea-marcy.jpg', descripcion: 'De pie frente a la polea alta, codos pegados al torso, empuja la barra o cuerda hacia abajo hasta extender el brazo y regresa controlado sin que el codo se despegue del cuerpo. Es el clásico de gimnasio para definir tríceps.' },
-  { nombre: 'Patada de tríceps con mancuerna', categoriaId: 'categoria-4', modalidad: 'niveles', imagen: 'imagenes/triceps-patada-mancuerna.jpg', descripcion: 'Con el torso inclinado y el brazo superior pegado al cuerpo y paralelo al piso, extiende el antebrazo hacia atrás hasta que el brazo quede recto, y regresa controlado. Aísla bien el tríceps si mantienes el codo fijo.' },
-  { nombre: 'Fondos en paralelas para tríceps', categoriaId: 'categoria-4', modalidad: 'PC', imagen: 'imagenes/triceps-fondos-paralelas.jpg', descripcion: 'A diferencia del fondo de pecho, mantén el torso lo más vertical posible y los codos cerca del cuerpo. Baja hasta 90° en el codo y empuja de regreso. Muy exigente: si te falta fuerza, apoya un pie en el piso para asistirte.' },
-  { nombre: 'Press cerrado con barra', categoriaId: 'categoria-4', modalidad: 'discos', imagen: 'imagenes/triceps-press-cerrado-barra.jpg', descripcion: 'Acostado en banco, agarre un poco más cerrado que el ancho de hombros, baja la barra hacia la parte baja del pecho manteniendo los codos cerca del torso, y empuja de regreso. Es un compuesto que suma tríceps y pecho, ideal para mover más peso que en aislamiento.' },
-  // Pierna (categoria-1)
-  { nombre: 'Sentadilla con barra', categoriaId: 'categoria-1', modalidad: 'discos', imagen: 'imagenes/pierna-sentadilla-barra.jpg', descripcion: 'Barra sobre la espalda alta (no el cuello), pies al ancho de hombros, baja como si te sentaras manteniendo el pecho arriba y las rodillas siguiendo la dirección de los pies. Baja al menos hasta que el muslo quede paralelo al piso y sube empujando por el talón. El patrón más importante para pierna completa.' },
-  { nombre: 'Peso muerto rumano con barra', categoriaId: 'categoria-1', modalidad: 'discos', imagen: 'imagenes/pierna-peso-muerto-rumano.jpg', descripcion: 'Con las rodillas casi extendidas (ligero quiebre), empuja la cadera hacia atrás bajando la barra pegada a las piernas hasta sentir estiramiento en isquiotibiales, y regresa apretando el glúteo. La espalda se mantiene neutra todo el tiempo, no se redondea.' },
-  { nombre: 'Extensión de cuádriceps en máquina (Marcy)', categoriaId: 'categoria-1', modalidad: 'niveles', imagen: 'imagenes/pierna-extension-cuadriceps-marcy.jpg', descripcion: 'Sentado en la máquina, extiende las rodillas hasta casi estirar por completo la pierna y baja controlado sin soltar de golpe. Aísla el cuádriceps sin involucrar cadera ni espalda.' },
-  { nombre: 'Curl femoral en máquina (Marcy)', categoriaId: 'categoria-1', modalidad: 'niveles', imagen: 'imagenes/pierna-curl-femoral-marcy.jpg', descripcion: 'Sentado o acostado según tu máquina, flexiona la rodilla llevando el talón hacia el glúteo y regresa controlado. Trabaja isquiotibiales, el músculo antagonista del cuádriceps y clave para prevenir lesiones de rodilla.' },
-  { nombre: 'Zancada con mancuerna', categoriaId: 'categoria-1', modalidad: 'niveles', imagen: 'imagenes/pierna-zancada-mancuerna.jpg', descripcion: 'Con una mancuerna en cada mano, da un paso al frente y baja hasta que ambas rodillas formen aproximadamente 90°, sin que la rodilla de atrás toque el piso con fuerza. Empuja con el talón delantero para regresar o continuar caminando.' },
-  { nombre: 'Sentadilla búlgara con mancuerna', categoriaId: 'categoria-1', modalidad: 'niveles', imagen: 'imagenes/pierna-sentadilla-bulgara.jpg', descripcion: 'Con el pie de atrás elevado en un banco y una mancuerna en cada mano, baja doblando la rodilla delantera hasta formar casi 90° y sube empujando por ese talón. Trabaja pierna de forma unilateral, muy exigente para cuádriceps y glúteo.' },
-  { nombre: 'Puente de glúteo', categoriaId: 'categoria-1', modalidad: 'PC', imagen: 'imagenes/pierna-puente-gluteo.jpg', descripcion: 'Acostado boca arriba, rodillas flexionadas y pies apoyados, sube la cadera apretando el glúteo hasta que el cuerpo forme una línea recta de hombro a rodilla, y baja controlado. Para más intensidad, hazlo con una sola pierna apoyada.' },
+  { nombre: 'Curl de bíceps con barra', categoriaId: 'categoria-3', modalidad: 'discos', imagen: 'imagenes/biceps-curl-barra.jpg', patron: 'tiron', equipo: ['barra'], gruposSecundarios: [], descripcion: 'De pie, agarre supino al ancho de hombros, sube la barra flexionando el codo sin mover los hombros ni balancear la cadera. Baja controlado hasta extensión casi completa. El básico para construir grosor de bíceps.' },
+  { nombre: 'Curl martillo con mancuerna', categoriaId: 'categoria-3', modalidad: 'niveles', imagen: 'imagenes/biceps-curl-martillo.jpg', patron: 'tiron', equipo: ['mancuerna'], gruposSecundarios: [], descripcion: 'Con las mancuernas en agarre neutro (pulgares arriba), sube alternando o al mismo tiempo sin girar la muñeca. Trabaja bíceps y braquial, y ayuda al grosor del antebrazo.' },
+  { nombre: 'Curl predicador en banco Scott (Marcy)', categoriaId: 'categoria-3', modalidad: 'niveles', imagen: 'imagenes/biceps-curl-predicador-marcy.jpg', patron: 'tiron', equipo: ['marcy'], gruposSecundarios: [], descripcion: 'Con el brazo apoyado sobre el banco inclinado del predicador, sube el peso sin despegar el tríceps del acolchado. Al fijar el brazo se elimina el impulso, aislando por completo el bíceps.' },
+  { nombre: 'Curl en polea baja (Marcy)', categoriaId: 'categoria-3', modalidad: 'niveles', imagen: 'imagenes/biceps-curl-polea-marcy.jpg', patron: 'tiron', equipo: ['marcy'], gruposSecundarios: [], descripcion: 'De pie frente a la polea baja, sube el mango flexionando el codo sin mover el torso. La polea mantiene tensión constante en el músculo durante todo el recorrido, a diferencia de la mancuerna o barra.' },
+  { nombre: 'Curl concentrado con mancuerna', categoriaId: 'categoria-3', modalidad: 'niveles', imagen: 'imagenes/biceps-curl-concentrado.jpg', patron: 'tiron', equipo: ['mancuerna'], gruposSecundarios: [], descripcion: 'Sentado, apoya el codo en la cara interna del muslo y sube la mancuerna flexionando solo el codo, sin mover el hombro. Es el ejercicio de mayor aislamiento para el pico del bíceps.' },
+  { nombre: 'Dominadas supinas (chin-ups)', categoriaId: 'categoria-3', modalidad: 'PC', imagen: 'imagenes/biceps-dominadas-supinas.jpg', patron: 'tiron', equipo: ['dominadas'], gruposSecundarios: ['Espalda'], descripcion: 'Igual que la dominada, pero con agarre supino (palmas viendo hacia ti) y manos al ancho de hombros. El giro de muñeca mete más al bíceps en el jalón, sin dejar de trabajar espalda. Buena opción para alternar con las dominadas normales.' },
+  // Tríceps (categoria-4) -- sin banco: se quitó press francés y press cerrado (acostados)
+  { nombre: 'Extensión de tríceps en polea alta (Marcy)', categoriaId: 'categoria-4', modalidad: 'niveles', imagen: 'imagenes/triceps-extension-polea-marcy.jpg', patron: 'empuje', equipo: ['marcy'], gruposSecundarios: [], descripcion: 'De pie frente a la polea alta, codos pegados al torso, empuja la barra o cuerda hacia abajo hasta extender el brazo y regresa controlado sin que el codo se despegue del cuerpo. Es el clásico de gimnasio para definir tríceps.' },
+  { nombre: 'Patada de tríceps con mancuerna', categoriaId: 'categoria-4', modalidad: 'niveles', imagen: 'imagenes/triceps-patada-mancuerna.jpg', patron: 'empuje', equipo: ['mancuerna'], gruposSecundarios: [], descripcion: 'Con el torso inclinado y el brazo superior pegado al cuerpo y paralelo al piso, extiende el antebrazo hacia atrás hasta que el brazo quede recto, y regresa controlado. Aísla bien el tríceps si mantienes el codo fijo.' },
+  { nombre: 'Fondos en paralelas para tríceps', categoriaId: 'categoria-4', modalidad: 'PC', imagen: 'imagenes/triceps-fondos-paralelas.jpg', patron: 'empuje', equipo: ['fondos'], gruposSecundarios: ['Pecho', 'Hombro'], descripcion: 'A diferencia del fondo de pecho, mantén el torso lo más vertical posible y los codos cerca del cuerpo. Baja hasta 90° en el codo y empuja de regreso. Muy exigente: si te falta fuerza, apoya un pie en el piso para asistirte.' },
+  { nombre: 'Extensión de tríceps sobre la cabeza', categoriaId: 'categoria-4', modalidad: 'discos', imagen: 'imagenes/triceps-extension-sobre-cabeza-barra.jpg', patron: 'empuje', equipo: ['barra'], gruposSecundarios: [], descripcion: 'De pie, barra sujeta con ambas manos por encima de la cabeza, baja doblando solo los codos hasta sentir el estiramiento detrás del brazo, y extiende de regreso. Mantén los codos apuntando al frente, sin abrirlos. Sustituto de pie del press francés, no necesita banco.' },
+  // Pierna (categoria-1) -- sin rack: se quitó sentadilla con barra y búlgara
+  { nombre: 'Peso muerto rumano con barra', categoriaId: 'categoria-1', modalidad: 'discos', imagen: 'imagenes/pierna-peso-muerto-rumano.jpg', patron: 'pierna', equipo: ['barra'], gruposSecundarios: ['Espalda'], descripcion: 'Con las rodillas casi extendidas (ligero quiebre), empuja la cadera hacia atrás bajando la barra pegada a las piernas hasta sentir estiramiento en isquiotibiales, y regresa apretando el glúteo. La espalda se mantiene neutra todo el tiempo, no se redondea.' },
+  { nombre: 'Extensión de cuádriceps en máquina (Marcy)', categoriaId: 'categoria-1', modalidad: 'niveles', imagen: 'imagenes/pierna-extension-cuadriceps-marcy.jpg', patron: 'pierna', equipo: ['marcy'], gruposSecundarios: [], descripcion: 'Sentado en la máquina, extiende las rodillas hasta casi estirar por completo la pierna y baja controlado sin soltar de golpe. Aísla el cuádriceps sin involucrar cadera ni espalda.' },
+  { nombre: 'Curl femoral en máquina (Marcy)', categoriaId: 'categoria-1', modalidad: 'niveles', imagen: 'imagenes/pierna-curl-femoral-marcy.jpg', patron: 'pierna', equipo: ['marcy'], gruposSecundarios: [], descripcion: 'Sentado o acostado según tu máquina, flexiona la rodilla llevando el talón hacia el glúteo y regresa controlado. Trabaja isquiotibiales, el músculo antagonista del cuádriceps y clave para prevenir lesiones de rodilla.' },
+  { nombre: 'Zancada con mancuerna', categoriaId: 'categoria-1', modalidad: 'niveles', imagen: 'imagenes/pierna-zancada-mancuerna.jpg', patron: 'pierna', equipo: ['mancuerna'], gruposSecundarios: [], descripcion: 'Con una mancuerna en cada mano, da un paso al frente y baja hasta que ambas rodillas formen aproximadamente 90°, sin que la rodilla de atrás toque el piso con fuerza. Empuja con el talón delantero para regresar o continuar caminando.' },
+  { nombre: 'Puente de glúteo', categoriaId: 'categoria-1', modalidad: 'PC', imagen: 'imagenes/pierna-puente-gluteo.jpg', patron: 'pierna', equipo: ['PC'], gruposSecundarios: [], descripcion: 'Acostado boca arriba, rodillas flexionadas y pies apoyados, sube la cadera apretando el glúteo hasta que el cuerpo forme una línea recta de hombro a rodilla, y baja controlado. Para más intensidad, hazlo con una sola pierna apoyada.' },
+  { nombre: 'Sentadilla goblet con mancuerna', categoriaId: 'categoria-1', modalidad: 'niveles', imagen: 'imagenes/pierna-sentadilla-goblet-mancuerna.jpg', patron: 'pierna', equipo: ['mancuerna'], gruposSecundarios: [], descripcion: 'Sostén una mancuerna vertical pegada al pecho con ambas manos, pies al ancho de hombros. Baja como sentadilla manteniendo el pecho arriba y los codos rozando las rodillas al fondo, sube empujando por los talones. Sustituto de la sentadilla con barra: no necesita rack, y el peso al frente ayuda a mantener la postura.' },
+  { nombre: 'Sentadilla al aire', categoriaId: 'categoria-1', modalidad: 'PC', imagen: 'imagenes/pierna-sentadilla-aire.jpg', patron: 'pierna', equipo: ['PC'], gruposSecundarios: [], descripcion: 'Pies al ancho de hombros, brazos al frente para el balance, baja como si te fueras a sentar hasta que el muslo quede paralelo al piso, y sube. Sirve como calentamiento antes de cargar peso, o como accesorio de alto volumen sin equipo.' },
   // Abdomen (categoria-5)
-  { nombre: 'Rueda abdominal (ab wheel rollout)', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-rueda-abdominal.jpg', descripcion: 'De rodillas, sostén la rueda con ambas manos y rueda hacia adelante extendiendo el cuerpo lo más que puedas sin que la cadera se hunda, manteniendo el abdomen apretado todo el tiempo. Regresa a la posición inicial usando el core, no la espalda baja. Empieza con un rango corto si eres principiante.' },
-  { nombre: 'Plancha (plank)', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-plancha.jpg', descripcion: 'Apoya antebrazos y puntas de pies, cuerpo en línea recta de cabeza a talón, abdomen y glúteo apretados. Sostén sin que la cadera suba ni se hunda. Es un ejercicio isométrico: mide tu progreso en tiempo sostenido con buena forma, no solo en segundos totales.' },
-  { nombre: 'Crunch en polea alta (Marcy)', categoriaId: 'categoria-5', modalidad: 'niveles', imagen: 'imagenes/abdomen-crunch-polea-marcy.jpg', descripcion: 'De rodillas frente a la polea alta con la cuerda detrás de la cabeza, flexiona el torso hacia abajo usando el abdomen, no los brazos ni la cadera. Permite agregar carga progresiva al abdomen una vez que el crunch normal se queda corto.' },
-  { nombre: 'Elevación de piernas', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-elevacion-piernas.jpg', descripcion: 'Colgado de una barra (o acostado en un banco si aún no tienes suficiente fuerza de agarre), sube las piernas flexionando la cadera hasta donde puedas sin balancear el cuerpo, y baja controlado. Trabaja la parte baja del abdomen y el control de cadera.' },
-  { nombre: 'Crunch bicicleta', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-crunch-bicicleta.jpg', descripcion: 'Acostado boca arriba, manos detrás de la cabeza, lleva un codo hacia la rodilla contraria mientras extiendes la otra pierna, alternando en un movimiento de pedaleo controlado. Trabaja el recto abdominal y los oblicuos al mismo tiempo.' },
-  { nombre: 'Giro ruso', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-giro-ruso.jpg', descripcion: 'Sentado con las rodillas flexionadas y el torso inclinado hacia atrás unos 45°, gira el tronco de lado a lado tocando el piso a cada costado (con o sin peso en las manos). Mantén el abdomen apretado para que el giro venga del torso, no solo de los brazos.' },
+  { nombre: 'Rueda abdominal (ab wheel rollout)', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-rueda-abdominal.jpg', patron: 'core', equipo: ['rueda'], gruposSecundarios: ['Hombro'], descripcion: 'De rodillas, sostén la rueda con ambas manos y rueda hacia adelante extendiendo el cuerpo lo más que puedas sin que la cadera se hunda, manteniendo el abdomen apretado todo el tiempo. Regresa a la posición inicial usando el core, no la espalda baja. Empieza con un rango corto si eres principiante.' },
+  { nombre: 'Plancha (plank)', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-plancha.jpg', patron: 'core', equipo: ['PC'], gruposSecundarios: [], descripcion: 'Apoya antebrazos y puntas de pies, cuerpo en línea recta de cabeza a talón, abdomen y glúteo apretados. Sostén sin que la cadera suba ni se hunda. Es un ejercicio isométrico: mide tu progreso en tiempo sostenido con buena forma, no solo en segundos totales.' },
+  { nombre: 'Crunch en polea alta (Marcy)', categoriaId: 'categoria-5', modalidad: 'niveles', imagen: 'imagenes/abdomen-crunch-polea-marcy.jpg', patron: 'core', equipo: ['marcy'], gruposSecundarios: [], descripcion: 'De rodillas frente a la polea alta con la cuerda detrás de la cabeza, flexiona el torso hacia abajo usando el abdomen, no los brazos ni la cadera. Permite agregar carga progresiva al abdomen una vez que el crunch normal se queda corto.' },
+  { nombre: 'Elevación de piernas', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-elevacion-piernas.jpg', patron: 'core', equipo: ['dominadas', 'PC'], gruposSecundarios: [], descripcion: 'Colgado de una barra (o acostado en un banco si aún no tienes suficiente fuerza de agarre), sube las piernas flexionando la cadera hasta donde puedas sin balancear el cuerpo, y baja controlado. Trabaja la parte baja del abdomen y el control de cadera.' },
+  { nombre: 'Crunch bicicleta', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-crunch-bicicleta.jpg', patron: 'core', equipo: ['PC'], gruposSecundarios: [], descripcion: 'Acostado boca arriba, manos detrás de la cabeza, lleva un codo hacia la rodilla contraria mientras extiendes la otra pierna, alternando en un movimiento de pedaleo controlado. Trabaja el recto abdominal y los oblicuos al mismo tiempo.' },
+  { nombre: 'Giro ruso', categoriaId: 'categoria-5', modalidad: 'PC', imagen: 'imagenes/abdomen-giro-ruso.jpg', patron: 'core', equipo: ['PC'], gruposSecundarios: [], descripcion: 'Sentado con las rodillas flexionadas y el torso inclinado hacia atrás unos 45°, gira el tronco de lado a lado tocando el piso a cada costado (con o sin peso en las manos). Mantén el abdomen apretado para que el giro venga del torso, no solo de los brazos.' },
+];
+
+// ────────── Catálogo de HIIT (Fase 5) — separado del catálogo de pesas ──────────
+// Cada rutina de HIIT trae su propia lista de ejercicios (nombre/descripción/
+// imagen autocontenidos, no referencian ejercicios de EJERCICIOS_INICIALES)
+// porque son de peso corporal y rotan por vuelta, no se cargan con equipo.
+
+const EJ_HIIT = {
+  mountainClimbers: { nombre: 'Mountain climbers', descripcion: 'En posición de plancha con brazos extendidos, lleva las rodillas al pecho alternando rápido, como si corrieras en el piso. Mantén la cadera baja, sin que suba.', imagen: 'imagenes/hiit-mountain-climbers.jpg' },
+  sentadillaAire: { nombre: 'Sentadilla al aire', descripcion: 'Pies al ancho de hombros, baja como si te sentaras hasta que el muslo quede paralelo al piso, y sube. Ritmo constante, sin pausas.', imagen: 'imagenes/pierna-sentadilla-aire.jpg' },
+  sentadillaSalto: { nombre: 'Sentadilla con salto', descripcion: 'Baja como sentadilla normal y explota hacia arriba saltando lo más alto posible, aterrizando suave con las rodillas flexionadas. Enlaza el aterrizaje directo con la siguiente bajada.', imagen: 'imagenes/hiit-sentadilla-salto.jpg' },
+  flexionPliometrica: { nombre: 'Flexión pliométrica', descripcion: 'Baja como una flexión normal y empuja con fuerza suficiente para que las manos se despeguen del piso. Aterriza suave y baja directo a la siguiente. Si es muy exigente, alterna con flexiones normales.', imagen: 'imagenes/hiit-flexion-pliometrica.jpg' },
+  flexiones: { nombre: 'Flexiones', descripcion: 'Manos un poco más anchas que los hombros, cuerpo en línea recta. Baja el pecho casi al piso y empuja de regreso, sin que la cadera se hunda.', imagen: 'imagenes/pecho-flexiones.jpg' },
+  saltarCuerda: { nombre: 'Saltar la cuerda', descripcion: 'Saltos pequeños y constantes, apoyando en la punta del pie, con la cuerda girando desde las muñecas, no desde el hombro. Si no tienes cuerda, simula el movimiento igual (saltos con giro de muñeca).', imagen: 'imagenes/hiit-saltar-cuerda.jpg' },
+  talonesGluteo: { nombre: 'Talones al glúteo', descripcion: 'Trota en el mismo lugar llevando los talones hacia atrás hasta tocar el glúteo con cada paso, lo más rápido que puedas mantener la técnica.', imagen: 'imagenes/hiit-talones-gluteo.jpg' },
+  stepUpRodilla: { nombre: 'Step-up con rodilla', descripcion: 'Sube a un escalón o banco firme con una pierna, y al llegar arriba sube la otra rodilla al pecho. Baja controlado y alterna la pierna que sube.', imagen: 'imagenes/hiit-step-up-rodilla.jpg' },
+  saltosLaterales: { nombre: 'Saltos laterales', descripcion: 'Salta de lado a lado sobre una línea imaginaria en el piso, aterrizando suave con ambos pies. Mantén el ritmo constante sin perder el equilibrio.', imagen: 'imagenes/hiit-saltos-laterales.jpg' },
+  plancha: { nombre: 'Plancha', descripcion: 'Antebrazos y puntas de pies en el piso, cuerpo en línea recta de cabeza a talón, abdomen apretado. Sostén sin que la cadera suba ni se hunda.', imagen: 'imagenes/abdomen-plancha.jpg' },
+  bicicleta: { nombre: 'Crunch bicicleta', descripcion: 'Acostado boca arriba, manos detrás de la cabeza, lleva un codo hacia la rodilla contraria mientras extiendes la otra pierna, alternando en pedaleo controlado.', imagen: 'imagenes/abdomen-crunch-bicicleta.jpg' },
+  giroRuso: { nombre: 'Giro ruso', descripcion: 'Sentado, rodillas flexionadas, torso inclinado hacia atrás unos 45°, gira el tronco de lado a lado tocando el piso a cada costado.', imagen: 'imagenes/abdomen-giro-ruso.jpg' },
+  burpees: { nombre: 'Burpees', descripcion: 'De pie, baja a cuclillas y apoya las manos, avienta los pies hacia atrás quedando en plancha, haz una flexión (opcional), regresa los pies de un salto y salta hacia arriba con los brazos extendidos. El más completo y el más exigente.', imagen: '' },
+  jumpingJacks: { nombre: 'Jumping jacks', descripcion: 'Salta separando piernas y brazos al mismo tiempo (brazos arriba), y vuelve a juntar todo en el siguiente salto. Ritmo constante, buen calentamiento o relleno de intervalo.', imagen: '' },
+};
+
+const RUTINAS_HIIT_INICIALES = [
+  { nombre: 'Tabata', descripcion: 'El protocolo clásico: 20 segundos al máximo esfuerzo, 10 de descanso, 8 vueltas (4 minutos). Corto pero brutal.', vueltas: 8, actividadSeg: 20, descansoSeg: 10, ejercicios: [EJ_HIIT.burpees, EJ_HIIT.mountainClimbers, EJ_HIIT.sentadillaSalto, EJ_HIIT.flexionPliometrica] },
+  { nombre: '30/30', descripcion: 'Trabajo y descanso iguales, 30 segundos cada uno, 10 vueltas. Buen punto de entrada al HIIT clásico.', vueltas: 10, actividadSeg: 30, descansoSeg: 30, ejercicios: [EJ_HIIT.jumpingJacks, EJ_HIIT.sentadillaAire, EJ_HIIT.mountainClimbers, EJ_HIIT.plancha] },
+  { nombre: '40/20', descripcion: '40 segundos de trabajo, 20 de descanso, 8 vueltas. Más tiempo bajo esfuerzo que el 30/30.', vueltas: 8, actividadSeg: 40, descansoSeg: 20, ejercicios: [EJ_HIIT.sentadillaSalto, EJ_HIIT.flexiones, EJ_HIIT.talonesGluteo, EJ_HIIT.bicicleta] },
+  { nombre: '45/15', descripcion: '45 segundos de trabajo, 15 de descanso, 8 vueltas. Exige mantener el ritmo con poco tiempo para recuperar.', vueltas: 8, actividadSeg: 45, descansoSeg: 15, ejercicios: [EJ_HIIT.mountainClimbers, EJ_HIIT.stepUpRodilla, EJ_HIIT.saltosLaterales, EJ_HIIT.giroRuso] },
+  { nombre: 'Sprints (estilo Wingate)', descripcion: '30 segundos al máximo esfuerzo, 90 de descanso completo, 6 vueltas. Protocolo de potencia: cada repetición debe salir casi al 100%, por eso el descanso es largo.', vueltas: 6, actividadSeg: 30, descansoSeg: 90, ejercicios: [EJ_HIIT.sentadillaSalto, EJ_HIIT.burpees, EJ_HIIT.saltosLaterales] },
+  { nombre: 'Principiante', descripcion: '20 segundos de trabajo, 40 de descanso, 8 vueltas. Más tiempo para recuperar entre cada intervalo; ideal para empezar.', vueltas: 8, actividadSeg: 20, descansoSeg: 40, ejercicios: [EJ_HIIT.sentadillaAire, EJ_HIIT.flexiones, EJ_HIIT.plancha, EJ_HIIT.jumpingJacks] },
 ];
 
 const ahoraISO = () => new Date().toISOString();
@@ -1296,6 +1329,7 @@ function crearDocumentoEjercicio(fecha = ahoraISO()) {
     version: 2,
     categorias: CATEGORIAS_INICIALES.map((nombre, i) => ({ id: `categoria-${i + 1}`, nombre, activo: true, creadoEn: fecha, modificadoEn: fecha })),
     ejercicios: EJERCICIOS_INICIALES.map((e, i) => ({ id: `ejercicio-inicial-${i + 1}`, ...e, activo: true, creadoEn: fecha, modificadoEn: fecha })),
+    rutinasHiit: RUTINAS_HIIT_INICIALES.map((r, i) => ({ id: `rutina-hiit-inicial-${i + 1}`, ...r, activo: true, creadoEn: fecha, modificadoEn: fecha })),
     rutinas: [], sesiones: [], hiits: [], modificadoEn: fecha,
   };
 }
@@ -1375,7 +1409,7 @@ function sonidosEnSegundo({ tipo, restanteSeg, esInicio = false }) {
   if (tipo === 'cuenta' && restanteSeg >= 1 && restanteSeg <= 3) return ['cuenta'];
   if (tipo === 'descanso' && restanteSeg >= 1 && restanteSeg <= 3) return ['cuenta'];
   if (tipo === 'actividad' && esInicio) return ['largo'];
-  if (tipo === 'final') return ['final'];
+  if (tipo === 'actividad' && restanteSeg >= 1 && restanteSeg <= 3) return ['cuenta'];
   return [];
 }
 
@@ -1391,6 +1425,28 @@ function normalizarRutina(rutina, fecha = ahoraISO()) {
   return { ...rutina, id: rutina.id || idNuevo(), nombre, entradas, ejercicioIds: entradas.map((e) => e.ejercicioId), activo: rutina.activo !== false, creadoEn: rutina.creadoEn || fecha, modificadoEn: fecha };
 }
 
+// Banco de ejercicios de HIIT disponible al armar una rutina propia --
+// exportado como arreglo (no el objeto EJ_HIIT interno con llaves en
+// inglés) para que la UI lo recorra sin exponer los nombres de propiedad.
+const BANCO_EJERCICIOS_HIIT = Object.values(EJ_HIIT);
+
+function normalizarRutinaHiit(rutina, fecha = ahoraISO()) {
+  const nombre = String(rutina.nombre || '').trim();
+  if (!nombre) throw new Error('Nombre de rutina requerido');
+  const vueltas = Number(rutina.vueltas), actividadSeg = Number(rutina.actividadSeg), descansoSeg = Number(rutina.descansoSeg);
+  if (!Number.isInteger(vueltas) || vueltas < 1) throw new Error('Vueltas inválidas');
+  if (!Number.isFinite(actividadSeg) || actividadSeg < 1) throw new Error('Actividad inválida');
+  if (!Number.isFinite(descansoSeg) || descansoSeg < 0) throw new Error('Descanso inválido');
+  if (!Array.isArray(rutina.ejercicios) || !rutina.ejercicios.length) throw new Error('Agrega al menos un ejercicio');
+  const ejercicios = rutina.ejercicios.map((e) => ({ nombre: String(e.nombre || '').trim(), descripcion: String(e.descripcion || ''), imagen: String(e.imagen || '') }));
+  if (ejercicios.some((e) => !e.nombre)) throw new Error('Cada ejercicio de la rutina necesita nombre');
+  return {
+    ...rutina, id: rutina.id || idNuevo(), nombre, descripcion: String(rutina.descripcion || ''),
+    vueltas, actividadSeg, descansoSeg, ejercicios,
+    activo: rutina.activo !== false, creadoEn: rutina.creadoEn || fecha, modificadoEn: fecha,
+  };
+}
+
 function siguientePasoRutina(paso, entradas) {
   const actual = entradas[paso.ejercicioIndice];
   if (!actual) return { ...paso, terminada: true };
@@ -1399,7 +1455,7 @@ function siguientePasoRutina(paso, entradas) {
   return { ejercicioIndice: paso.ejercicioIndice, serieNumero: paso.serieNumero, terminada: true };
 }
 
-  return { MODALIDADES_CARGA, CATEGORIAS_INICIALES, crearDocumentoEjercicio, calcularDuracionHiit, normalizarEjercicio, normalizarSerie, crearHiit, pausarHiit, reanudarHiit, finalizarHiit, sumarExtensionDescanso, ajustarCantidad, sonidosEnSegundo, normalizarRutina, siguientePasoRutina };
+  return { MODALIDADES_CARGA, CATEGORIAS_INICIALES, crearDocumentoEjercicio, calcularDuracionHiit, normalizarEjercicio, normalizarSerie, crearHiit, pausarHiit, reanudarHiit, finalizarHiit, sumarExtensionDescanso, ajustarCantidad, sonidosEnSegundo, normalizarRutina, BANCO_EJERCICIOS_HIIT, normalizarRutinaHiit, siguientePasoRutina };
 })();
 const MODALIDADES_CARGA = ejercicio_modelo.MODALIDADES_CARGA;
 const CATEGORIAS_INICIALES = ejercicio_modelo.CATEGORIAS_INICIALES;
@@ -1415,6 +1471,8 @@ const sumarExtensionDescanso = ejercicio_modelo.sumarExtensionDescanso;
 const ajustarCantidad = ejercicio_modelo.ajustarCantidad;
 const sonidosEnSegundo = ejercicio_modelo.sonidosEnSegundo;
 const normalizarRutina = ejercicio_modelo.normalizarRutina;
+const BANCO_EJERCICIOS_HIIT = ejercicio_modelo.BANCO_EJERCICIOS_HIIT;
+const normalizarRutinaHiit = ejercicio_modelo.normalizarRutinaHiit;
 const siguientePasoRutina = ejercicio_modelo.siguientePasoRutina;
 
 // ── peso/js/ejercicio_almacen.js ──────────────────────────────────────────
@@ -1472,7 +1530,7 @@ function mezclarLista(a = [], b = []) {
 function mezclarDocumento(local, remoto) {
   const base = crearDocumentoEjercicio();
   const resultado = { ...base, ...remoto, ...local };
-  for (const campo of ['categorias', 'ejercicios', 'rutinas', 'sesiones', 'hiits']) resultado[campo] = mezclarLista(local?.[campo], remoto?.[campo]);
+  for (const campo of ['categorias', 'ejercicios', 'rutinas', 'rutinasHiit', 'sesiones', 'hiits']) resultado[campo] = mezclarLista(local?.[campo], remoto?.[campo]);
   resultado.version = 2;
   resultado.modificadoEn = [local?.modificadoEn, remoto?.modificadoEn].filter(Boolean).sort().at(-1) || base.modificadoEn;
   return resultado;
@@ -1538,7 +1596,164 @@ function serieProgreso(sesiones = [], ejercicioId) {
   return sesiones.filter((s) => s.estado === 'completada').flatMap((s) => (s.series || []).filter((x) => x.ejercicioId === ejercicioId).map((x) => ({ fecha: s.fecha || s.fin, valor: x.modalidad === 'niveles' ? Number(x.carga || 0) : Number(x.repeticiones || 0), unidad: x.modalidad })));
 }
 
-  return { filtrarPeriodo, seriesContables, resumenModalidades, descansoPromedio, resumenHiit, serieProgreso };
+// ────────── Análisis deportivo (Fase 3) — todo sin kg, en unidades relativas ──────────
+// Estándares usados (evidencia de fuerza/hipertrofia, no inventados):
+// 10-20 series semanales por músculo, frecuencia 2x/semana, ventana de
+// recuperación 48-72h, zonas de repeticiones 1-5/6-12/13+.
+
+function seriesConEjercicio(sesiones, ejercicios) {
+  const porId = new Map(ejercicios.map((e) => [e.id, e]));
+  return seriesContables(sesiones).map((s) => ({ serie: s, ejercicio: porId.get(s.ejercicioId) })).filter((x) => x.ejercicio);
+}
+
+function volumenPorGrupo(sesiones, ejercicios, categorias) {
+  const conteo = new Map(categorias.map((c) => [c.id, { nombre: c.nombre, series: 0 }]));
+  for (const { ejercicio } of seriesConEjercicio(sesiones, ejercicios)) {
+    if (conteo.has(ejercicio.categoriaId)) conteo.get(ejercicio.categoriaId).series += 1;
+    for (const nombreSecundario of ejercicio.gruposSecundarios || []) {
+      const cat = categorias.find((c) => c.nombre === nombreSecundario);
+      if (cat && conteo.has(cat.id)) conteo.get(cat.id).series += 0.5;
+    }
+  }
+  return [...conteo.values()].map((v) => ({
+    ...v,
+    series: Math.round(v.series * 10) / 10,
+    etiqueta: v.series < 10 ? 'bajo' : v.series <= 20 ? 'en-rango' : 'alto',
+  }));
+}
+
+function frecuenciaPorGrupo(sesiones, ejercicios, categorias) {
+  const dias = new Map(categorias.map((c) => [c.id, new Set()]));
+  for (const s of sesiones.filter((x) => x.estado === 'completada')) {
+    const fecha = String(s.fecha || s.fin || '').slice(0, 10);
+    for (const serie of s.series || []) {
+      const ej = ejercicios.find((e) => e.id === serie.ejercicioId);
+      if (ej && dias.has(ej.categoriaId)) dias.get(ej.categoriaId).add(fecha);
+    }
+  }
+  return categorias.map((c) => ({ nombre: c.nombre, dias: dias.get(c.id).size }));
+}
+
+function balancePatron(sesiones, ejercicios) {
+  const conteo = { empuje: 0, tiron: 0, pierna: 0, core: 0 };
+  for (const { ejercicio } of seriesConEjercicio(sesiones, ejercicios)) {
+    if (conteo[ejercicio.patron] != null) conteo[ejercicio.patron] += 1;
+  }
+  const { empuje, tiron } = conteo;
+  let mensaje = 'Balanceado';
+  if (empuje > 0 && tiron === 0) mensaje = 'Todo empuje, nada de tirón -- riesgo de hombro';
+  else if (empuje > tiron * 1.5) mensaje = 'Más empuje que tirón -- agrega remo o jalón';
+  else if (tiron > empuje * 1.5) mensaje = 'Más tirón que empuje -- también es un desbalance';
+  return { ...conteo, mensaje };
+}
+
+function balanceSuperiorInferior(sesiones, ejercicios) {
+  let superior = 0, inferior = 0;
+  for (const { ejercicio } of seriesConEjercicio(sesiones, ejercicios)) {
+    if (ejercicio.patron === 'pierna') inferior += 1;
+    else if (ejercicio.patron === 'empuje' || ejercicio.patron === 'tiron') superior += 1;
+  }
+  let mensaje = 'Balanceado';
+  if (superior > 0 && inferior === 0) mensaje = 'Nada de pierna -- el error más común';
+  else if (superior > inferior * 2) mensaje = 'Mucho más tren superior que pierna';
+  return { superior, inferior, mensaje };
+}
+
+function musculosAtrasados(sesiones, ejercicios, categorias, ahora = new Date()) {
+  const ultima = new Map(categorias.map((c) => [c.id, null]));
+  for (const s of sesiones.filter((x) => x.estado === 'completada')) {
+    const fecha = s.fecha || s.fin;
+    for (const serie of s.series || []) {
+      const ej = ejercicios.find((e) => e.id === serie.ejercicioId);
+      if (!ej || !ultima.has(ej.categoriaId)) continue;
+      if (!ultima.get(ej.categoriaId) || fecha > ultima.get(ej.categoriaId)) ultima.set(ej.categoriaId, fecha);
+    }
+  }
+  return categorias.map((c) => {
+    const fecha = ultima.get(c.id);
+    const dias = fecha ? Math.floor((ahora - new Date(fecha)) / 86400000) : null;
+    return { nombre: c.nombre, dias, recuperado: dias == null ? null : dias >= 2 };
+  }).sort((a, b) => (b.dias ?? 999) - (a.dias ?? 999));
+}
+
+// Fase 4: coaching en la pantalla de descanso -- "la vez pasada hiciste X".
+function ultimaMarcaEjercicio(sesiones, ejercicioId) {
+  const puntos = serieProgreso(sesiones, ejercicioId);
+  if (!puntos.length) return null;
+  return [...puntos].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))[0];
+}
+
+function consejoRepeticiones(repeticionesObjetivo) {
+  const reps = Number(repeticionesObjetivo) || 0;
+  if (reps >= 1 && reps <= 5) return 'Zona de fuerza (1-5 reps): descansa completo entre series, prioriza técnica sobre velocidad.';
+  if (reps >= 6 && reps <= 12) return 'Zona de hipertrofia (6-12 reps): busca llegar cerca del fallo técnico en la última serie.';
+  if (reps >= 13) return 'Zona de resistencia (13+ reps): el descanso puede ser más corto, el reto es sostener la técnica cansado.';
+  return '';
+}
+
+function mejorSerieHistorica(sesiones, ejercicioId) {
+  const puntos = serieProgreso(sesiones, ejercicioId);
+  if (!puntos.length) return null;
+  return puntos.reduce((mejor, p) => (p.valor > mejor.valor ? p : mejor), puntos[0]);
+}
+
+function detectarEstancamiento(sesiones, ejercicioId, ahora = new Date(), semanas = 4) {
+  const puntos = serieProgreso(sesiones, ejercicioId);
+  if (puntos.length < 2) return false;
+  const limite = new Date(ahora); limite.setDate(limite.getDate() - semanas * 7);
+  const recientes = puntos.filter((p) => new Date(p.fecha) >= limite);
+  if (recientes.length < 2) return false;
+  const maximoAntes = Math.max(...puntos.filter((p) => new Date(p.fecha) < limite).map((p) => p.valor), 0);
+  const maximoReciente = Math.max(...recientes.map((p) => p.valor));
+  return maximoAntes > 0 && maximoReciente <= maximoAntes;
+}
+
+function zonaRepeticiones(series = []) {
+  const r = { fuerza: 0, hipertrofia: 0, resistencia: 0 };
+  for (const s of series) {
+    const reps = Number(s.repeticiones || 0);
+    if (reps >= 1 && reps <= 5) r.fuerza += 1;
+    else if (reps >= 6 && reps <= 12) r.hipertrofia += 1;
+    else if (reps >= 13) r.resistencia += 1;
+  }
+  const total = r.fuerza + r.hipertrofia + r.resistencia;
+  const dominante = total === 0 ? null : Object.entries(r).sort((a, b) => b[1] - a[1])[0][0];
+  return { ...r, dominante };
+}
+
+function descansoRealVsProgramado(series = []) {
+  const reales = series.map((s) => Number(s.descansoRealSeg)).filter(Number.isFinite);
+  const planeados = series.map((s) => Number(s.descansoPlaneadoSeg)).filter(Number.isFinite);
+  if (!reales.length || !planeados.length) return { real: 0, planeado: 0, cumplimientoPct: 0 };
+  const real = Math.round(reales.reduce((a, b) => a + b, 0) / reales.length);
+  const planeado = Math.round(planeados.reduce((a, b) => a + b, 0) / planeados.length);
+  return { real, planeado, cumplimientoPct: planeado ? Math.round((real / planeado) * 100) : 0 };
+}
+
+function ratioTrabajoDescansoHiit(hiits = []) {
+  const completados = hiits.filter((h) => Number(h.actividadSeg) > 0 && Number(h.descansoSeg) > 0);
+  if (!completados.length) return null;
+  const actividad = completados.reduce((a, h) => a + Number(h.actividadSeg), 0) / completados.length;
+  const descanso = completados.reduce((a, h) => a + Number(h.descansoSeg), 0) / completados.length;
+  const ratio = descanso ? actividad / descanso : actividad;
+  let sistema = 'Mixto';
+  if (ratio >= 1.8) sistema = 'Fuerza-resistencia (trabajo largo vs descanso)';
+  else if (ratio <= 0.6) sistema = 'Capacidad aláctica/potencia (descansos largos)';
+  else sistema = 'Metabólico/cardiovascular (1:1 aprox.)';
+  return { actividadProm: Math.round(actividad), descansoProm: Math.round(descanso), ratio: Math.round(ratio * 10) / 10, sistema };
+}
+
+function constancia(sesiones = [], hiits = [], ahora = new Date()) {
+  const fechas = new Set([...sesiones, ...hiits].filter((r) => r.estado === 'completada').map((r) => String(r.fecha || r.fin || '').slice(0, 10)));
+  let racha = 0;
+  const cursor = new Date(ahora);
+  while (fechas.has(cursor.toISOString().slice(0, 10))) { racha += 1; cursor.setDate(cursor.getDate() - 1); }
+  const completadas = sesiones.filter((s) => s.estado === 'completada').length + hiits.filter((h) => h.estado === 'completada').length;
+  const descartadas = sesiones.filter((s) => s.estado === 'descartada').length + hiits.filter((h) => h.estado === 'detenida').length;
+  return { rachaDias: racha, completadas, descartadas, diasActivos: fechas.size };
+}
+
+  return { filtrarPeriodo, seriesContables, resumenModalidades, descansoPromedio, resumenHiit, serieProgreso, volumenPorGrupo, frecuenciaPorGrupo, balancePatron, balanceSuperiorInferior, musculosAtrasados, ultimaMarcaEjercicio, consejoRepeticiones, mejorSerieHistorica, detectarEstancamiento, zonaRepeticiones, descansoRealVsProgramado, ratioTrabajoDescansoHiit, constancia };
 })();
 const filtrarPeriodo = ejercicio_calculos.filtrarPeriodo;
 const seriesContables = ejercicio_calculos.seriesContables;
@@ -1546,6 +1761,19 @@ const resumenModalidades = ejercicio_calculos.resumenModalidades;
 const descansoPromedio = ejercicio_calculos.descansoPromedio;
 const resumenHiit = ejercicio_calculos.resumenHiit;
 const serieProgreso = ejercicio_calculos.serieProgreso;
+const volumenPorGrupo = ejercicio_calculos.volumenPorGrupo;
+const frecuenciaPorGrupo = ejercicio_calculos.frecuenciaPorGrupo;
+const balancePatron = ejercicio_calculos.balancePatron;
+const balanceSuperiorInferior = ejercicio_calculos.balanceSuperiorInferior;
+const musculosAtrasados = ejercicio_calculos.musculosAtrasados;
+const ultimaMarcaEjercicio = ejercicio_calculos.ultimaMarcaEjercicio;
+const consejoRepeticiones = ejercicio_calculos.consejoRepeticiones;
+const mejorSerieHistorica = ejercicio_calculos.mejorSerieHistorica;
+const detectarEstancamiento = ejercicio_calculos.detectarEstancamiento;
+const zonaRepeticiones = ejercicio_calculos.zonaRepeticiones;
+const descansoRealVsProgramado = ejercicio_calculos.descansoRealVsProgramado;
+const ratioTrabajoDescansoHiit = ejercicio_calculos.ratioTrabajoDescansoHiit;
+const constancia = ejercicio_calculos.constancia;
 
 // ── peso/js/ejercicio_graficas.js ──────────────────────────────────────────
 const ejercicio_graficas = (function () {
@@ -1605,9 +1833,12 @@ function rellenarCatalogoFaltante(datos) {
   const faltanCategorias = base.categorias.filter((c) => !nombresCategoria.has(c.nombre));
   const nombresEjercicio = new Set((datos.ejercicios || []).map((e) => e.nombre));
   const faltanEjercicios = base.ejercicios.filter((e) => !nombresEjercicio.has(e.nombre));
-  if (!faltanCategorias.length && !faltanEjercicios.length) return false;
+  const nombresRutinaHiit = new Set((datos.rutinasHiit || []).map((r) => r.nombre));
+  const faltanRutinasHiit = base.rutinasHiit.filter((r) => !nombresRutinaHiit.has(r.nombre));
+  if (!faltanCategorias.length && !faltanEjercicios.length && !faltanRutinasHiit.length) return false;
   datos.categorias = [...(datos.categorias || []), ...faltanCategorias];
   datos.ejercicios = [...(datos.ejercicios || []), ...faltanEjercicios];
+  datos.rutinasHiit = [...(datos.rutinasHiit || []), ...faltanRutinasHiit];
   return true;
 }
 
@@ -1764,7 +1995,25 @@ function renderEntrenamientoActivo() {
     return;
   }
   const { entrada, ejercicio } = ejercicioActual(), totalSeries = t.entradas.reduce((n, e) => n + e.series, 0), hechas = t.series.length;
-  if (t.fase === 'descanso') { const restante = Math.max(0, Math.ceil((S.descanso.finMs - Date.now()) / 1000)); p.innerHTML = `<section class="descanso-pantalla"><small>DESCANSO</small><strong>${restante}</strong><div class="progreso-circular"><span>Siguiente</span><b>${escapeHTML(ejercicio?.nombre || '')}</b><small>Serie ${t.serieNumero} de ${entrada.series}</small></div><button id="sumar-cinco">+5 s</button><button id="saltar-descanso">Saltar descanso</button></section>`; p.querySelector('#sumar-cinco').onclick = () => { S.descanso.finMs += 5000; S.descanso.extraSeg += 5; }; p.querySelector('#saltar-descanso').onclick = cerrarDescanso; return; }
+  if (t.fase === 'descanso') {
+    const restante = Math.max(0, Math.ceil((S.descanso.finMs - Date.now()) / 1000));
+    // Coaching en vivo (Fase 4): qué hiciste la vez pasada en este ejercicio,
+    // si en esta sesión vas mejor/igual/peor, y un consejo de zona de reps
+    // según lo que buscas hacer. Todo con datos que la app ya guardaba.
+    const marcaAnterior = ejercicio ? ultimaMarcaEjercicio(S.datos.sesiones || [], ejercicio.id) : null;
+    const ultimaHoy = ejercicio ? t.series.filter((s) => s.ejercicioId === ejercicio.id).at(-1) : null;
+    let comparacion = '';
+    if (marcaAnterior && ultimaHoy) {
+      const valorHoy = ultimaHoy.modalidad === 'niveles' ? Number(ultimaHoy.carga || 0) : Number(ultimaHoy.repeticiones || 0);
+      comparacion = valorHoy > marcaAnterior.valor ? '📈 Vas mejorando' : valorHoy === marcaAnterior.valor ? '➡️ Vas igual que la vez pasada' : '📉 Por debajo de tu marca anterior';
+    }
+    const consejo = consejoRepeticiones(entrada.repeticiones);
+    const coachingHtml = (marcaAnterior || consejo) ? `<div class="coaching-descanso">${marcaAnterior ? `<p>La vez pasada: <b>${marcaAnterior.valor} ${marcaAnterior.unidad === 'niveles' ? 'nivel' : 'reps'}</b>${comparacion ? ` · ${comparacion}` : ''}</p>` : ''}${consejo ? `<p class="texto-suave">${escapeHTML(consejo)}</p>` : ''}</div>` : '';
+    p.innerHTML = `<section class="descanso-pantalla"><small>DESCANSO</small><strong>${restante}</strong><div class="progreso-circular"><span>Siguiente</span><b>${escapeHTML(ejercicio?.nombre || '')}</b><small>Serie ${t.serieNumero} de ${entrada.series}</small></div>${coachingHtml}<button id="sumar-cinco">+5 s</button><button id="saltar-descanso">Saltar descanso</button></section>`;
+    p.querySelector('#sumar-cinco').onclick = () => { S.descanso.finMs += 5000; S.descanso.extraSeg += 5; };
+    p.querySelector('#saltar-descanso').onclick = cerrarDescanso;
+    return;
+  }
   p.innerHTML = `<section class="entrenamiento-activo"><header><button id="salir-rutina">×</button><div><small>${escapeHTML(t.nombre)}</small><b>${hechas}/${totalSeries} series</b></div><span>${Math.round(hechas / totalSeries * 100)}%</span></header><div class="barra-rutina"><i style="width:${hechas / totalSeries * 100}%"></i></div><article class="tarjeta-ejercicio-actual"><span class="numero-ejercicio">${t.ejercicioIndice + 1}/${t.entradas.length}</span><h1>${escapeHTML(ejercicio?.nombre || 'Ejercicio')}</h1><button type="button" id="ver-como-hacerlo" class="btn-discreto">Ver cómo hacerlo</button><p>Serie <b>${t.serieNumero}</b> de ${entrada.series} · meta ${entrada.repeticiones} reps</p>${stepperCantidad('serie-reps', 'Repeticiones', entrada.repeticiones, 1)}${cargaEntrenamiento(ejercicio)}<button id="terminar-serie" class="btn-terminar-serie">Terminar serie</button><small>Descanso programado: ${entrada.descansoSeg}s</small>${t.ejercicioIndice + 1 < t.entradas.length ? '<button id="saltar-ejercicio" class="btn-discreto">Saltar este ejercicio</button>' : ''}</article></section>`;
   conectarSteppers(p);
   const btnTerminar = p.querySelector('#terminar-serie');
@@ -1845,14 +2094,68 @@ function finalizarEntrenamiento() {
 function renderHiit() {
   const p = document.getElementById('ejercicio-panel');
   if (S.hiit) return renderHiitActivo();
-  p.innerHTML = `<section class="hiit-config"><div class="hiit-emblema">HIIT</div><h1>Intervalos precisos</h1><p>Actividad intensa, descansos claros y avisos que no tienes que mirar.</p><div class="grid-form"><label>Vueltas<input id="hiit-vueltas" type="number" min="1" value="6"></label><label>Actividad (s)<input id="hiit-actividad" type="number" min="1" value="30"></label><label>Descanso (s)<input id="hiit-descanso" type="number" min="0" value="20"></label></div><button id="hiit-iniciar" class="btn-entrenar">Iniciar HIIT</button></section>`;
-  p.querySelector('#hiit-iniciar').onclick = iniciarHiit;
+  p.innerHTML = `<section class="hiit-config"><div class="hiit-emblema">HIIT</div><h1>Intervalos precisos</h1><p>Actividad intensa, descansos claros y avisos que no tienes que mirar.</p><button type="button" id="hiit-rutinas" class="btn-discreto">📋 Rutinas HIIT</button><div class="grid-form"><label>Vueltas<input id="hiit-vueltas" type="number" min="1" value="6"></label><label>Actividad (s)<input id="hiit-actividad" type="number" min="1" value="30"></label><label>Descanso (s)<input id="hiit-descanso" type="number" min="0" value="20"></label></div><button id="hiit-iniciar" class="btn-entrenar">Iniciar HIIT (manual)</button></section>`;
+  p.querySelector('#hiit-iniciar').onclick = () => iniciarHiit();
+  p.querySelector('#hiit-rutinas').onclick = abrirRutinasHiit;
 }
 
-function iniciarHiit() {
-  const config = { vueltas: Number(document.getElementById('hiit-vueltas').value), actividadSeg: Number(document.getElementById('hiit-actividad').value), descansoSeg: Number(document.getElementById('hiit-descanso').value) };
+// Catálogo de rutinas HIIT (Fase 5): presets + las que Miguel/Cindy hayan
+// creado -- cada usuario tiene el suyo porque S.datos ya es por usuario
+// (leerLocal(getUsuario())). Tocar "Usar esta" arranca el HIIT directo con
+// esa configuración y su lista de ejercicios, sin pasar por el formulario
+// manual.
+function abrirRutinasHiit() {
+  const rutinas = (S.datos.rutinasHiit || []).filter((r) => r.activo !== false);
+  abrirModal('Rutinas HIIT', `<button type="button" id="nueva-rutina-hiit" class="btn-primario ancho-completo">+ Nueva rutina</button><div class="lista-modal">${rutinas.map((r) => `<div class="fila-selector-ejercicio"><button type="button" data-usar-hiit="${r.id}"><span><b>${escapeHTML(r.nombre)}</b><small>${r.vueltas} vueltas · ${r.actividadSeg}s/${r.descansoSeg}s · ${r.ejercicios.length} ejercicios</small></span><i>Usar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-hiit="${r.id}" aria-label="Borrar ${escapeAtributo(r.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Sin rutinas todavía.</p>'}</div>`, (c) => {
+    c.querySelector('#nueva-rutina-hiit').onclick = () => abrirFormularioRutinaHiit();
+    c.querySelectorAll('[data-usar-hiit]').forEach((b) => b.onclick = () => { cerrarModal(); iniciarHiit(S.datos.rutinasHiit.find((r) => r.id === b.dataset.usarHiit)); });
+    c.querySelectorAll('[data-borrar-hiit]').forEach((b) => b.onclick = () => {
+      if (!confirm('¿Borrar esta rutina de HIIT?')) return;
+      guardar((d) => { const x = d.rutinasHiit.find((y) => y.id === b.dataset.borrarHiit); if (x) x.activo = false; }, 'borrar_rutina_hiit', b.dataset.borrarHiit);
+      abrirRutinasHiit();
+    });
+  }, 'HIIT');
+}
+
+function abrirFormularioRutinaHiit() {
+  const seleccionados = new Set();
+  const marcado = (n) => seleccionados.has(n) ? 'checked' : '';
+  abrirModal('Nueva rutina HIIT', `<form id="form-rutina-hiit" class="form-modal">
+    <label>Nombre<input id="hiit-rutina-nombre" required maxlength="40"></label>
+    <label>Descripción (opcional)<textarea id="hiit-rutina-descripcion" rows="2" maxlength="200"></textarea></label>
+    <div class="grid-form"><label>Vueltas<input id="hiit-rutina-vueltas" type="number" min="1" value="8"></label><label>Actividad (s)<input id="hiit-rutina-actividad" type="number" min="1" value="30"></label><label>Descanso (s)<input id="hiit-rutina-descanso" type="number" min="0" value="20"></label></div>
+    <fieldset><legend>Ejercicios (elige el orden en que quieres que roten)</legend><div id="hiit-rutina-ejercicios">${BANCO_EJERCICIOS_HIIT.map((e) => `<label class="opcion-modalidad"><input type="checkbox" data-ejercicio-hiit="${escapeAtributo(e.nombre)}" ${marcado(e.nombre)}><span>${escapeHTML(e.nombre)}${e.imagen ? '' : ' <small>(sin foto)</small>'}</span></label>`).join('')}</div></fieldset>
+    <button class="btn-primario">Guardar rutina</button>
+  </form>`, (c) => {
+    c.querySelector('#form-rutina-hiit').onsubmit = (e) => {
+      e.preventDefault();
+      const elegidos = [...c.querySelectorAll('[data-ejercicio-hiit]:checked')].map((chk) => BANCO_EJERCICIOS_HIIT.find((ej) => ej.nombre === chk.dataset.ejercicioHiit));
+      try {
+        const rutina = normalizarRutinaHiit({
+          nombre: c.querySelector('#hiit-rutina-nombre').value,
+          descripcion: c.querySelector('#hiit-rutina-descripcion').value,
+          vueltas: c.querySelector('#hiit-rutina-vueltas').value,
+          actividadSeg: c.querySelector('#hiit-rutina-actividad').value,
+          descansoSeg: c.querySelector('#hiit-rutina-descanso').value,
+          ejercicios: elegidos,
+        });
+        guardar((d) => { d.rutinasHiit = d.rutinasHiit || []; d.rutinasHiit.push(rutina); }, 'guardar_rutina_hiit', rutina.id);
+        abrirRutinasHiit();
+      } catch (err) { S.toast(err.message, true); }
+    };
+  }, 'HIIT');
+}
+
+function iniciarHiit(rutina) {
+  const config = rutina
+    ? { vueltas: rutina.vueltas, actividadSeg: rutina.actividadSeg, descansoSeg: rutina.descansoSeg }
+    : { vueltas: Number(document.getElementById('hiit-vueltas').value), actividadSeg: Number(document.getElementById('hiit-actividad').value), descansoSeg: Number(document.getElementById('hiit-descanso').value) };
   try { calcularDuracionHiit(config); } catch (err) { return S.toast(err.message, true); }
-  S.hiit = { id: uid(), ...config, planeadoSeg: calcularDuracionHiit(config), inicioMs: Date.now(), pausaMs: 0, pausaInicio: null, faseIndice: -1, cuentaFinMs: Date.now() + 3000, estado: 'cuenta', sonidos: new Set() };
+  S.hiit = {
+    id: uid(), ...config, planeadoSeg: calcularDuracionHiit(config), inicioMs: Date.now(), pausaMs: 0, pausaInicio: null,
+    faseIndice: -1, cuentaFinMs: Date.now() + 3000, estado: 'cuenta', sonidos: new Set(),
+    nombre: rutina?.nombre || '', ejercicios: rutina?.ejercicios || null,
+  };
   S.sonidosEmitidos.clear();
   clearInterval(S.intervalo); S.intervalo = setInterval(tickHiit, 200); solicitarWake(); tickHiit();
 }
@@ -1863,11 +2166,16 @@ function tickHiit() { if (!S.hiit || S.hiit.pausaInicio) return renderHiitActivo
 
 function renderHiitActivo() {
   const p = document.getElementById('ejercicio-panel'), e = estadoHiit();
-  p.innerHTML = `<section class="hiit-activo ${e.tipo}"><small>${S.hiit.pausaInicio ? 'PAUSADO' : e.tipo === 'cuenta' ? 'PREPÁRATE' : e.tipo.toUpperCase()}</small><strong>${e.restante}</strong><span>${e.vuelta ? `Vuelta ${e.vuelta}/${S.hiit.vueltas}` : 'Comienza en'}</span><div class="acciones"><button id="hiit-pausa">${S.hiit.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="hiit-detener">Detener</button></div></section>`;
+  // Fase 5: qué ejercicio toca en esta vuelta, rotando la lista de la
+  // rutina elegida. Solo aplica en fase 'actividad' y si el HIIT arrancó
+  // desde una rutina (el manual/sin rutina no tiene ejercicios que mostrar).
+  const ejercicioActual = (e.tipo === 'actividad' && S.hiit.ejercicios?.length) ? S.hiit.ejercicios[(e.vuelta - 1) % S.hiit.ejercicios.length] : null;
+  const ejercicioHtml = ejercicioActual ? `<div class="hiit-ejercicio-actual">${ejercicioActual.imagen ? `<img src="${escapeAtributo(ejercicioActual.imagen)}" alt="${escapeAtributo(ejercicioActual.nombre)}" loading="lazy">` : ''}<b>${escapeHTML(ejercicioActual.nombre)}</b></div>` : '';
+  p.innerHTML = `<section class="hiit-activo ${e.tipo}"><small>${S.hiit.pausaInicio ? 'PAUSADO' : e.tipo === 'cuenta' ? 'PREPÁRATE' : e.tipo.toUpperCase()}</small><strong>${e.restante}</strong><span>${e.vuelta ? `Vuelta ${e.vuelta}/${S.hiit.vueltas}` : 'Comienza en'}</span>${ejercicioHtml}<div class="acciones"><button id="hiit-pausa">${S.hiit.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="hiit-detener">Detener</button></div></section>`;
   p.querySelector('#hiit-pausa').onclick = alternarPausaHiit; p.querySelector('#hiit-detener').onclick = () => finalizarHiit(true);
 }
 function alternarPausaHiit() { const h = S.hiit; if (h.pausaInicio) { const pausa = Date.now() - h.pausaInicio; if (h.estado === 'cuenta') h.cuentaFinMs += pausa; else h.pausaMs += pausa; h.pausaInicio = null; solicitarWake(); } else { h.pausaInicio = Date.now(); liberarWake(); } renderHiitActivo(); }
-function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const r = { id: h.id, nombre: 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: detenido ? Math.round(real / h.planeadoSeg * 100) : 100, estado: detenido ? 'detenida' : 'completada', creadoEn: iso(), modificadoEn: iso() }; guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
+function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const r = { id: h.id, nombre: h.nombre || 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: detenido ? Math.round(real / h.planeadoSeg * 100) : 100, estado: detenido ? 'detenida' : 'completada', creadoEn: iso(), modificadoEn: iso() }; guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
 
 const SONIDOS = { rapido: 'audio/rapido.mp3', cuenta: 'audio/cuenta.mp3', largo: 'audio/largo.mp3', final: 'audio/final.mp3' };
 function beep(tipo) { try { const a = new Audio(SONIDOS[tipo]); a.volume = .6; a.play().catch(() => {}); } catch {} }
@@ -1878,10 +2186,71 @@ function liberarWake() { S.wake?.release().catch(() => {}); S.wake = null; }
 
 function renderProgreso() {
   const p = document.getElementById('ejercicio-panel'), sesiones = filtrarPeriodo(S.datos.sesiones || [], S.periodo), hiits = filtrarPeriodo(S.datos.hiits || [], S.periodo), series = seriesContables(sesiones), m = resumenModalidades(series), h = resumenHiit(hiits);
-  p.innerHTML = `<section class="progreso-ejercicio"><header><div><small>TU CONSTANCIA</small><h1>Progreso</h1></div><div class="filtros-periodo"><button data-periodo="semana">Semana</button><button data-periodo="mes">Mes</button><button data-periodo="total">Total</button></div></header><div class="kpis-ejercicio"><div><b>${sesiones.filter((s) => s.estado === 'completada').length}</b><span>Sesiones</span></div><div><b>${series.length}</b><span>Series</span></div><div><b>${descansoPromedio(series)}s</b><span>Descanso promedio</span></div><div><b>${h.minutos}m</b><span>HIIT activo</span></div><div><b>${h.porcentajePromedio}%</b><span>HIIT promedio</span></div><div><b>${h.abandonos}</b><span>Abandonos</span></div></div><article class="tarjeta marca-resumen"><h3>Mejores esfuerzos</h3><p>Discos × reps: grandes ${m.discos.grande}, chicos ${m.discos.chico}</p><p>Nivel máximo ${m.niveles.mejor} · PC ${m.PC.repeticiones} reps</p></article><article class="tarjeta"><h3>Historial</h3><div class="historial-entrenamiento">${[...(S.datos.sesiones || []), ...(S.datos.hiits || [])].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map((r) => `<div><span><b>${escapeHTML(r.nombre || 'Entrenamiento')}</b><small>${escapeHTML(String(r.fecha || '').slice(0, 10))} · ${escapeHTML(r.estado)}</small></span><div><button data-editar-registro="${r.id}">Editar</button><button data-eliminar="${r.id}">Eliminar</button></div></div>`).join('') || '<p class="estado-vacio">Completa una rutina para ver tu historial.</p>'}</div></article></section>`;
+  p.innerHTML = `<section class="progreso-ejercicio"><header><div><small>TU CONSTANCIA</small><h1>Progreso</h1></div><div class="filtros-periodo"><button data-periodo="semana" class="${S.periodo === 'semana' ? 'activo' : ''}" aria-pressed="${S.periodo === 'semana'}">Semana</button><button data-periodo="mes" class="${S.periodo === 'mes' ? 'activo' : ''}" aria-pressed="${S.periodo === 'mes'}">Mes</button><button data-periodo="total" class="${S.periodo === 'total' ? 'activo' : ''}" aria-pressed="${S.periodo === 'total'}">Total</button></div></header><button type="button" id="ver-analisis-completo" class="btn-discreto">📊 Ver análisis completo</button><div class="kpis-ejercicio"><div><b>${sesiones.filter((s) => s.estado === 'completada').length}</b><span>Sesiones</span></div><div><b>${series.length}</b><span>Series</span></div><div><b>${descansoPromedio(series)}s</b><span>Descanso promedio</span></div><div><b>${h.minutos}m</b><span>HIIT activo</span></div><div><b>${h.porcentajePromedio}%</b><span>HIIT promedio</span></div><div><b>${h.abandonos}</b><span>Abandonos</span></div></div><article class="tarjeta marca-resumen"><h3>Mejores esfuerzos</h3><p>Discos × reps: grandes ${m.discos.grande}, chicos ${m.discos.chico}</p><p>Nivel máximo ${m.niveles.mejor} · PC ${m.PC.repeticiones} reps</p></article><article class="tarjeta"><h3>Historial</h3><div class="historial-entrenamiento">${[...sesiones, ...hiits].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map((r) => `<div><span><b>${escapeHTML(r.nombre || 'Entrenamiento')}</b><small>${escapeHTML(String(r.fecha || '').slice(0, 10))} · ${escapeHTML(r.estado)}</small></span><div><button data-editar-registro="${r.id}">Editar</button><button data-eliminar="${r.id}">Eliminar</button></div></div>`).join('') || '<p class="estado-vacio">Sin registros en este periodo.</p>'}</div></article></section>`;
   p.querySelectorAll('[data-periodo]').forEach((b) => b.onclick = () => { S.periodo = b.dataset.periodo; renderProgreso(); });
+  p.querySelector('#ver-analisis-completo').onclick = abrirAnalisisCompleto;
   p.querySelectorAll('[data-editar-registro]').forEach((b) => b.onclick = () => abrirEditarRegistro(b.dataset.editarRegistro));
   p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { d.sesiones = d.sesiones.filter((x) => x.id !== b.dataset.eliminar); d.hiits = d.hiits.filter((x) => x.id !== b.dataset.eliminar); }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
+}
+
+// Análisis deportivo completo: volumen semanal por músculo, balance,
+// progreso por ejercicio, zona de repeticiones, descansos y HIIT. Se abre
+// como modal (igual que el catálogo) en vez de una vista nueva, para no
+// tocar la pantalla de Progreso que ya funciona bien.
+function abrirAnalisisCompleto() {
+  const todasSesiones = S.datos.sesiones || [], todosHiits = S.datos.hiits || [], categorias = (S.datos.categorias || []).filter((c) => c.activo !== false), ejercicios = S.datos.ejercicios || [];
+  const sesionesSemana = filtrarPeriodo(todasSesiones, 'semana');
+  const volumen = volumenPorGrupo(sesionesSemana, ejercicios, categorias);
+  const frecuencia = frecuenciaPorGrupo(sesionesSemana, ejercicios, categorias);
+  const patron = balancePatron(sesionesSemana, ejercicios);
+  const superiorInferior = balanceSuperiorInferior(sesionesSemana, ejercicios);
+  const atrasados = musculosAtrasados(todasSesiones, ejercicios, categorias);
+  const seriesTodas = seriesContables(todasSesiones);
+  const zonas = zonaRepeticiones(seriesTodas);
+  const descanso = descansoRealVsProgramado(seriesTodas);
+  const ratioHiit = ratioTrabajoDescansoHiit(todosHiits);
+  const rachaInfo = constancia(todasSesiones, todosHiits);
+
+  const idsEntrenados = [...new Set(todasSesiones.flatMap((s) => (s.series || []).map((x) => x.ejercicioId)))];
+  const filasEjercicio = idsEntrenados.map((id) => {
+    const ej = ejercicios.find((e) => e.id === id);
+    if (!ej) return '';
+    const mejor = mejorSerieHistorica(todasSesiones, id);
+    const estancado = detectarEstancamiento(todasSesiones, id);
+    return `<div><span><b>${escapeHTML(ej.nombre)}</b><small>Mejor: ${mejor ? `${mejor.valor} ${mejor.unidad === 'niveles' ? 'nivel' : 'reps'}` : '—'}${estancado ? ' · sin mejora en 4 semanas' : ''}</small></span></div>`;
+  }).filter(Boolean).join('') || '<p class="estado-vacio">Todavía no hay ejercicios entrenados.</p>';
+
+  const html = `
+    <article class="tarjeta"><h3>Volumen semanal por músculo</h3><p class="texto-suave" style="margin-top:0">Referencia: 10-20 series por semana por músculo.</p>
+      <div class="historial-entrenamiento">${volumen.map((v) => `<div><span><b>${escapeHTML(v.nombre)}</b><small>${v.series} series · ${frecuencia.find((f) => f.nombre === v.nombre)?.dias || 0} día(s)/semana</small></span><span class="badge">${v.etiqueta === 'bajo' ? 'Bajo' : v.etiqueta === 'alto' ? 'Alto' : 'En rango'}</span></div>`).join('')}</div>
+    </article>
+    <article class="tarjeta"><h3>Balance y riesgo</h3>
+      <p>Empuje ${patron.empuje} · Tirón ${patron.tiron} · Pierna ${patron.pierna} · Core ${patron.core}</p>
+      <p>${escapeHTML(patron.mensaje)}</p>
+      <p>${escapeHTML(superiorInferior.mensaje)} (superior ${superiorInferior.superior} · pierna ${superiorInferior.inferior})</p>
+    </article>
+    <article class="tarjeta"><h3>Músculos atrasados</h3>
+      <div class="historial-entrenamiento">${atrasados.map((a) => `<div><span><b>${escapeHTML(a.nombre)}</b><small>${a.dias == null ? 'sin entrenar todavía' : `hace ${a.dias} día(s)${a.recuperado ? '' : ' · aún en recuperación'}`}</small></span></div>`).join('')}</div>
+    </article>
+    <article class="tarjeta"><h3>Progreso por ejercicio</h3>
+      <div class="historial-entrenamiento">${filasEjercicio}</div>
+    </article>
+    <article class="tarjeta"><h3>Zona de repeticiones</h3>
+      <p>Fuerza (1-5): ${zonas.fuerza} · Hipertrofia (6-12): ${zonas.hipertrofia} · Resistencia (13+): ${zonas.resistencia}</p>
+      <p>${zonas.dominante ? `Entrenas sobre todo en zona de <b>${escapeHTML(zonas.dominante)}</b>.` : 'Sin series registradas todavía.'}</p>
+    </article>
+    <article class="tarjeta"><h3>Descansos</h3>
+      <p>Real ${descanso.real}s vs. programado ${descanso.planeado}s (${descanso.cumplimientoPct}% de cumplimiento).</p>
+      <p class="texto-suave" style="margin-top:0">Menos de 90s favorece hipertrofia/metabólico · 2-5 min favorece fuerza.</p>
+    </article>
+    <article class="tarjeta"><h3>HIIT</h3>
+      ${ratioHiit ? `<p>Trabajo ${ratioHiit.actividadProm}s / descanso ${ratioHiit.descansoProm}s (ratio ${ratioHiit.ratio}:1).</p><p>${escapeHTML(ratioHiit.sistema)}</p>` : '<p class="estado-vacio">Sin HIIT registrado todavía.</p>'}
+    </article>
+    <article class="tarjeta"><h3>Constancia</h3>
+      <p>Racha actual: ${rachaInfo.rachaDias} día(s) · Completadas ${rachaInfo.completadas} · Descartadas ${rachaInfo.descartadas} · Días activos ${rachaInfo.diasActivos}</p>
+    </article>
+  `;
+  abrirModal('Análisis completo', html, () => {}, 'ANÁLISIS');
 }
 
 function abrirEditarRegistro(id) {

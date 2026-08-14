@@ -31,8 +31,11 @@
   <div class="tarjeta-login">
     <div class="marca-acceso"><img src="icon-512.png" alt=""><div><strong>Mis Apps</strong><span>Bienvenido de nuevo</span></div></div>
     <div id="faceid-usuarios" class="faceid-lista oculto"></div>
-    <input type="text" id="usuario-input" aria-label="Usuario" placeholder="Usuario" autocomplete="username">
-    <button class="btn-primario" id="btn-usuario-continuar">Continuar</button>
+    <button type="button" class="btn-secundario oculto" id="btn-mostrar-usuario-form">Iniciar con usuario y contraseña</button>
+    <div id="usuario-form" class="oculto">
+      <input type="text" id="usuario-input" aria-label="Usuario" placeholder="Usuario" autocomplete="username">
+      <button class="btn-primario" id="btn-usuario-continuar">Continuar</button>
+    </div>
     <p id="usuario-error" class="oculto texto-error" role="alert" aria-live="assertive"></p>
   </div>
 </div>
@@ -86,11 +89,19 @@
     </a>
   </div>
   </div>
-  <button class="btn-secundario" id="btn-cerrar-sesion" style="max-width:200px; margin-top:24px;">Cambiar de usuario</button>
-  <button class="btn-secundario oculto" id="btn-agregar-usuario" style="max-width:200px; margin-top:8px;">+ Agregar usuario</button>
-  <button class="btn-secundario oculto" id="btn-faceid-activar" style="max-width:280px; margin-top:8px;">🔒 Activar Face ID en este iPhone</button>
-  <button class="btn-secundario oculto" id="btn-faceid-desactivar" style="max-width:280px; margin-top:8px;">Face ID activado ✓ — Desactivar</button>
-  <p class="texto-suave oculto" id="faceid-motivo" style="max-width:280px; margin-top:10px;"></p>
+  <button class="btn-secundario" id="btn-abrir-ajustes" style="max-width:200px; margin-top:24px;">⚙️ Ajustes</button>
+</div>
+
+<div id="popup-ajustes" class="popup-fondo oculto" role="dialog" aria-modal="true" aria-labelledby="popup-ajustes-titulo">
+  <div class="popup-caja">
+    <p id="popup-ajustes-titulo" style="font-weight:600; margin-bottom:6px;">⚙️ Ajustes</p>
+    <button class="btn-secundario" id="btn-cerrar-sesion" style="max-width:240px; margin-top:8px;">Cambiar de usuario</button>
+    <button class="btn-secundario oculto" id="btn-agregar-usuario" style="max-width:240px; margin-top:8px;">+ Agregar usuario</button>
+    <button class="btn-secundario oculto" id="btn-faceid-activar" style="max-width:280px; margin-top:8px;">🔒 Activar Face ID en este iPhone</button>
+    <button class="btn-secundario oculto" id="btn-faceid-desactivar" style="max-width:280px; margin-top:8px;">Face ID activado ✓ — Desactivar</button>
+    <p class="texto-suave oculto" id="faceid-motivo" style="max-width:280px; margin-top:10px;"></p>
+    <button class="btn-primario" id="btn-cerrar-ajustes" style="margin-top:16px;">Cerrar</button>
+  </div>
 </div>
 
 <div id="popup-faceid" class="popup-fondo oculto" role="dialog" aria-modal="true" aria-labelledby="popup-faceid-mensaje">

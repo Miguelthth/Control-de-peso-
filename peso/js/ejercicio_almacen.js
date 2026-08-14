@@ -53,7 +53,7 @@ function mezclarLista(a = [], b = []) {
 export function mezclarDocumento(local, remoto) {
   const base = crearDocumentoEjercicio();
   const resultado = { ...base, ...remoto, ...local };
-  for (const campo of ['categorias', 'ejercicios', 'rutinas', 'sesiones', 'hiits']) resultado[campo] = mezclarLista(local?.[campo], remoto?.[campo]);
+  for (const campo of ['categorias', 'ejercicios', 'rutinas', 'rutinasHiit', 'sesiones', 'hiits']) resultado[campo] = mezclarLista(local?.[campo], remoto?.[campo]);
   resultado.version = 2;
   resultado.modificadoEn = [local?.modificadoEn, remoto?.modificadoEn].filter(Boolean).sort().at(-1) || base.modificadoEn;
   return resultado;

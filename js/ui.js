@@ -21,18 +21,26 @@ function escapeHTML(s) {
 
 async function renderFaceIdUsuarios() {
   const cont = document.getElementById('faceid-usuarios');
+  const btnMostrarForm = document.getElementById('btn-mostrar-usuario-form');
+  const form = document.getElementById('usuario-form');
   // Solo los que además tienen su PIN cacheado aquí -- si el passkey se creó
   // desde Gastos, el launcher no tiene con qué entrar y el botón sobraría.
   const registrados = passkey.usuariosRegistrados().filter((u) => candado.leerCandado('launcher', u));
   if (!registrados.length || !(await passkey.disponible())) {
     cont.classList.add('oculto');
     cont.innerHTML = '';
+    // Sin opción de Face ID no tiene caso esconder el usuario/contraseña
+    // detrás de un botón extra -- es la única forma de entrar.
+    btnMostrarForm.classList.add('oculto');
+    form.classList.remove('oculto');
     return;
   }
   cont.innerHTML = registrados
     .map((u) => `<button class="btn-faceid" data-usuario="${escapeHTML(u)}">🔒 Entrar como ${escapeHTML(u)} con Face ID</button>`)
-    .join('') + '<p class="faceid-separador">— o escribe tu usuario —</p>';
+    .join('');
   cont.classList.remove('oculto');
+  btnMostrarForm.classList.remove('oculto');
+  form.classList.add('oculto');
 }
 
 // OJO con TODAS las llamadas a passkey.*: Safari exige que salgan directo
@@ -386,6 +394,11 @@ function wireEventos() {
   document.getElementById('usuario-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-usuario-continuar').click();
   });
+  document.getElementById('btn-mostrar-usuario-form').addEventListener('click', (e) => {
+    e.currentTarget.classList.add('oculto');
+    document.getElementById('usuario-form').classList.remove('oculto');
+    document.getElementById('usuario-input').focus();
+  });
 
   document.getElementById('btn-pin-continuar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, continuarPin));
   document.getElementById('btn-pin-volver').addEventListener('click', volverAUsuario);
@@ -398,10 +411,19 @@ function wireEventos() {
   document.getElementById('btn-pin-nuevo-guardar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarPinNuevo));
 
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
+    document.getElementById('popup-ajustes').classList.add('oculto');
     cerrarSesionEnSegundoPlano(api.cerrarSesionServidor);
     document.getElementById('usuario-input').value = '';
     mostrarPantalla('pantalla-usuario');
     renderFaceIdUsuarios();
+  });
+
+  document.getElementById('btn-abrir-ajustes').addEventListener('click', () => {
+    actualizarBotonesFaceId();
+    document.getElementById('popup-ajustes').classList.remove('oculto');
+  });
+  document.getElementById('btn-cerrar-ajustes').addEventListener('click', () => {
+    document.getElementById('popup-ajustes').classList.add('oculto');
   });
 
   document.getElementById('btn-agregar-usuario').addEventListener('click', agregarUsuario);

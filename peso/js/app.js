@@ -819,6 +819,26 @@ function anchoResponsivo(nPuntos) {
   return Math.max(MIN_ANCHO, nPuntos * PX_POR_PUNTO);
 }
 
+// Qué índices de una serie de n puntos llevan etiqueta de fecha en el eje X,
+// sin que dos etiquetas queden pegadas. Se muestra 1 de cada `cada` puntos
+// (según cuánto espacio real hay por punto) -- pero SIEMPRE se incluye el
+// último punto (para siempre ver la fecha más reciente), REEMPLAZANDO (no
+// sumando) a la última etiqueta alineada si esa quedaría a menos de un paso
+// de distancia: mostrar las dos ahí encima solapa el texto en vez de ayudar
+// a leerlo (bug real: "los meses se leen amontonados" en la gráfica de
+// tendencias).
+function indicesConEtiqueta(n) {
+  const cada = Math.ceil(40 / PX_POR_PUNTO);
+  const indices = new Set();
+  for (let i = 0; i < n; i += cada) indices.add(i);
+  const ultimo = n - 1;
+  if (!indices.has(ultimo)) {
+    indices.delete(Math.floor(ultimo / cada) * cada);
+    indices.add(ultimo);
+  }
+  return indices;
+}
+
 function escalaY(valores, alto, pad) {
   const min = Math.min(...valores);
   const max = Math.max(...valores);
@@ -859,11 +879,9 @@ function svgLineaPeso(serie, { height = 220, color = '#4c5fd5', meta = null } = 
       <text x="4" y="${yy + 4}" class="grafica-eje-texto">${valor.toFixed(1)}</text>`;
   }).join('');
 
+  const indicesEtiqueta = indicesConEtiqueta(serie.length);
   const etiquetasX = serie.map((p, i) => {
-    // en pantallas chicas, una etiqueta por punto se amontona -- se salta
-    // según cuánto espacio real hay por punto.
-    const cada = Math.ceil(40 / PX_POR_PUNTO);
-    if (i % cada !== 0 && i !== serie.length - 1) return '';
+    if (!indicesEtiqueta.has(i)) return '';
     const [x] = puntosXY[i];
     return `<text x="${x}" y="${height - 6}" text-anchor="middle" class="grafica-eje-texto">${fechaCorta(p.fecha)}</text>`;
   }).join('');
@@ -925,9 +943,9 @@ function svgLineaComparativa(serieA, serieB, { height = 240, colorA = '#4c5fd5',
       <text x="4" y="${yy + 4}" class="grafica-eje-texto">${valor.toFixed(1)}</text>`;
   }).join('');
 
-  const cada = Math.ceil(40 / PX_POR_PUNTO);
+  const indicesEtiqueta = indicesConEtiqueta(fechas.length);
   const etiquetasX = fechas.map((f, i) => {
-    if (i % cada !== 0 && i !== fechas.length - 1) return '';
+    if (!indicesEtiqueta.has(i)) return '';
     return `<text x="${x(f)}" y="${height - 6}" text-anchor="middle" class="grafica-eje-texto">${fechaCorta(f)}</text>`;
   }).join('');
 
@@ -1132,6 +1150,19 @@ function tieneBloqueoAuth(usuario) {
   return bloqueadosPorAuth.has(String(usuario || ''));
 }
 
+// El bloqueo por AUTH es UN caso de "atorado" -- pero una edición (borrar +
+// guardar) puede quedarse pegada por otras razones (ej. la fila ya no
+// existe del lado del servidor por una edición previa a medias, un timeout
+// repetido, etc.) sin que el error traiga código AUTH. Sin esto, esos casos
+// se quedan mostrando "🔄 Sincronizando..." para siempre -- que se lee como
+// "ya casi", no como "esto no se está subiendo a Drive, hay que hacer algo".
+const UMBRAL_ATORADO_MS = 2 * 60 * 1000;
+
+function tieneOperacionAtorada(usuario) {
+  const cola = leerCola(usuario);
+  return cola.some((e) => Date.now() - Number(e.ts || 0) > UMBRAL_ATORADO_MS);
+}
+
 async function sincronizar(usuario, transporte = api) {
   if (sincronizando) return;
   const cola = leerCola(usuario);
@@ -1166,17 +1197,20 @@ async function sincronizar(usuario, transporte = api) {
 function iniciarSincronizacionAutomatica(usuario, alSincronizar) {
   const intentar = async () => {
     const r = await sincronizar(usuario);
-    // También al detectar el bloqueo por sesión (aunque nada se haya
-    // sincronizado), para que el badge deje de decir "🔄 Sincronizando..."
-    // y avise que hace falta volver a entrar -- no basta con esperar.
-    if (r && (r.sincronizados > 0 || r.bloqueoAuth) && alSincronizar) alSincronizar(r);
+    // También si sigue habiendo pendientes (aunque nada se haya
+    // sincronizado en este intento), para que el badge se re-evalúe cada
+    // 15s y pueda pasar de "🔄 Sincronizando..." a la advertencia de
+    // "atorado" según vaya envejeciendo -- si solo se avisara al lograr
+    // sincronizar algo, una operación que nunca logra pasar se quedaría
+    // mostrando el mensaje discreto para siempre.
+    if (r && (r.sincronizados > 0 || r.bloqueoAuth || r.pendientes > 0) && alSincronizar) alSincronizar(r);
   };
   window.addEventListener('online', intentar);
   setInterval(intentar, 15000);
   intentar();
 }
 
-  return { compactarOperaciones, leerCola, encolarPeso, encolarBorrado, leerCache, refrescarDatos, hayCambiosRemotos, tieneBloqueoAuth, sincronizar, iniciarSincronizacionAutomatica };
+  return { compactarOperaciones, leerCola, encolarPeso, encolarBorrado, leerCache, refrescarDatos, hayCambiosRemotos, tieneBloqueoAuth, tieneOperacionAtorada, sincronizar, iniciarSincronizacionAutomatica };
 })();
 const compactarOperaciones = cola.compactarOperaciones;
 const leerCola = cola.leerCola;
@@ -1186,6 +1220,7 @@ const leerCache = cola.leerCache;
 const refrescarDatos = cola.refrescarDatos;
 const hayCambiosRemotos = cola.hayCambiosRemotos;
 const tieneBloqueoAuth = cola.tieneBloqueoAuth;
+const tieneOperacionAtorada = cola.tieneOperacionAtorada;
 const sincronizar = cola.sincronizar;
 const iniciarSincronizacionAutomatica = cola.iniciarSincronizacionAutomatica;
 
@@ -2351,6 +2386,16 @@ function formatoPesoDualColor(pesoKg) {
   return `<span class="unidad-kg">${kgTxt} kg</span> · <span class="unidad-lb">${lbTxt} lb</span>`;
 }
 
+// Las gráficas crecen hacia la derecha con la cantidad de puntos (más
+// reciente = más a la derecha) y hacen scroll horizontal cuando no caben --
+// por defecto un contenedor con overflow-x empieza mostrando el borde
+// IZQUIERDO (el más viejo). Con esto arrancan mostrando lo más reciente, y
+// deslizar el dedo hacia la izquierda lleva al historial completo hasta el
+// primer registro, sin tener que achicar nada.
+function mostrarGraficaDesdeElFinal(el) {
+  requestAnimationFrame(() => { el.scrollLeft = el.scrollWidth; });
+}
+
 function toast(msg, esError = false) {
   let el = document.getElementById('toast-simple');
   if (!el) {
@@ -2425,6 +2470,13 @@ function actualizarBadgeConexion() {
     el.classList.remove('oculto');
   } else if (E.sinConexion) {
     el.textContent = pendientes ? `📴 Sin conexión · ${pendientes} sin sincronizar` : '📴 Sin conexión (viendo lo último guardado)';
+    el.classList.remove('oculto');
+  } else if (pendientes && cola.tieneOperacionAtorada(getUsuario())) {
+    // Hay señal (no es "sin conexión") y ya pasaron minutos sin lograr
+    // subir esto -- seguir diciendo "Sincronizando..." sería mentir. Cubre
+    // capturas Y ediciones (misma cola) que se atoran por razones que no
+    // son sesión vencida (ej. timeout repetido, conflicto en el servidor).
+    el.textContent = `⚠️ ${pendientes} sin subir -- revisa tu conexión, o ábrela de nuevo más tarde`;
     el.classList.remove('oculto');
   } else if (pendientes) {
     el.textContent = `🔄 Sincronizando ${pendientes}...`;
@@ -2561,13 +2613,19 @@ function renderProgreso() {
     elAvance.innerHTML = '<p class="texto-suave">Define tu meta y tu peso inicial en Ajustes para ver tu avance.</p>';
   }
 
-  document.getElementById('grafica-diaria').innerHTML = graficas.svgLineaPeso(serie, { meta: u.metaKg, color: '#ff6b4a' });
+  const elDiaria = document.getElementById('grafica-diaria');
+  elDiaria.innerHTML = graficas.svgLineaPeso(serie, { meta: u.metaKg, color: '#ff6b4a' });
+  mostrarGraficaDesdeElFinal(elDiaria);
 
   const suavizada = promedioMovil(serie, 7);
-  document.getElementById('grafica-progreso').innerHTML = graficas.svgLineaPeso(suavizada, { meta: u.metaKg });
+  const elProgreso = document.getElementById('grafica-progreso');
+  elProgreso.innerHTML = graficas.svgLineaPeso(suavizada, { meta: u.metaKg });
+  mostrarGraficaDesdeElFinal(elProgreso);
 
   const semanal = promedioSemanal(serie, 12);
-  document.getElementById('grafica-semanal').innerHTML = graficas.svgLineaPeso(semanal.map((s) => ({ fecha: s.semana, pesoKg: s.pesoKg })));
+  const elSemanal = document.getElementById('grafica-semanal');
+  elSemanal.innerHTML = graficas.svgLineaPeso(semanal.map((s) => ({ fecha: s.semana, pesoKg: s.pesoKg })));
+  mostrarGraficaDesdeElFinal(elSemanal);
 
   mostrarGraficaActiva();
   renderHistorial(serie);
@@ -2698,10 +2756,12 @@ function renderReto() {
   document.getElementById('leyenda-otro').textContent = otro || '—';
   document.getElementById('leyenda-punto-yo').style.background = colorDeUsuario(getUsuario());
   document.getElementById('leyenda-punto-otro').style.background = otro ? colorDeUsuario(otro) : '#999';
-  document.getElementById('grafica-reto').innerHTML = graficas.svgLineaComparativa(
+  const elReto = document.getElementById('grafica-reto');
+  elReto.innerHTML = graficas.svgLineaComparativa(
     promedioMovil(serieYo, 7), promedioMovil(serieOtro, 7),
     { colorA: colorDeUsuario(getUsuario()), colorB: otro ? colorDeUsuario(otro) : '#999' }
   );
+  mostrarGraficaDesdeElFinal(elReto);
 
   const nombres = otro ? [getUsuario(), otro] : [getUsuario()];
   const filas = nombres.map((nombre) => {

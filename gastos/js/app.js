@@ -1595,9 +1595,28 @@ function limpiarPendiente(usuario) {
   localStorage.removeItem(clavePendiente(usuario));
 }
 
+// A diferencia de "pendiente" (un guardado que todavía no llega al
+// servidor), esto es una COPIA de lo último que sí llegó -- el blob sigue
+// cifrado, nunca se guarda nada en claro. Sin esto, abrir la app sin señal
+// no tenía de dónde leer (a menos que hubiera justo un guardado pendiente
+// a medias) y Miguel se quedaba sin poder ni siquiera VER sus gastos, mucho
+// menos capturar uno nuevo, cuando no tenía red -- que es precisamente
+// cuando más lo necesita (documentar en el momento, sin señal).
+function claveCache(usuario) {
+  return `gastos_cache_${usuario}`;
+}
+function guardarCache(usuario, blobStr) {
+  localStorage.setItem(claveCache(usuario), blobStr);
+}
+function leerCache(usuario) {
+  return localStorage.getItem(claveCache(usuario));
+}
+
 function crearLecturaApertura(usuario, dependencias = {}) {
   const leerLocal = dependencias.leerPendiente || leerPendiente;
   const leerRemoto = dependencias.leerRemoto || leerGastos;
+  const guardarLocalCache = dependencias.guardarCache || guardarCache;
+  const leerLocalCache = dependencias.leerCache || leerCache;
   let promesa;
   return {
     leer() {
@@ -1605,8 +1624,15 @@ function crearLecturaApertura(usuario, dependencias = {}) {
         promesa = Promise.resolve().then(async () => {
           const pendiente = leerLocal(usuario);
           if (pendiente) return { ok: true, blob: pendiente, pendienteDeSincronizar: true };
-          const respuesta = await leerRemoto(usuario);
-          return { ...respuesta, pendienteDeSincronizar: false };
+          try {
+            const respuesta = await leerRemoto(usuario);
+            if (respuesta.ok && respuesta.blob) guardarLocalCache(usuario, respuesta.blob);
+            return { ...respuesta, pendienteDeSincronizar: false };
+          } catch (error) {
+            const cache = leerLocalCache(usuario);
+            if (!cache) throw error; // nunca se ha sincronizado nada -- no hay de dónde leer sin red
+            return { ok: true, blob: cache, pendienteDeSincronizar: false, sinConexion: true };
+          }
         }).catch((error) => {
           promesa = null;
           throw error;
@@ -1652,7 +1678,7 @@ async function cargar(usuario, password, lectura = crearLecturaApertura(usuario)
   const paquete = JSON.parse(r.blob);
   const { clave, saltB64 } = await crearClaveSesion(password, paquete.salt);
   const datos = await descifrarConClave(paquete, clave); // avienta si password mal
-  return { datos: normalizarDatos(datos), pendienteDeSincronizar: false, clave, saltB64 };
+  return { datos: normalizarDatos(datos), pendienteDeSincronizar: false, sinConexion: !!r.sinConexion, clave, saltB64 };
 }
 
 // Regresa {sincronizado}: true si ya llegó al servidor, false si quedó en
@@ -1676,6 +1702,7 @@ function crearColaGuardados(dependencias = {}) {
   const enviar = dependencias.enviar || guardarGastos;
   const guardarLocal = dependencias.guardarPendiente || guardarPendiente;
   const limpiarLocal = dependencias.limpiarPendiente || limpiarPendiente;
+  const guardarLocalCache = dependencias.guardarCache || guardarCache;
   const registroColas = dependencias.registroColas || crearRegistroColas();
   const versiones = new Map();
   return {
@@ -1690,6 +1717,11 @@ function crearColaGuardados(dependencias = {}) {
           const r = await enviar(usuario, blobStr);
           if (r.ok) {
             if (versiones.get(usuario) === version) limpiarLocal(usuario);
+            // También refresca el caché de "última lectura buena" -- si no,
+            // abrir la app offline después de este guardado mostraría el
+            // dato de ANTES de este cambio (el último leer() exitoso, no
+            // el último guardar() exitoso).
+            guardarLocalCache(usuario, blobStr);
             return { sincronizado: true };
           }
         } catch {
@@ -1707,6 +1739,7 @@ async function ejecutarSincronizacion(usuario, estado, dependencias) {
   const leerLocal = dependencias.leerPendiente || leerPendiente;
   const enviar = dependencias.enviar || guardarGastos;
   const limpiarLocal = dependencias.limpiarPendiente || limpiarPendiente;
+  const guardarLocalCache = dependencias.guardarCache || guardarCache;
   if (estado.sincronizando || !estaEnLinea()) return false;
   const pendiente = leerLocal(usuario);
   if (!pendiente) return false;
@@ -1716,6 +1749,7 @@ async function ejecutarSincronizacion(usuario, estado, dependencias) {
     const r = await enviar(usuario, pendiente);
     if (r.ok && leerLocal(usuario) === pendiente) {
       limpiarLocal(usuario);
+      guardarLocalCache(usuario, pendiente); // ver comentario igual en crearColaGuardados
       ok = true;
     }
   } catch {
@@ -2016,7 +2050,7 @@ async function intentarClaveSesion() {
   E.passwordModo = 'entrar';
   mostrarVerificandoPassword(true);
   try {
-    const { datos, pendienteDeSincronizar, clave: claveCripto, saltB64 } = await almacen.cargar(getUsuario(), clave, E.lecturaApertura);
+    const { datos, pendienteDeSincronizar, sinConexion, clave: claveCripto, saltB64 } = await almacen.cargar(getUsuario(), clave, E.lecturaApertura);
     E.clave = claveCripto;
     E.saltCifrado = saltB64;
     E.datos = datos;
@@ -2025,7 +2059,7 @@ async function intentarClaveSesion() {
       E.datos.movimientos.push(...nuevos);
       await persistir();
     }
-    finalizarConexion(pendienteDeSincronizar);
+    finalizarConexion(pendienteDeSincronizar, sinConexion);
     ofrecerActivarFaceId(clave);
     return true;
   } catch {
@@ -2106,10 +2140,11 @@ function mostrarVerificandoPassword(verificando) {
   document.getElementById('btn-faceid-password').disabled = verificando;
 }
 
-function finalizarConexion(pendienteDeSincronizar) {
+function finalizarConexion(pendienteDeSincronizar, sinConexion = false) {
   document.getElementById('pantalla-password').classList.add('oculto');
   document.getElementById('app').classList.remove('oculto');
   if (pendienteDeSincronizar) toast('Tenías cambios sin sincronizar — se están subiendo.', true);
+  else if (sinConexion) toast('Sin conexión — viendo lo último guardado. Lo que captures se sube solo al volver la señal.', true);
   render();
   E.cleanupSincronizacion?.();
   E.cleanupSincronizacion = almacen.iniciarSincronizacionAutomatica(getUsuario(), () => toast('Sincronizado ✓'));
@@ -2142,7 +2177,7 @@ async function confirmarPassword() {
     // avisar nada aquí, se sentía como que la app se quedó pasmada.
     mostrarVerificandoPassword(true);
     try {
-      const { datos, pendienteDeSincronizar, clave, saltB64 } = await almacen.cargar(getUsuario(), pass, E.lecturaApertura);
+      const { datos, pendienteDeSincronizar, sinConexion, clave, saltB64 } = await almacen.cargar(getUsuario(), pass, E.lecturaApertura);
       E.clave = clave;
       E.saltCifrado = saltB64;
       E.datos = datos;
@@ -2167,7 +2202,7 @@ async function confirmarPassword() {
         toast('Tu contraseña de Gastos ya quedó unificada con tu contraseña de acceso ✓');
       }
       guardarClaveSesion(claveSesionActual || pass); // para que Peso <-> Gastos ya no la vuelva a pedir el resto de la sesión
-      finalizarConexion(pendienteDeSincronizar);
+      finalizarConexion(pendienteDeSincronizar, sinConexion);
       ofrecerActivarFaceId(claveSesionActual || pass);
       return true;
     } catch (e) {

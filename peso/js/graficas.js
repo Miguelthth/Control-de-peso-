@@ -25,6 +25,26 @@ function anchoResponsivo(nPuntos) {
   return Math.max(MIN_ANCHO, nPuntos * PX_POR_PUNTO);
 }
 
+// Qué índices de una serie de n puntos llevan etiqueta de fecha en el eje X,
+// sin que dos etiquetas queden pegadas. Se muestra 1 de cada `cada` puntos
+// (según cuánto espacio real hay por punto) -- pero SIEMPRE se incluye el
+// último punto (para siempre ver la fecha más reciente), REEMPLAZANDO (no
+// sumando) a la última etiqueta alineada si esa quedaría a menos de un paso
+// de distancia: mostrar las dos ahí encima solapa el texto en vez de ayudar
+// a leerlo (bug real: "los meses se leen amontonados" en la gráfica de
+// tendencias).
+function indicesConEtiqueta(n) {
+  const cada = Math.ceil(40 / PX_POR_PUNTO);
+  const indices = new Set();
+  for (let i = 0; i < n; i += cada) indices.add(i);
+  const ultimo = n - 1;
+  if (!indices.has(ultimo)) {
+    indices.delete(Math.floor(ultimo / cada) * cada);
+    indices.add(ultimo);
+  }
+  return indices;
+}
+
 function escalaY(valores, alto, pad) {
   const min = Math.min(...valores);
   const max = Math.max(...valores);
@@ -65,11 +85,9 @@ export function svgLineaPeso(serie, { height = 220, color = '#4c5fd5', meta = nu
       <text x="4" y="${yy + 4}" class="grafica-eje-texto">${valor.toFixed(1)}</text>`;
   }).join('');
 
+  const indicesEtiqueta = indicesConEtiqueta(serie.length);
   const etiquetasX = serie.map((p, i) => {
-    // en pantallas chicas, una etiqueta por punto se amontona -- se salta
-    // según cuánto espacio real hay por punto.
-    const cada = Math.ceil(40 / PX_POR_PUNTO);
-    if (i % cada !== 0 && i !== serie.length - 1) return '';
+    if (!indicesEtiqueta.has(i)) return '';
     const [x] = puntosXY[i];
     return `<text x="${x}" y="${height - 6}" text-anchor="middle" class="grafica-eje-texto">${fechaCorta(p.fecha)}</text>`;
   }).join('');
@@ -131,9 +149,9 @@ export function svgLineaComparativa(serieA, serieB, { height = 240, colorA = '#4
       <text x="4" y="${yy + 4}" class="grafica-eje-texto">${valor.toFixed(1)}</text>`;
   }).join('');
 
-  const cada = Math.ceil(40 / PX_POR_PUNTO);
+  const indicesEtiqueta = indicesConEtiqueta(fechas.length);
   const etiquetasX = fechas.map((f, i) => {
-    if (i % cada !== 0 && i !== fechas.length - 1) return '';
+    if (!indicesEtiqueta.has(i)) return '';
     return `<text x="${x(f)}" y="${height - 6}" text-anchor="middle" class="grafica-eje-texto">${fechaCorta(f)}</text>`;
   }).join('');
 

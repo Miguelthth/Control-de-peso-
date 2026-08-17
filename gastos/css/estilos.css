@@ -22,7 +22,14 @@ button, input, select, textarea { font-family: inherit; }
   z-index: 1;
   max-width: 480px;
   margin: 0 auto;
-  min-height: 100vh;
+  /* 100vh en celular se calcula con la barra de direcciones OCULTA (la más
+     alta posible) -- con la barra visible (el caso normal al abrir la app)
+     el área real de pantalla es más chica de lo que #app cree que tiene,
+     así que el contenido queda calculado más largo de lo necesario y el
+     botón al final de cada vista termina fuera de la parte visible, atrás
+     del nav fijo, hasta hacer scroll de más. .pantalla-conexion (abajo en
+     este mismo archivo) ya usa 100dvh por esto mismo -- aquí faltaba. */
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   padding-bottom: 76px;
@@ -64,11 +71,11 @@ button, input, select, textarea { font-family: inherit; }
 }
 .nav-inferior .contenedor { display: flex; width: 100%; max-width: 480px; }
 .nav-inferior button, .nav-inferior-link {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
   background: none; border: none; color: var(--texto-suave); text-decoration: none;
-  font-size: 0.7rem; padding: 8px 4px; cursor: pointer; border-radius: 10px;
+  font-size: 0.68rem; padding: 6px 4px; cursor: pointer; border-radius: 10px;
 }
-.nav-inferior button .emoji, .nav-inferior-link .emoji { font-size: 1.25rem; }
+.nav-inferior button .emoji, .nav-inferior-link .emoji { font-size: 1.1rem; }
 .nav-inferior button.activo { color: var(--primario); font-weight: 600; }
 
 /* ---- Vistas ---- */

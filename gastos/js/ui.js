@@ -211,7 +211,7 @@ async function intentarClaveSesion() {
   E.passwordModo = 'entrar';
   mostrarVerificandoPassword(true);
   try {
-    const { datos, pendienteDeSincronizar, clave: claveCripto, saltB64 } = await almacen.cargar(getUsuario(), clave, E.lecturaApertura);
+    const { datos, pendienteDeSincronizar, sinConexion, clave: claveCripto, saltB64 } = await almacen.cargar(getUsuario(), clave, E.lecturaApertura);
     E.clave = claveCripto;
     E.saltCifrado = saltB64;
     E.datos = datos;
@@ -220,7 +220,7 @@ async function intentarClaveSesion() {
       E.datos.movimientos.push(...nuevos);
       await persistir();
     }
-    finalizarConexion(pendienteDeSincronizar);
+    finalizarConexion(pendienteDeSincronizar, sinConexion);
     ofrecerActivarFaceId(clave);
     return true;
   } catch {
@@ -301,10 +301,11 @@ function mostrarVerificandoPassword(verificando) {
   document.getElementById('btn-faceid-password').disabled = verificando;
 }
 
-function finalizarConexion(pendienteDeSincronizar) {
+function finalizarConexion(pendienteDeSincronizar, sinConexion = false) {
   document.getElementById('pantalla-password').classList.add('oculto');
   document.getElementById('app').classList.remove('oculto');
   if (pendienteDeSincronizar) toast('Tenías cambios sin sincronizar — se están subiendo.', true);
+  else if (sinConexion) toast('Sin conexión — viendo lo último guardado. Lo que captures se sube solo al volver la señal.', true);
   render();
   E.cleanupSincronizacion?.();
   E.cleanupSincronizacion = almacen.iniciarSincronizacionAutomatica(getUsuario(), () => toast('Sincronizado ✓'));
@@ -337,7 +338,7 @@ async function confirmarPassword() {
     // avisar nada aquí, se sentía como que la app se quedó pasmada.
     mostrarVerificandoPassword(true);
     try {
-      const { datos, pendienteDeSincronizar, clave, saltB64 } = await almacen.cargar(getUsuario(), pass, E.lecturaApertura);
+      const { datos, pendienteDeSincronizar, sinConexion, clave, saltB64 } = await almacen.cargar(getUsuario(), pass, E.lecturaApertura);
       E.clave = clave;
       E.saltCifrado = saltB64;
       E.datos = datos;
@@ -362,7 +363,7 @@ async function confirmarPassword() {
         toast('Tu contraseña de Gastos ya quedó unificada con tu contraseña de acceso ✓');
       }
       guardarClaveSesion(claveSesionActual || pass); // para que Peso <-> Gastos ya no la vuelva a pedir el resto de la sesión
-      finalizarConexion(pendienteDeSincronizar);
+      finalizarConexion(pendienteDeSincronizar, sinConexion);
       ofrecerActivarFaceId(claveSesionActual || pass);
       return true;
     } catch (e) {

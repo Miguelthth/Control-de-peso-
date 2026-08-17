@@ -143,6 +143,19 @@ export function tieneBloqueoAuth(usuario) {
   return bloqueadosPorAuth.has(String(usuario || ''));
 }
 
+// El bloqueo por AUTH es UN caso de "atorado" -- pero una edición (borrar +
+// guardar) puede quedarse pegada por otras razones (ej. la fila ya no
+// existe del lado del servidor por una edición previa a medias, un timeout
+// repetido, etc.) sin que el error traiga código AUTH. Sin esto, esos casos
+// se quedan mostrando "🔄 Sincronizando..." para siempre -- que se lee como
+// "ya casi", no como "esto no se está subiendo a Drive, hay que hacer algo".
+const UMBRAL_ATORADO_MS = 2 * 60 * 1000;
+
+export function tieneOperacionAtorada(usuario) {
+  const cola = leerCola(usuario);
+  return cola.some((e) => Date.now() - Number(e.ts || 0) > UMBRAL_ATORADO_MS);
+}
+
 export async function sincronizar(usuario, transporte = api) {
   if (sincronizando) return;
   const cola = leerCola(usuario);
@@ -177,10 +190,13 @@ export async function sincronizar(usuario, transporte = api) {
 export function iniciarSincronizacionAutomatica(usuario, alSincronizar) {
   const intentar = async () => {
     const r = await sincronizar(usuario);
-    // También al detectar el bloqueo por sesión (aunque nada se haya
-    // sincronizado), para que el badge deje de decir "🔄 Sincronizando..."
-    // y avise que hace falta volver a entrar -- no basta con esperar.
-    if (r && (r.sincronizados > 0 || r.bloqueoAuth) && alSincronizar) alSincronizar(r);
+    // También si sigue habiendo pendientes (aunque nada se haya
+    // sincronizado en este intento), para que el badge se re-evalúe cada
+    // 15s y pueda pasar de "🔄 Sincronizando..." a la advertencia de
+    // "atorado" según vaya envejeciendo -- si solo se avisara al lograr
+    // sincronizar algo, una operación que nunca logra pasar se quedaría
+    // mostrando el mensaje discreto para siempre.
+    if (r && (r.sincronizados > 0 || r.bloqueoAuth || r.pendientes > 0) && alSincronizar) alSincronizar(r);
   };
   window.addEventListener('online', intentar);
   setInterval(intentar, 15000);

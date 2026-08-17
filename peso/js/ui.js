@@ -68,6 +68,16 @@ function formatoPesoDualColor(pesoKg) {
   return `<span class="unidad-kg">${kgTxt} kg</span> · <span class="unidad-lb">${lbTxt} lb</span>`;
 }
 
+// Las gráficas crecen hacia la derecha con la cantidad de puntos (más
+// reciente = más a la derecha) y hacen scroll horizontal cuando no caben --
+// por defecto un contenedor con overflow-x empieza mostrando el borde
+// IZQUIERDO (el más viejo). Con esto arrancan mostrando lo más reciente, y
+// deslizar el dedo hacia la izquierda lleva al historial completo hasta el
+// primer registro, sin tener que achicar nada.
+function mostrarGraficaDesdeElFinal(el) {
+  requestAnimationFrame(() => { el.scrollLeft = el.scrollWidth; });
+}
+
 function toast(msg, esError = false) {
   let el = document.getElementById('toast-simple');
   if (!el) {
@@ -142,6 +152,13 @@ function actualizarBadgeConexion() {
     el.classList.remove('oculto');
   } else if (E.sinConexion) {
     el.textContent = pendientes ? `📴 Sin conexión · ${pendientes} sin sincronizar` : '📴 Sin conexión (viendo lo último guardado)';
+    el.classList.remove('oculto');
+  } else if (pendientes && cola.tieneOperacionAtorada(getUsuario())) {
+    // Hay señal (no es "sin conexión") y ya pasaron minutos sin lograr
+    // subir esto -- seguir diciendo "Sincronizando..." sería mentir. Cubre
+    // capturas Y ediciones (misma cola) que se atoran por razones que no
+    // son sesión vencida (ej. timeout repetido, conflicto en el servidor).
+    el.textContent = `⚠️ ${pendientes} sin subir -- revisa tu conexión, o ábrela de nuevo más tarde`;
     el.classList.remove('oculto');
   } else if (pendientes) {
     el.textContent = `🔄 Sincronizando ${pendientes}...`;
@@ -278,13 +295,19 @@ function renderProgreso() {
     elAvance.innerHTML = '<p class="texto-suave">Define tu meta y tu peso inicial en Ajustes para ver tu avance.</p>';
   }
 
-  document.getElementById('grafica-diaria').innerHTML = graficas.svgLineaPeso(serie, { meta: u.metaKg, color: '#ff6b4a' });
+  const elDiaria = document.getElementById('grafica-diaria');
+  elDiaria.innerHTML = graficas.svgLineaPeso(serie, { meta: u.metaKg, color: '#ff6b4a' });
+  mostrarGraficaDesdeElFinal(elDiaria);
 
   const suavizada = promedioMovil(serie, 7);
-  document.getElementById('grafica-progreso').innerHTML = graficas.svgLineaPeso(suavizada, { meta: u.metaKg });
+  const elProgreso = document.getElementById('grafica-progreso');
+  elProgreso.innerHTML = graficas.svgLineaPeso(suavizada, { meta: u.metaKg });
+  mostrarGraficaDesdeElFinal(elProgreso);
 
   const semanal = promedioSemanal(serie, 12);
-  document.getElementById('grafica-semanal').innerHTML = graficas.svgLineaPeso(semanal.map((s) => ({ fecha: s.semana, pesoKg: s.pesoKg })));
+  const elSemanal = document.getElementById('grafica-semanal');
+  elSemanal.innerHTML = graficas.svgLineaPeso(semanal.map((s) => ({ fecha: s.semana, pesoKg: s.pesoKg })));
+  mostrarGraficaDesdeElFinal(elSemanal);
 
   mostrarGraficaActiva();
   renderHistorial(serie);
@@ -415,10 +438,12 @@ function renderReto() {
   document.getElementById('leyenda-otro').textContent = otro || '—';
   document.getElementById('leyenda-punto-yo').style.background = colorDeUsuario(getUsuario());
   document.getElementById('leyenda-punto-otro').style.background = otro ? colorDeUsuario(otro) : '#999';
-  document.getElementById('grafica-reto').innerHTML = graficas.svgLineaComparativa(
+  const elReto = document.getElementById('grafica-reto');
+  elReto.innerHTML = graficas.svgLineaComparativa(
     promedioMovil(serieYo, 7), promedioMovil(serieOtro, 7),
     { colorA: colorDeUsuario(getUsuario()), colorB: otro ? colorDeUsuario(otro) : '#999' }
   );
+  mostrarGraficaDesdeElFinal(elReto);
 
   const nombres = otro ? [getUsuario(), otro] : [getUsuario()];
   const filas = nombres.map((nombre) => {

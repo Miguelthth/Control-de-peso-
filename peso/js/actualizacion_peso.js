@@ -14,8 +14,8 @@ export function hayCapturaPesoPendiente(captura) {
   return Boolean(tienePeso || cambioFecha);
 }
 
-export function decidirRecargaActualizacion({ capturaPendiente, formularioPendiente = false, escribiendoActivo, recargaDiferida = false }) {
-  if (capturaPendiente || formularioPendiente || escribiendoActivo) return { recargar: false, diferir: true };
+export function decidirRecargaActualizacion({ capturaPendiente, formularioPendiente = false, escribiendoActivo, entrenamientoActivo = false, recargaDiferida = false }) {
+  if (capturaPendiente || formularioPendiente || escribiendoActivo || entrenamientoActivo) return { recargar: false, diferir: true };
   return { recargar: true, diferir: false };
 }
 

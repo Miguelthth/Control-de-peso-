@@ -1120,6 +1120,18 @@ async function hayCambiosRemotos() {
 
 let sincronizando = false;
 
+// Por usuario: true mientras el servidor siga rechazando la cola por sesión
+// inválida/expirada (código 'AUTH'). A diferencia de una falla de red, esto
+// NO se resuelve solo reintentando -- se queda atorado hasta que alguien
+// vuelva a iniciar sesión -- así que amerita un aviso distinto al badge
+// discreto de "sincronizando", que el dueño del dato puede pasar por alto
+// mientras el otro celular nunca recibe el cambio.
+const bloqueadosPorAuth = new Set();
+
+function tieneBloqueoAuth(usuario) {
+  return bloqueadosPorAuth.has(String(usuario || ''));
+}
+
 async function sincronizar(usuario, transporte = api) {
   if (sincronizando) return;
   const cola = leerCola(usuario);
@@ -1127,6 +1139,7 @@ async function sincronizar(usuario, transporte = api) {
   sincronizando = true;
   try {
   const pendientes = [];
+  let bloqueoAuth = false;
   for (const entrada of cola) {
     try {
       const r = entrada.tipo === 'borrar'
@@ -1137,11 +1150,14 @@ async function sincronizar(usuario, transporte = api) {
         const id = identidadOperacion(entrada);
         guardarJSON(claveCola(usuario), leerCola(usuario).filter((e) => identidadOperacion(e) !== id));
       }
-    } catch {
-      pendientes.push(entrada); // sigue sin señal -- se queda en la cola
+    } catch (error) {
+      pendientes.push(entrada); // sigue sin señal (o sin sesión) -- se queda en la cola
+      if (error?.code === 'AUTH') bloqueoAuth = true;
     }
   }
-  return { sincronizados: cola.length - pendientes.length, pendientes: leerCola(usuario).length };
+  if (bloqueoAuth) bloqueadosPorAuth.add(String(usuario || ''));
+  else bloqueadosPorAuth.delete(String(usuario || ''));
+  return { sincronizados: cola.length - pendientes.length, pendientes: leerCola(usuario).length, bloqueoAuth };
   } finally {
     sincronizando = false;
   }
@@ -1150,14 +1166,17 @@ async function sincronizar(usuario, transporte = api) {
 function iniciarSincronizacionAutomatica(usuario, alSincronizar) {
   const intentar = async () => {
     const r = await sincronizar(usuario);
-    if (r && r.sincronizados > 0 && alSincronizar) alSincronizar(r);
+    // También al detectar el bloqueo por sesión (aunque nada se haya
+    // sincronizado), para que el badge deje de decir "🔄 Sincronizando..."
+    // y avise que hace falta volver a entrar -- no basta con esperar.
+    if (r && (r.sincronizados > 0 || r.bloqueoAuth) && alSincronizar) alSincronizar(r);
   };
   window.addEventListener('online', intentar);
   setInterval(intentar, 15000);
   intentar();
 }
 
-  return { compactarOperaciones, leerCola, encolarPeso, encolarBorrado, leerCache, refrescarDatos, hayCambiosRemotos, sincronizar, iniciarSincronizacionAutomatica };
+  return { compactarOperaciones, leerCola, encolarPeso, encolarBorrado, leerCache, refrescarDatos, hayCambiosRemotos, tieneBloqueoAuth, sincronizar, iniciarSincronizacionAutomatica };
 })();
 const compactarOperaciones = cola.compactarOperaciones;
 const leerCola = cola.leerCola;
@@ -1166,6 +1185,7 @@ const encolarBorrado = cola.encolarBorrado;
 const leerCache = cola.leerCache;
 const refrescarDatos = cola.refrescarDatos;
 const hayCambiosRemotos = cola.hayCambiosRemotos;
+const tieneBloqueoAuth = cola.tieneBloqueoAuth;
 const sincronizar = cola.sincronizar;
 const iniciarSincronizacionAutomatica = cola.iniciarSincronizacionAutomatica;
 
@@ -1185,8 +1205,8 @@ function hayCapturaPesoPendiente(captura) {
   return Boolean(tienePeso || cambioFecha);
 }
 
-function decidirRecargaActualizacion({ capturaPendiente, formularioPendiente = false, escribiendoActivo, recargaDiferida = false }) {
-  if (capturaPendiente || formularioPendiente || escribiendoActivo) return { recargar: false, diferir: true };
+function decidirRecargaActualizacion({ capturaPendiente, formularioPendiente = false, escribiendoActivo, entrenamientoActivo = false, recargaDiferida = false }) {
+  if (capturaPendiente || formularioPendiente || escribiendoActivo || entrenamientoActivo) return { recargar: false, diferir: true };
   return { recargar: true, diferir: false };
 }
 
@@ -1854,6 +1874,11 @@ async function iniciarModuloEjercicio(toast) {
 
 function salirModuloEjercicio() { liberarWake(); }
 
+// Usado por actualizacion_peso.js (vía app.js) para no recargar la página
+// de golpe -- perdiendo la rutina o el HIIT en curso -- cuando llega una
+// versión nueva del service worker mientras el usuario está entrenando.
+function hayEntrenamientoActivo() { return Boolean(S.entrenamiento || S.hiit); }
+
 function renderModuloEjercicio() {
   if (!S.datos) S.datos = leerLocal(getUsuario());
   const raiz = document.getElementById('ejercicio-contenido');
@@ -2263,11 +2288,12 @@ function abrirEditarRegistro(id) {
   }
 }
 
-  return { rellenarCatalogoFaltante, iniciarModuloEjercicio, salirModuloEjercicio, renderModuloEjercicio };
+  return { rellenarCatalogoFaltante, iniciarModuloEjercicio, salirModuloEjercicio, hayEntrenamientoActivo, renderModuloEjercicio };
 })();
 const rellenarCatalogoFaltante = ejercicio_ui.rellenarCatalogoFaltante;
 const iniciarModuloEjercicio = ejercicio_ui.iniciarModuloEjercicio;
 const salirModuloEjercicio = ejercicio_ui.salirModuloEjercicio;
+const hayEntrenamientoActivo = ejercicio_ui.hayEntrenamientoActivo;
 const renderModuloEjercicio = ejercicio_ui.renderModuloEjercicio;
 
 // ── peso/js/ui.js ──────────────────────────────────────────
@@ -2391,7 +2417,13 @@ async function cargarYRenderizar() {
 function actualizarBadgeConexion() {
   const el = document.getElementById('badge-conexion');
   const pendientes = cola.leerCola(getUsuario()).length;
-  if (E.sinConexion) {
+  if (pendientes && cola.tieneBloqueoAuth(getUsuario())) {
+    // A diferencia de "sin conexión" (se resuelve solo), esto no se va a
+    // sincronizar hasta que la persona vuelva a entrar -- el mensaje debe
+    // decirlo, no verse igual que el badge de reintento silencioso.
+    el.textContent = `⚠️ ${pendientes} sin guardar -- vuelve a entrar para sincronizar`;
+    el.classList.remove('oculto');
+  } else if (E.sinConexion) {
     el.textContent = pendientes ? `📴 Sin conexión · ${pendientes} sin sincronizar` : '📴 Sin conexión (viendo lo último guardado)';
     el.classList.remove('oculto');
   } else if (pendientes) {
@@ -3120,7 +3152,7 @@ if ('serviceWorker' in navigator) {
     const decision = actualizacion.decidirRecargaActualizacion({
       capturaPendiente: actualizacion.hayCapturaPesoPendiente(E.captura),
       formularioPendiente: ajustesPendientes.size > 0,
-      escribiendoActivo: Boolean(escribiendo), recargaDiferida,
+      escribiendoActivo: Boolean(escribiendo), entrenamientoActivo: hayEntrenamientoActivo(), recargaDiferida,
     });
     recargaDiferida = decision.diferir;
     if (!decision.recargar) return;
@@ -3128,7 +3160,7 @@ if ('serviceWorker' in navigator) {
     releerMetadataActualizacion().finally(() => location.reload());
   }
   intentarRecargaDiferida = function () {
-    if (recargaDiferida && !actualizacion.hayCapturaPesoPendiente(E.captura) && ajustesPendientes.size === 0) intentarRecargar();
+    if (recargaDiferida && !actualizacion.hayCapturaPesoPendiente(E.captura) && ajustesPendientes.size === 0 && !hayEntrenamientoActivo()) intentarRecargar();
   };
   document.addEventListener('input', intentarRecargaDiferida);
   navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);

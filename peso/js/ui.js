@@ -16,7 +16,7 @@ import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, debeConf
 import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
 import { pinNuevoValido } from '../../shared/autorizacion.js';
-import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio, rellenarCatalogoFaltante } from './ejercicio_ui.js';
+import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio, rellenarCatalogoFaltante, hayEntrenamientoActivo } from './ejercicio_ui.js';
 import { mutarLocal, leerLocal, guardarLocal } from './ejercicio_almacen.js';
 
 api.configurarManejadorAuth(() => {
@@ -134,7 +134,13 @@ async function cargarYRenderizar() {
 function actualizarBadgeConexion() {
   const el = document.getElementById('badge-conexion');
   const pendientes = cola.leerCola(getUsuario()).length;
-  if (E.sinConexion) {
+  if (pendientes && cola.tieneBloqueoAuth(getUsuario())) {
+    // A diferencia de "sin conexión" (se resuelve solo), esto no se va a
+    // sincronizar hasta que la persona vuelva a entrar -- el mensaje debe
+    // decirlo, no verse igual que el badge de reintento silencioso.
+    el.textContent = `⚠️ ${pendientes} sin guardar -- vuelve a entrar para sincronizar`;
+    el.classList.remove('oculto');
+  } else if (E.sinConexion) {
     el.textContent = pendientes ? `📴 Sin conexión · ${pendientes} sin sincronizar` : '📴 Sin conexión (viendo lo último guardado)';
     el.classList.remove('oculto');
   } else if (pendientes) {
@@ -863,7 +869,7 @@ if ('serviceWorker' in navigator) {
     const decision = actualizacion.decidirRecargaActualizacion({
       capturaPendiente: actualizacion.hayCapturaPesoPendiente(E.captura),
       formularioPendiente: ajustesPendientes.size > 0,
-      escribiendoActivo: Boolean(escribiendo), recargaDiferida,
+      escribiendoActivo: Boolean(escribiendo), entrenamientoActivo: hayEntrenamientoActivo(), recargaDiferida,
     });
     recargaDiferida = decision.diferir;
     if (!decision.recargar) return;
@@ -871,7 +877,7 @@ if ('serviceWorker' in navigator) {
     releerMetadataActualizacion().finally(() => location.reload());
   }
   intentarRecargaDiferida = function () {
-    if (recargaDiferida && !actualizacion.hayCapturaPesoPendiente(E.captura) && ajustesPendientes.size === 0) intentarRecargar();
+    if (recargaDiferida && !actualizacion.hayCapturaPesoPendiente(E.captura) && ajustesPendientes.size === 0 && !hayEntrenamientoActivo()) intentarRecargar();
   };
   document.addEventListener('input', intentarRecargaDiferida);
   navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);

@@ -131,6 +131,18 @@ export async function hayCambiosRemotos() {
 
 let sincronizando = false;
 
+// Por usuario: true mientras el servidor siga rechazando la cola por sesión
+// inválida/expirada (código 'AUTH'). A diferencia de una falla de red, esto
+// NO se resuelve solo reintentando -- se queda atorado hasta que alguien
+// vuelva a iniciar sesión -- así que amerita un aviso distinto al badge
+// discreto de "sincronizando", que el dueño del dato puede pasar por alto
+// mientras el otro celular nunca recibe el cambio.
+const bloqueadosPorAuth = new Set();
+
+export function tieneBloqueoAuth(usuario) {
+  return bloqueadosPorAuth.has(String(usuario || ''));
+}
+
 export async function sincronizar(usuario, transporte = api) {
   if (sincronizando) return;
   const cola = leerCola(usuario);
@@ -138,6 +150,7 @@ export async function sincronizar(usuario, transporte = api) {
   sincronizando = true;
   try {
   const pendientes = [];
+  let bloqueoAuth = false;
   for (const entrada of cola) {
     try {
       const r = entrada.tipo === 'borrar'
@@ -148,11 +161,14 @@ export async function sincronizar(usuario, transporte = api) {
         const id = identidadOperacion(entrada);
         guardarJSON(claveCola(usuario), leerCola(usuario).filter((e) => identidadOperacion(e) !== id));
       }
-    } catch {
-      pendientes.push(entrada); // sigue sin señal -- se queda en la cola
+    } catch (error) {
+      pendientes.push(entrada); // sigue sin señal (o sin sesión) -- se queda en la cola
+      if (error?.code === 'AUTH') bloqueoAuth = true;
     }
   }
-  return { sincronizados: cola.length - pendientes.length, pendientes: leerCola(usuario).length };
+  if (bloqueoAuth) bloqueadosPorAuth.add(String(usuario || ''));
+  else bloqueadosPorAuth.delete(String(usuario || ''));
+  return { sincronizados: cola.length - pendientes.length, pendientes: leerCola(usuario).length, bloqueoAuth };
   } finally {
     sincronizando = false;
   }
@@ -161,7 +177,10 @@ export async function sincronizar(usuario, transporte = api) {
 export function iniciarSincronizacionAutomatica(usuario, alSincronizar) {
   const intentar = async () => {
     const r = await sincronizar(usuario);
-    if (r && r.sincronizados > 0 && alSincronizar) alSincronizar(r);
+    // También al detectar el bloqueo por sesión (aunque nada se haya
+    // sincronizado), para que el badge deje de decir "🔄 Sincronizando..."
+    // y avise que hace falta volver a entrar -- no basta con esperar.
+    if (r && (r.sincronizados > 0 || r.bloqueoAuth) && alSincronizar) alSincronizar(r);
   };
   window.addEventListener('online', intentar);
   setInterval(intentar, 15000);

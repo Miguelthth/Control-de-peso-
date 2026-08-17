@@ -73,6 +73,11 @@ export async function iniciarModuloEjercicio(toast) {
 
 export function salirModuloEjercicio() { liberarWake(); }
 
+// Usado por actualizacion_peso.js (vía app.js) para no recargar la página
+// de golpe -- perdiendo la rutina o el HIIT en curso -- cuando llega una
+// versión nueva del service worker mientras el usuario está entrenando.
+export function hayEntrenamientoActivo() { return Boolean(S.entrenamiento || S.hiit); }
+
 export function renderModuloEjercicio() {
   if (!S.datos) S.datos = leerLocal(getUsuario());
   const raiz = document.getElementById('ejercicio-contenido');

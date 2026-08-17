@@ -47,9 +47,25 @@ async function precachearAssets() {
   }
 }
 
+// cache.addAll() hace fetch() normal por dentro -- respeta la caché HTTP
+// del navegador. Si el hosting sirve estos archivos con Cache-Control (p.
+// ej. GitHub Pages, ~10 min), un install() disparado poco después de subir
+// cambios puede terminar precacheando el JS/HTML VIEJO que el navegador ya
+// tenía guardado, aunque el nombre de la caché (CACHE) sea nuevo -- el SW
+// "detecta la actualización" y se activa, pero el contenido adentro sigue
+// siendo el de antes. { cache: 'reload' } fuerza a saltarse la caché HTTP
+// y pedir cada archivo del shell directo al servidor.
+async function precachearShell() {
+  const cache = await caches.open(CACHE);
+  await Promise.all(ARCHIVOS.map(async (url) => {
+    const resp = await fetch(url, { cache: 'reload' });
+    await cache.put(url, resp);
+  }));
+}
+
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    Promise.all([caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)), precachearAssets()])
+    Promise.all([precachearShell(), precachearAssets()])
       .then(async () => {
         const cache = await caches.open(CACHE);
         await cache.put(URL_METADATA, new Response(JSON.stringify({

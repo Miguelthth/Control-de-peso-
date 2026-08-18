@@ -87,6 +87,35 @@ const RUTINAS_HIIT_INICIALES = [
   { nombre: 'Principiante', descripcion: '20 segundos de trabajo, 40 de descanso, 8 vueltas. Más tiempo para recuperar entre cada intervalo; ideal para empezar.', vueltas: 8, actividadSeg: 20, descansoSeg: 40, ejercicios: [EJ_HIIT.sentadillaAire, EJ_HIIT.flexiones, EJ_HIIT.plancha, EJ_HIIT.jumpingJacks] },
 ];
 
+// Presets de Caminar/Correr -- progresión clásica de menos a más carrera,
+// para que la pestaña no arranque vacía (mismo criterio que RUTINAS_HIIT_INICIALES).
+const RUTINAS_WR_INICIALES = [
+  {
+    nombre: 'Principiante', descripcion: 'Camina 4 min, corre 1 min. Empieza aquí si tienes tiempo sin correr.',
+    vueltas: 6, calentamientoSeg: 300, enfriamientoSeg: 0,
+    fases: [
+      { nombre: 'Caminar', tipo: 'caminar', duracionSeg: 240 },
+      { nombre: 'Correr', tipo: 'correr', duracionSeg: 60 },
+    ],
+  },
+  {
+    nombre: 'Intermedio', descripcion: 'Mitad y mitad: 2 min caminando, 2 min corriendo.',
+    vueltas: 8, calentamientoSeg: 300, enfriamientoSeg: 0,
+    fases: [
+      { nombre: 'Caminar', tipo: 'caminar', duracionSeg: 120 },
+      { nombre: 'Correr', tipo: 'correr', duracionSeg: 120 },
+    ],
+  },
+  {
+    nombre: 'Avanzado', descripcion: 'Corre 3 min con solo 1 min de caminata para recuperar.',
+    vueltas: 8, calentamientoSeg: 300, enfriamientoSeg: 300,
+    fases: [
+      { nombre: 'Caminar', tipo: 'caminar', duracionSeg: 60 },
+      { nombre: 'Correr', tipo: 'correr', duracionSeg: 180 },
+    ],
+  },
+];
+
 const ahoraISO = () => new Date().toISOString();
 const idNuevo = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -96,7 +125,8 @@ export function crearDocumentoEjercicio(fecha = ahoraISO()) {
     categorias: CATEGORIAS_INICIALES.map((nombre, i) => ({ id: `categoria-${i + 1}`, nombre, activo: true, creadoEn: fecha, modificadoEn: fecha })),
     ejercicios: EJERCICIOS_INICIALES.map((e, i) => ({ id: `ejercicio-inicial-${i + 1}`, ...e, activo: true, creadoEn: fecha, modificadoEn: fecha })),
     rutinasHiit: RUTINAS_HIIT_INICIALES.map((r, i) => ({ id: `rutina-hiit-inicial-${i + 1}`, ...r, activo: true, creadoEn: fecha, modificadoEn: fecha })),
-    rutinas: [], sesiones: [], hiits: [], modificadoEn: fecha,
+    rutinasWr: RUTINAS_WR_INICIALES.map((r, i) => ({ id: `rutina-wr-inicial-${i + 1}`, ...r, activo: true, creadoEn: fecha, modificadoEn: fecha })),
+    rutinas: [], sesiones: [], hiits: [], wrs: [], modificadoEn: fecha,
   };
 }
 
@@ -219,4 +249,129 @@ export function siguientePasoRutina(paso, entradas) {
   if (paso.serieNumero < actual.series) return { ejercicioIndice: paso.ejercicioIndice, serieNumero: paso.serieNumero + 1, terminada: false };
   if (paso.ejercicioIndice + 1 < entradas.length) return { ejercicioIndice: paso.ejercicioIndice + 1, serieNumero: 1, terminada: false };
   return { ejercicioIndice: paso.ejercicioIndice, serieNumero: paso.serieNumero, terminada: true };
+}
+
+// ────────── Caminar/Correr (W/R) ──────────
+// A diferencia de HIIT (dos duraciones fijas que se alternan), una rutina
+// W/R es una LISTA ORDENADA de fases que el usuario arma como quiera y que
+// se repite `vueltas` veces, con calentamiento/enfriamiento opcionales
+// alrededor. Eso permite desde el clásico "camina 3 / corre 1" hasta una
+// pirámide con duraciones distintas en cada tramo.
+
+export const TIPOS_FASE_WR = ['caminar', 'correr', 'calentamiento', 'enfriamiento'];
+
+export function normalizarRutinaWr(rutina, fecha = ahoraISO()) {
+  const nombre = String(rutina.nombre || '').trim();
+  if (!nombre) throw new Error('Nombre de rutina requerido');
+  const vueltas = Number(rutina.vueltas);
+  if (!Number.isInteger(vueltas) || vueltas < 1) throw new Error('Vueltas inválidas');
+  const calentamientoSeg = Number(rutina.calentamientoSeg || 0);
+  if (!Number.isFinite(calentamientoSeg) || calentamientoSeg < 0) throw new Error('Calentamiento inválido');
+  const enfriamientoSeg = Number(rutina.enfriamientoSeg || 0);
+  if (!Number.isFinite(enfriamientoSeg) || enfriamientoSeg < 0) throw new Error('Enfriamiento inválido');
+  if (!Array.isArray(rutina.fases) || !rutina.fases.length) throw new Error('Agrega al menos una fase');
+  const fases = rutina.fases.map((f) => {
+    const duracionSeg = Number(f.duracionSeg);
+    if (!Number.isFinite(duracionSeg) || duracionSeg < 1) throw new Error('Cada fase necesita una duración de al menos 1 segundo');
+    if (!TIPOS_FASE_WR.includes(f.tipo)) throw new Error('Tipo de fase inválido');
+    return { nombre: String(f.nombre || '').trim() || (f.tipo === 'correr' ? 'Correr' : 'Caminar'), tipo: f.tipo, duracionSeg };
+  });
+  return {
+    ...rutina, id: rutina.id || idNuevo(), nombre, descripcion: String(rutina.descripcion || ''),
+    vueltas, calentamientoSeg, enfriamientoSeg, fases,
+    activo: rutina.activo !== false, creadoEn: rutina.creadoEn || fecha, modificadoEn: fecha,
+  };
+}
+
+// La secuencia completa y plana de fases que se van a ejecutar, en orden.
+// `vuelta` es 0 para calentamiento/enfriamiento (no pertenecen a ninguna
+// vuelta) y 1..N para las fases del ciclo.
+export function fasesWr(rutina) {
+  const fases = [];
+  if (rutina.calentamientoSeg > 0) fases.push({ tipo: 'calentamiento', nombre: 'Calentamiento', seg: rutina.calentamientoSeg, vuelta: 0 });
+  for (let v = 1; v <= rutina.vueltas; v++) {
+    for (const f of rutina.fases) fases.push({ tipo: f.tipo, nombre: f.nombre, seg: f.duracionSeg, vuelta: v });
+  }
+  if (rutina.enfriamientoSeg > 0) fases.push({ tipo: 'enfriamiento', nombre: 'Enfriamiento', seg: rutina.enfriamientoSeg, vuelta: 0 });
+  return fases;
+}
+
+export function calcularDuracionWr(rutina) {
+  return fasesWr(rutina).reduce((n, f) => n + f.seg, 0);
+}
+
+// Dado el segundo N desde que arrancó la sesión, en qué fase vas, cuánto
+// le falta, y cuál sigue (para poder anunciarla en pantalla antes de que
+// llegue). null significa que la sesión ya terminó.
+export function faseEnSegundo(fases, transcurridoSeg) {
+  let t = Math.max(0, Math.floor(transcurridoSeg));
+  for (let i = 0; i < fases.length; i++) {
+    if (t < fases[i].seg) {
+      return { ...fases[i], indice: i, restante: fases[i].seg - t, siguiente: fases[i + 1] || null };
+    }
+    t -= fases[i].seg;
+  }
+  return null;
+}
+
+// Cuánto tiempo REAL se acumuló en cada tipo de fase -- si la sesión se
+// detiene a la mitad, solo cuenta lo que de verdad se hizo, no lo planeado.
+export function tiempoPorTipoWr(fases, transcurridoSeg) {
+  let restante = Math.max(0, Math.floor(transcurridoSeg));
+  const acumulado = { caminar: 0, correr: 0, calentamiento: 0, enfriamiento: 0 };
+  for (const f of fases) {
+    if (restante <= 0) break;
+    const usado = Math.min(f.seg, restante);
+    acumulado[f.tipo] = (acumulado[f.tipo] || 0) + usado;
+    restante -= usado;
+  }
+  return acumulado;
+}
+
+// El aviso al ENTRAR a una fase le dice al cuerpo qué hacer sin tener que
+// mirar la pantalla: un tono largo para acelerar, tres cortos para bajar.
+export function avisoWrAlEntrarAFase(tipo) {
+  if (tipo === 'correr') return ['largo'];
+  if (tipo === 'caminar') return ['rapido', 'rapido', 'rapido'];
+  if (tipo === 'calentamiento') return ['rapido'];
+  if (tipo === 'enfriamiento') return ['rapido', 'rapido'];
+  return [];
+}
+
+export function avisoWrCuentaFinal(restanteSeg) {
+  return (restanteSeg >= 1 && restanteSeg <= 3) ? ['cuenta'] : [];
+}
+
+// ────────── GPS de W/R (Fase 2) ──────────
+// El GPS del celular rebota: en interiores, entre edificios o con señal
+// débil manda lecturas que "saltan" decenas de metros sin que te muevas.
+// Sin filtrar, esos saltos inflan la distancia hasta volverla inútil.
+
+const PRECISION_MINIMA_M = 50; // peor que esto no se puede confiar
+const VELOCIDAD_MAXIMA_MS = 30; // ~108 km/h: nadie corre así, es un salto de GPS
+
+export function distanciaMetros(a, b) {
+  const R = 6371000; // radio de la Tierra en metros
+  const rad = (g) => g * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// Estado inmutable: {ultimo, distanciaM} -> {ultimo, distanciaM}. Descarta
+// la lectura (sin cambiar nada) si es imprecisa o implica una velocidad
+// imposible; así una mala lectura no contamina el total.
+export function acumularPuntoGps(estado, punto) {
+  if (!punto || !Number.isFinite(punto.lat) || !Number.isFinite(punto.lon)) return estado;
+  if (Number.isFinite(punto.accuracy) && punto.accuracy > PRECISION_MINIMA_M) return estado;
+  if (!estado.ultimo) return { ultimo: punto, distanciaM: estado.distanciaM || 0 };
+  const metros = distanciaMetros(estado.ultimo, punto);
+  const segundos = Math.max(0.001, (punto.tMs - estado.ultimo.tMs) / 1000);
+  if (metros / segundos > VELOCIDAD_MAXIMA_MS) return estado;
+  return { ultimo: punto, distanciaM: (estado.distanciaM || 0) + metros };
+}
+
+export function ritmoSegPorKm(segundos, metros) {
+  if (!metros || metros <= 0) return null;
+  return Math.round(segundos / (metros / 1000));
 }

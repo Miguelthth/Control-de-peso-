@@ -1376,6 +1376,35 @@ const RUTINAS_HIIT_INICIALES = [
   { nombre: 'Principiante', descripcion: '20 segundos de trabajo, 40 de descanso, 8 vueltas. Más tiempo para recuperar entre cada intervalo; ideal para empezar.', vueltas: 8, actividadSeg: 20, descansoSeg: 40, ejercicios: [EJ_HIIT.sentadillaAire, EJ_HIIT.flexiones, EJ_HIIT.plancha, EJ_HIIT.jumpingJacks] },
 ];
 
+// Presets de Caminar/Correr -- progresión clásica de menos a más carrera,
+// para que la pestaña no arranque vacía (mismo criterio que RUTINAS_HIIT_INICIALES).
+const RUTINAS_WR_INICIALES = [
+  {
+    nombre: 'Principiante', descripcion: 'Camina 4 min, corre 1 min. Empieza aquí si tienes tiempo sin correr.',
+    vueltas: 6, calentamientoSeg: 300, enfriamientoSeg: 0,
+    fases: [
+      { nombre: 'Caminar', tipo: 'caminar', duracionSeg: 240 },
+      { nombre: 'Correr', tipo: 'correr', duracionSeg: 60 },
+    ],
+  },
+  {
+    nombre: 'Intermedio', descripcion: 'Mitad y mitad: 2 min caminando, 2 min corriendo.',
+    vueltas: 8, calentamientoSeg: 300, enfriamientoSeg: 0,
+    fases: [
+      { nombre: 'Caminar', tipo: 'caminar', duracionSeg: 120 },
+      { nombre: 'Correr', tipo: 'correr', duracionSeg: 120 },
+    ],
+  },
+  {
+    nombre: 'Avanzado', descripcion: 'Corre 3 min con solo 1 min de caminata para recuperar.',
+    vueltas: 8, calentamientoSeg: 300, enfriamientoSeg: 300,
+    fases: [
+      { nombre: 'Caminar', tipo: 'caminar', duracionSeg: 60 },
+      { nombre: 'Correr', tipo: 'correr', duracionSeg: 180 },
+    ],
+  },
+];
+
 const ahoraISO = () => new Date().toISOString();
 const idNuevo = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -1385,7 +1414,8 @@ function crearDocumentoEjercicio(fecha = ahoraISO()) {
     categorias: CATEGORIAS_INICIALES.map((nombre, i) => ({ id: `categoria-${i + 1}`, nombre, activo: true, creadoEn: fecha, modificadoEn: fecha })),
     ejercicios: EJERCICIOS_INICIALES.map((e, i) => ({ id: `ejercicio-inicial-${i + 1}`, ...e, activo: true, creadoEn: fecha, modificadoEn: fecha })),
     rutinasHiit: RUTINAS_HIIT_INICIALES.map((r, i) => ({ id: `rutina-hiit-inicial-${i + 1}`, ...r, activo: true, creadoEn: fecha, modificadoEn: fecha })),
-    rutinas: [], sesiones: [], hiits: [], modificadoEn: fecha,
+    rutinasWr: RUTINAS_WR_INICIALES.map((r, i) => ({ id: `rutina-wr-inicial-${i + 1}`, ...r, activo: true, creadoEn: fecha, modificadoEn: fecha })),
+    rutinas: [], sesiones: [], hiits: [], wrs: [], modificadoEn: fecha,
   };
 }
 
@@ -1510,7 +1540,132 @@ function siguientePasoRutina(paso, entradas) {
   return { ejercicioIndice: paso.ejercicioIndice, serieNumero: paso.serieNumero, terminada: true };
 }
 
-  return { MODALIDADES_CARGA, CATEGORIAS_INICIALES, crearDocumentoEjercicio, calcularDuracionHiit, normalizarEjercicio, normalizarSerie, crearHiit, pausarHiit, reanudarHiit, finalizarHiit, sumarExtensionDescanso, ajustarCantidad, sonidosEnSegundo, normalizarRutina, BANCO_EJERCICIOS_HIIT, normalizarRutinaHiit, siguientePasoRutina };
+// ────────── Caminar/Correr (W/R) ──────────
+// A diferencia de HIIT (dos duraciones fijas que se alternan), una rutina
+// W/R es una LISTA ORDENADA de fases que el usuario arma como quiera y que
+// se repite `vueltas` veces, con calentamiento/enfriamiento opcionales
+// alrededor. Eso permite desde el clásico "camina 3 / corre 1" hasta una
+// pirámide con duraciones distintas en cada tramo.
+
+const TIPOS_FASE_WR = ['caminar', 'correr', 'calentamiento', 'enfriamiento'];
+
+function normalizarRutinaWr(rutina, fecha = ahoraISO()) {
+  const nombre = String(rutina.nombre || '').trim();
+  if (!nombre) throw new Error('Nombre de rutina requerido');
+  const vueltas = Number(rutina.vueltas);
+  if (!Number.isInteger(vueltas) || vueltas < 1) throw new Error('Vueltas inválidas');
+  const calentamientoSeg = Number(rutina.calentamientoSeg || 0);
+  if (!Number.isFinite(calentamientoSeg) || calentamientoSeg < 0) throw new Error('Calentamiento inválido');
+  const enfriamientoSeg = Number(rutina.enfriamientoSeg || 0);
+  if (!Number.isFinite(enfriamientoSeg) || enfriamientoSeg < 0) throw new Error('Enfriamiento inválido');
+  if (!Array.isArray(rutina.fases) || !rutina.fases.length) throw new Error('Agrega al menos una fase');
+  const fases = rutina.fases.map((f) => {
+    const duracionSeg = Number(f.duracionSeg);
+    if (!Number.isFinite(duracionSeg) || duracionSeg < 1) throw new Error('Cada fase necesita una duración de al menos 1 segundo');
+    if (!TIPOS_FASE_WR.includes(f.tipo)) throw new Error('Tipo de fase inválido');
+    return { nombre: String(f.nombre || '').trim() || (f.tipo === 'correr' ? 'Correr' : 'Caminar'), tipo: f.tipo, duracionSeg };
+  });
+  return {
+    ...rutina, id: rutina.id || idNuevo(), nombre, descripcion: String(rutina.descripcion || ''),
+    vueltas, calentamientoSeg, enfriamientoSeg, fases,
+    activo: rutina.activo !== false, creadoEn: rutina.creadoEn || fecha, modificadoEn: fecha,
+  };
+}
+
+// La secuencia completa y plana de fases que se van a ejecutar, en orden.
+// `vuelta` es 0 para calentamiento/enfriamiento (no pertenecen a ninguna
+// vuelta) y 1..N para las fases del ciclo.
+function fasesWr(rutina) {
+  const fases = [];
+  if (rutina.calentamientoSeg > 0) fases.push({ tipo: 'calentamiento', nombre: 'Calentamiento', seg: rutina.calentamientoSeg, vuelta: 0 });
+  for (let v = 1; v <= rutina.vueltas; v++) {
+    for (const f of rutina.fases) fases.push({ tipo: f.tipo, nombre: f.nombre, seg: f.duracionSeg, vuelta: v });
+  }
+  if (rutina.enfriamientoSeg > 0) fases.push({ tipo: 'enfriamiento', nombre: 'Enfriamiento', seg: rutina.enfriamientoSeg, vuelta: 0 });
+  return fases;
+}
+
+function calcularDuracionWr(rutina) {
+  return fasesWr(rutina).reduce((n, f) => n + f.seg, 0);
+}
+
+// Dado el segundo N desde que arrancó la sesión, en qué fase vas, cuánto
+// le falta, y cuál sigue (para poder anunciarla en pantalla antes de que
+// llegue). null significa que la sesión ya terminó.
+function faseEnSegundo(fases, transcurridoSeg) {
+  let t = Math.max(0, Math.floor(transcurridoSeg));
+  for (let i = 0; i < fases.length; i++) {
+    if (t < fases[i].seg) {
+      return { ...fases[i], indice: i, restante: fases[i].seg - t, siguiente: fases[i + 1] || null };
+    }
+    t -= fases[i].seg;
+  }
+  return null;
+}
+
+// Cuánto tiempo REAL se acumuló en cada tipo de fase -- si la sesión se
+// detiene a la mitad, solo cuenta lo que de verdad se hizo, no lo planeado.
+function tiempoPorTipoWr(fases, transcurridoSeg) {
+  let restante = Math.max(0, Math.floor(transcurridoSeg));
+  const acumulado = { caminar: 0, correr: 0, calentamiento: 0, enfriamiento: 0 };
+  for (const f of fases) {
+    if (restante <= 0) break;
+    const usado = Math.min(f.seg, restante);
+    acumulado[f.tipo] = (acumulado[f.tipo] || 0) + usado;
+    restante -= usado;
+  }
+  return acumulado;
+}
+
+// El aviso al ENTRAR a una fase le dice al cuerpo qué hacer sin tener que
+// mirar la pantalla: un tono largo para acelerar, tres cortos para bajar.
+function avisoWrAlEntrarAFase(tipo) {
+  if (tipo === 'correr') return ['largo'];
+  if (tipo === 'caminar') return ['rapido', 'rapido', 'rapido'];
+  if (tipo === 'calentamiento') return ['rapido'];
+  if (tipo === 'enfriamiento') return ['rapido', 'rapido'];
+  return [];
+}
+
+function avisoWrCuentaFinal(restanteSeg) {
+  return (restanteSeg >= 1 && restanteSeg <= 3) ? ['cuenta'] : [];
+}
+
+// ────────── GPS de W/R (Fase 2) ──────────
+// El GPS del celular rebota: en interiores, entre edificios o con señal
+// débil manda lecturas que "saltan" decenas de metros sin que te muevas.
+// Sin filtrar, esos saltos inflan la distancia hasta volverla inútil.
+
+const PRECISION_MINIMA_M = 50; // peor que esto no se puede confiar
+const VELOCIDAD_MAXIMA_MS = 30; // ~108 km/h: nadie corre así, es un salto de GPS
+
+function distanciaMetros(a, b) {
+  const R = 6371000; // radio de la Tierra en metros
+  const rad = (g) => g * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// Estado inmutable: {ultimo, distanciaM} -> {ultimo, distanciaM}. Descarta
+// la lectura (sin cambiar nada) si es imprecisa o implica una velocidad
+// imposible; así una mala lectura no contamina el total.
+function acumularPuntoGps(estado, punto) {
+  if (!punto || !Number.isFinite(punto.lat) || !Number.isFinite(punto.lon)) return estado;
+  if (Number.isFinite(punto.accuracy) && punto.accuracy > PRECISION_MINIMA_M) return estado;
+  if (!estado.ultimo) return { ultimo: punto, distanciaM: estado.distanciaM || 0 };
+  const metros = distanciaMetros(estado.ultimo, punto);
+  const segundos = Math.max(0.001, (punto.tMs - estado.ultimo.tMs) / 1000);
+  if (metros / segundos > VELOCIDAD_MAXIMA_MS) return estado;
+  return { ultimo: punto, distanciaM: (estado.distanciaM || 0) + metros };
+}
+
+function ritmoSegPorKm(segundos, metros) {
+  if (!metros || metros <= 0) return null;
+  return Math.round(segundos / (metros / 1000));
+}
+
+  return { MODALIDADES_CARGA, CATEGORIAS_INICIALES, crearDocumentoEjercicio, calcularDuracionHiit, normalizarEjercicio, normalizarSerie, crearHiit, pausarHiit, reanudarHiit, finalizarHiit, sumarExtensionDescanso, ajustarCantidad, sonidosEnSegundo, normalizarRutina, BANCO_EJERCICIOS_HIIT, normalizarRutinaHiit, siguientePasoRutina, TIPOS_FASE_WR, normalizarRutinaWr, fasesWr, calcularDuracionWr, faseEnSegundo, tiempoPorTipoWr, avisoWrAlEntrarAFase, avisoWrCuentaFinal, distanciaMetros, acumularPuntoGps, ritmoSegPorKm };
 })();
 const MODALIDADES_CARGA = ejercicio_modelo.MODALIDADES_CARGA;
 const CATEGORIAS_INICIALES = ejercicio_modelo.CATEGORIAS_INICIALES;
@@ -1529,6 +1684,17 @@ const normalizarRutina = ejercicio_modelo.normalizarRutina;
 const BANCO_EJERCICIOS_HIIT = ejercicio_modelo.BANCO_EJERCICIOS_HIIT;
 const normalizarRutinaHiit = ejercicio_modelo.normalizarRutinaHiit;
 const siguientePasoRutina = ejercicio_modelo.siguientePasoRutina;
+const TIPOS_FASE_WR = ejercicio_modelo.TIPOS_FASE_WR;
+const normalizarRutinaWr = ejercicio_modelo.normalizarRutinaWr;
+const fasesWr = ejercicio_modelo.fasesWr;
+const calcularDuracionWr = ejercicio_modelo.calcularDuracionWr;
+const faseEnSegundo = ejercicio_modelo.faseEnSegundo;
+const tiempoPorTipoWr = ejercicio_modelo.tiempoPorTipoWr;
+const avisoWrAlEntrarAFase = ejercicio_modelo.avisoWrAlEntrarAFase;
+const avisoWrCuentaFinal = ejercicio_modelo.avisoWrCuentaFinal;
+const distanciaMetros = ejercicio_modelo.distanciaMetros;
+const acumularPuntoGps = ejercicio_modelo.acumularPuntoGps;
+const ritmoSegPorKm = ejercicio_modelo.ritmoSegPorKm;
 
 // ── peso/js/ejercicio_almacen.js ──────────────────────────────────────────
 const ejercicio_almacen = (function () {
@@ -1585,7 +1751,7 @@ function mezclarLista(a = [], b = []) {
 function mezclarDocumento(local, remoto) {
   const base = crearDocumentoEjercicio();
   const resultado = { ...base, ...remoto, ...local };
-  for (const campo of ['categorias', 'ejercicios', 'rutinas', 'rutinasHiit', 'sesiones', 'hiits']) resultado[campo] = mezclarLista(local?.[campo], remoto?.[campo]);
+  for (const campo of ['categorias', 'ejercicios', 'rutinas', 'rutinasHiit', 'rutinasWr', 'sesiones', 'hiits', 'wrs']) resultado[campo] = mezclarLista(local?.[campo], remoto?.[campo]);
   resultado.version = 2;
   resultado.modificadoEn = [local?.modificadoEn, remoto?.modificadoEn].filter(Boolean).sort().at(-1) || base.modificadoEn;
   return resultado;
@@ -1645,6 +1811,20 @@ function descansoPromedio(series = []) {
 function resumenHiit(hiits = []) {
   if (!hiits.length) return { minutos: 0, porcentajePromedio: 0, completadas: 0, abandonos: 0 };
   return { minutos: Math.round(hiits.reduce((n, h) => n + Number(h.duracionRealSeg || 0), 0) / 60), porcentajePromedio: Math.round(hiits.reduce((n, h) => n + Number(h.porcentaje || 0), 0) / hiits.length), completadas: hiits.filter((h) => h.estado === 'completada').length, abandonos: hiits.filter((h) => h.estado === 'detenida').length };
+}
+
+function resumenWr(wrs = []) {
+  if (!wrs.length) return { sesiones: 0, completadas: 0, minutosTotales: 0, minutosCaminando: 0, minutosCorriendo: 0, ultima: null };
+  const suma = (campo) => wrs.reduce((n, w) => n + Number(w[campo] || 0), 0);
+  const ultima = wrs.slice().sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))).at(-1);
+  return {
+    sesiones: wrs.length,
+    completadas: wrs.filter((w) => w.estado === 'completada').length,
+    minutosTotales: Math.round(suma('realSeg') / 60),
+    minutosCaminando: Math.round(suma('caminarSeg') / 60),
+    minutosCorriendo: Math.round(suma('correrSeg') / 60),
+    ultima,
+  };
 }
 
 function serieProgreso(sesiones = [], ejercicioId) {
@@ -1808,13 +1988,14 @@ function constancia(sesiones = [], hiits = [], ahora = new Date()) {
   return { rachaDias: racha, completadas, descartadas, diasActivos: fechas.size };
 }
 
-  return { filtrarPeriodo, seriesContables, resumenModalidades, descansoPromedio, resumenHiit, serieProgreso, volumenPorGrupo, frecuenciaPorGrupo, balancePatron, balanceSuperiorInferior, musculosAtrasados, ultimaMarcaEjercicio, consejoRepeticiones, mejorSerieHistorica, detectarEstancamiento, zonaRepeticiones, descansoRealVsProgramado, ratioTrabajoDescansoHiit, constancia };
+  return { filtrarPeriodo, seriesContables, resumenModalidades, descansoPromedio, resumenHiit, resumenWr, serieProgreso, volumenPorGrupo, frecuenciaPorGrupo, balancePatron, balanceSuperiorInferior, musculosAtrasados, ultimaMarcaEjercicio, consejoRepeticiones, mejorSerieHistorica, detectarEstancamiento, zonaRepeticiones, descansoRealVsProgramado, ratioTrabajoDescansoHiit, constancia };
 })();
 const filtrarPeriodo = ejercicio_calculos.filtrarPeriodo;
 const seriesContables = ejercicio_calculos.seriesContables;
 const resumenModalidades = ejercicio_calculos.resumenModalidades;
 const descansoPromedio = ejercicio_calculos.descansoPromedio;
 const resumenHiit = ejercicio_calculos.resumenHiit;
+const resumenWr = ejercicio_calculos.resumenWr;
 const serieProgreso = ejercicio_calculos.serieProgreso;
 const volumenPorGrupo = ejercicio_calculos.volumenPorGrupo;
 const frecuenciaPorGrupo = ejercicio_calculos.frecuenciaPorGrupo;
@@ -1846,7 +2027,7 @@ const svgProgreso = ejercicio_graficas.svgProgreso;
 
 // ── peso/js/ejercicio_ui.js ──────────────────────────────────────────
 const ejercicio_ui = (function () {
-const S = { datos: null, tab: 'entrenar', toast: () => {}, audio: null, intervalo: null, wake: null, hiit: null, entrenamiento: null, descanso: null, rutinaSeleccionada: '', periodo: 'semana', sonidosEmitidos: new Set(), redLista: false };
+const S = { datos: null, tab: 'entrenar', toast: () => {}, audio: null, intervalo: null, wake: null, hiit: null, wr: null, entrenamiento: null, descanso: null, rutinaSeleccionada: '', periodo: 'semana', sonidosEmitidos: new Set(), redLista: false };
 const uid = () => crypto.randomUUID();
 const iso = () => new Date().toISOString();
 
@@ -1912,16 +2093,16 @@ function salirModuloEjercicio() { liberarWake(); }
 // Usado por actualizacion_peso.js (vía app.js) para no recargar la página
 // de golpe -- perdiendo la rutina o el HIIT en curso -- cuando llega una
 // versión nueva del service worker mientras el usuario está entrenando.
-function hayEntrenamientoActivo() { return Boolean(S.entrenamiento || S.hiit); }
+function hayEntrenamientoActivo() { return Boolean(S.entrenamiento || S.hiit || S.wr); }
 
 function renderModuloEjercicio() {
   if (!S.datos) S.datos = leerLocal(getUsuario());
   const raiz = document.getElementById('ejercicio-contenido');
-  raiz.innerHTML = `<header class="ejercicio-hero"><div><span class="ejercicio-kicker">ENTRENAMIENTO</span><h2>Muévete. Registra. Mejora.</h2></div><small id="ejercicio-sync"></small></header><nav id="ejercicio-tabs" class="ejercicio-tabs" role="tablist"><button role="tab" data-etab="entrenar">Entrenar</button><button role="tab" data-etab="hiit">HIIT</button><button role="tab" data-etab="progreso">Progreso</button></nav><main id="ejercicio-panel"></main><dialog id="ejercicio-modal" class="ejercicio-modal"><div class="modal-ejercicio-contenido"><header><div><small id="modal-kicker">CONFIGURAR</small><h2 id="modal-titulo"></h2></div><button type="button" class="modal-cerrar" aria-label="Cerrar">×</button></header><div id="modal-cuerpo"></div></div></dialog>`;
+  raiz.innerHTML = `<header class="ejercicio-hero"><div><span class="ejercicio-kicker">ENTRENAMIENTO</span><h2>Muévete. Registra. Mejora.</h2></div><small id="ejercicio-sync"></small></header><nav id="ejercicio-tabs" class="ejercicio-tabs" role="tablist"><button role="tab" data-etab="entrenar">Entrenar</button><button role="tab" data-etab="hiit">HIIT</button><button role="tab" data-etab="wr">W/R</button><button role="tab" data-etab="progreso">Progreso</button></nav><main id="ejercicio-panel"></main><dialog id="ejercicio-modal" class="ejercicio-modal"><div class="modal-ejercicio-contenido"><header><div><small id="modal-kicker">CONFIGURAR</small><h2 id="modal-titulo"></h2></div><button type="button" class="modal-cerrar" aria-label="Cerrar">×</button></header><div id="modal-cuerpo"></div></div></dialog>`;
   raiz.querySelectorAll('[data-etab]').forEach((b) => { b.setAttribute('aria-selected', String(b.dataset.etab === S.tab)); b.onclick = () => { S.tab = b.dataset.etab; renderModuloEjercicio(); }; });
   actualizarSync();
   raiz.querySelector('.modal-cerrar').onclick = cerrarModal;
-  if (S.tab === 'entrenar') renderEntrenar(); else if (S.tab === 'hiit') renderHiit(); else renderProgreso();
+  if (S.tab === 'entrenar') renderEntrenar(); else if (S.tab === 'hiit') renderHiit(); else if (S.tab === 'wr') renderWr(); else renderProgreso();
 }
 
 function abrirModal(titulo, html, configurar, kicker = 'CONFIGURAR') {
@@ -2151,6 +2332,253 @@ function finalizarEntrenamiento() {
   guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id); S.entrenamiento = null; S.descanso = null; clearInterval(S.intervalo); liberarWake(); beep('final'); S.toast('Rutina completada'); renderEntrenar();
 }
 
+// ────────── Caminar/Correr (W/R) ──────────
+// Portada de la pestaña: elegir una rutina guardada y arrancar. A
+// diferencia de HIIT (que permite un modo "manual" con dos duraciones),
+// aquí SIEMPRE se corre desde una rutina, porque la gracia de W/R son las
+// fases libres -- y armarlas requiere el constructor, no tres inputs.
+function formatoDuracionWr(segundos) {
+  const min = Math.floor(segundos / 60), seg = segundos % 60;
+  return seg ? `${min}:${String(seg).padStart(2, '0')} min` : `${min} min`;
+}
+
+function resumenFasesWr(rutina) {
+  return rutina.fases.map((f) => `${escapeHTML(f.nombre)} ${formatoDuracionWr(f.duracionSeg)}`).join(' → ');
+}
+
+function renderWr() {
+  const p = document.getElementById('ejercicio-panel');
+  if (S.wr) return renderWrActivo();
+  const rutinas = (S.datos.rutinasWr || []).filter((r) => r.activo !== false);
+  p.innerHTML = `<section class="wr-config"><div class="wr-emblema">W/R</div><h1>Caminar y correr</h1><p>Arma tus propios intervalos. La app te avisa cuándo acelerar y cuándo bajar el ritmo, sin que tengas que ver la pantalla.</p><button type="button" id="wr-nueva" class="btn-primario ancho-completo">+ Nueva rutina</button><div class="lista-modal">${rutinas.map((r) => `<div class="fila-selector-ejercicio"><button type="button" data-usar-wr="${escapeAtributo(r.id)}"><span><b>${escapeHTML(r.nombre)}</b><small>${r.vueltas} vueltas · ${formatoDuracionWr(calcularDuracionWr(r))} · ${resumenFasesWr(r)}</small></span><i>Iniciar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-wr="${escapeAtributo(r.id)}" aria-label="Borrar ${escapeAtributo(r.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Crea tu primera rutina de caminar/correr.</p>'}</div></section>`;
+  p.querySelector('#wr-nueva').onclick = () => abrirFormularioRutinaWr();
+  p.querySelectorAll('[data-usar-wr]').forEach((b) => b.onclick = () => iniciarWr(S.datos.rutinasWr.find((r) => r.id === b.dataset.usarWr)));
+  p.querySelectorAll('[data-borrar-wr]').forEach((b) => b.onclick = () => {
+    if (!confirm('¿Borrar esta rutina de caminar/correr?')) return;
+    guardar((d) => { const x = (d.rutinasWr || []).find((y) => y.id === b.dataset.borrarWr); if (x) x.activo = false; }, 'borrar_rutina_wr', b.dataset.borrarWr);
+    renderWr();
+  });
+}
+
+// Constructor de rutinas W/R: fases que se pueden agregar, quitar y
+// reordenar, con duración en minutos + segundos. Mismo patrón de
+// "borrador en memoria + repintar" que abrirConstructorRutina (pesas),
+// porque aquí también hay una lista editable antes de guardar.
+function abrirFormularioRutinaWr(id = '') {
+  const actual = (S.datos.rutinasWr || []).find((r) => r.id === id);
+  const borrador = actual
+    ? { id: actual.id, nombre: actual.nombre, descripcion: actual.descripcion || '', vueltas: actual.vueltas, calentamientoMin: Math.round(actual.calentamientoSeg / 60), enfriamientoMin: Math.round(actual.enfriamientoSeg / 60), fases: structuredClone(actual.fases) }
+    : { id: '', nombre: '', descripcion: '', vueltas: 6, calentamientoMin: 5, enfriamientoMin: 0, fases: [{ nombre: 'Caminar', tipo: 'caminar', duracionSeg: 180 }, { nombre: 'Correr', tipo: 'correr', duracionSeg: 60 }] };
+
+  const pintar = () => {
+    const rutinaPrevia = { vueltas: Number(borrador.vueltas) || 1, calentamientoSeg: (Number(borrador.calentamientoMin) || 0) * 60, enfriamientoSeg: (Number(borrador.enfriamientoMin) || 0) * 60, fases: borrador.fases };
+    let totalTexto = '—';
+    try { totalTexto = formatoDuracionWr(calcularDuracionWr(rutinaPrevia)); } catch { totalTexto = '—'; }
+    abrirModal(actual ? 'Editar rutina W/R' : 'Nueva rutina W/R', `<form id="form-rutina-wr" class="form-modal">
+      <label>Nombre<input id="wr-nombre" required maxlength="40" value="${escapeAtributo(borrador.nombre)}" placeholder="Ej. Mi rutina de la mañana"></label>
+      <label>Descripción (opcional)<textarea id="wr-descripcion" rows="2" maxlength="200">${escapeHTML(borrador.descripcion)}</textarea></label>
+      <div class="grid-form">
+        <label>Vueltas<input id="wr-vueltas" type="number" min="1" value="${borrador.vueltas}"></label>
+        <label>Calentamiento (min)<input id="wr-calentamiento" type="number" min="0" value="${borrador.calentamientoMin}"></label>
+        <label>Enfriamiento (min)<input id="wr-enfriamiento" type="number" min="0" value="${borrador.enfriamientoMin}"></label>
+      </div>
+      <div class="constructor-rutina">
+        <div class="constructor-titulo"><b>Fases (se repiten cada vuelta)</b><button type="button" id="wr-agregar-fase">+ Agregar fase</button></div>
+        ${borrador.fases.map((f, i) => `<article data-fase="${i}"><header><span><b>${i + 1}. ${escapeHTML(f.nombre)}</b><small>${escapeHTML(f.tipo)}</small></span><div><button type="button" data-subir-fase="${i}" aria-label="Subir">↑</button><button type="button" data-bajar-fase="${i}" aria-label="Bajar">↓</button><button type="button" data-quitar-fase="${i}">Quitar</button></div></header><div class="grid-form"><label>Nombre<input data-campo-fase="nombre" maxlength="24" value="${escapeAtributo(f.nombre)}"></label><label>Tipo<select data-campo-fase="tipo">${TIPOS_FASE_WR.map((t) => `<option value="${t}" ${t === f.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select></label><label>Minutos<input data-campo-fase="min" type="number" min="0" value="${Math.floor(f.duracionSeg / 60)}"></label><label>Segundos<input data-campo-fase="seg" type="number" min="0" max="59" value="${f.duracionSeg % 60}"></label></div></article>`).join('') || '<p class="estado-vacio">Agrega al menos una fase.</p>'}
+      </div>
+      <p class="texto-suave">Duración total: <b>${totalTexto}</b></p>
+      <button class="btn-primario ancho-completo">Guardar rutina</button>
+    </form>`, (c) => {
+      c.querySelector('#wr-nombre').oninput = (e) => { borrador.nombre = e.target.value; };
+      c.querySelector('#wr-descripcion').oninput = (e) => { borrador.descripcion = e.target.value; };
+      c.querySelector('#wr-vueltas').oninput = (e) => { borrador.vueltas = e.target.value; };
+      c.querySelector('#wr-calentamiento').oninput = (e) => { borrador.calentamientoMin = e.target.value; };
+      c.querySelector('#wr-enfriamiento').oninput = (e) => { borrador.enfriamientoMin = e.target.value; };
+      c.querySelectorAll('[data-fase]').forEach((art) => {
+        const i = Number(art.dataset.fase);
+        art.querySelectorAll('[data-campo-fase]').forEach((inp) => inp.oninput = () => {
+          const campo = inp.dataset.campoFase;
+          if (campo === 'nombre') borrador.fases[i].nombre = inp.value;
+          else if (campo === 'tipo') borrador.fases[i].tipo = inp.value;
+          else {
+            const min = Number(art.querySelector('[data-campo-fase="min"]').value) || 0;
+            const seg = Number(art.querySelector('[data-campo-fase="seg"]').value) || 0;
+            borrador.fases[i].duracionSeg = min * 60 + seg;
+          }
+        });
+      });
+      c.querySelector('#wr-agregar-fase').onclick = () => { borrador.fases.push({ nombre: 'Caminar', tipo: 'caminar', duracionSeg: 60 }); pintar(); };
+      c.querySelectorAll('[data-quitar-fase]').forEach((b) => b.onclick = () => { borrador.fases.splice(Number(b.dataset.quitarFase), 1); pintar(); });
+      c.querySelectorAll('[data-subir-fase]').forEach((b) => b.onclick = () => { const i = Number(b.dataset.subirFase); if (i > 0) [borrador.fases[i - 1], borrador.fases[i]] = [borrador.fases[i], borrador.fases[i - 1]]; pintar(); });
+      c.querySelectorAll('[data-bajar-fase]').forEach((b) => b.onclick = () => { const i = Number(b.dataset.bajarFase); if (i < borrador.fases.length - 1) [borrador.fases[i + 1], borrador.fases[i]] = [borrador.fases[i], borrador.fases[i + 1]]; pintar(); });
+      c.querySelector('#form-rutina-wr').onsubmit = (e) => {
+        e.preventDefault();
+        try {
+          const rutina = normalizarRutinaWr({
+            ...actual, id: actual?.id || uid(), nombre: borrador.nombre, descripcion: borrador.descripcion,
+            vueltas: Number(borrador.vueltas), calentamientoSeg: (Number(borrador.calentamientoMin) || 0) * 60,
+            enfriamientoSeg: (Number(borrador.enfriamientoMin) || 0) * 60, fases: borrador.fases,
+          });
+          guardar((d) => { d.rutinasWr = d.rutinasWr || []; const i = d.rutinasWr.findIndex((x) => x.id === rutina.id); if (i >= 0) d.rutinasWr[i] = rutina; else d.rutinasWr.push(rutina); }, 'guardar_rutina_wr', rutina.id);
+          cerrarModal(); renderWr();
+        } catch (err) { S.toast(err.message, true); }
+      };
+    }, 'W/R');
+  };
+  pintar();
+}
+
+// El GPS es OPCIONAL: si el usuario niega el permiso, el navegador no lo
+// soporta, o la señal es mala, la sesión sigue funcionando igual solo con
+// los tiempos. Nunca se bloquea el entrenamiento por esto.
+function iniciarGpsWr() {
+  if (!navigator.geolocation) return;
+  try {
+    S.wr.gps = { ultimo: null, distanciaM: 0, porTipo: { caminar: 0, correr: 0 }, activo: true };
+    S.wr.watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!S.wr || !S.wr.gps) return;
+        const punto = { lat: pos.coords.latitude, lon: pos.coords.longitude, tMs: pos.timestamp || Date.now(), accuracy: pos.coords.accuracy };
+        const antes = S.wr.gps.distanciaM;
+        const nuevo = acumularPuntoGps(S.wr.gps, punto);
+        S.wr.gps = { ...S.wr.gps, ...nuevo };
+        // El tramo recorrido se le acredita a la fase que está corriendo
+        // AHORA, para poder dar ritmo de caminata vs de carrera por separado.
+        const avance = S.wr.gps.distanciaM - antes;
+        if (avance > 0 && S.wr.estado === 'activo') {
+          const e = faseEnSegundo(S.wr.fases, transcurridoWr());
+          if (e && (e.tipo === 'caminar' || e.tipo === 'correr')) S.wr.gps.porTipo[e.tipo] += avance;
+        }
+      },
+      () => { if (S.wr && S.wr.gps) S.wr.gps.activo = false; }, // permiso negado o sin señal: se sigue sin GPS
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+    );
+  } catch { S.wr.gps = null; }
+}
+
+function detenerGpsWr() {
+  if (S.wr && S.wr.watchId != null && navigator.geolocation) {
+    try { navigator.geolocation.clearWatch(S.wr.watchId); } catch { /* ya estaba detenido */ }
+  }
+}
+
+// Ejecución de una sesión W/R. Mismo esqueleto que el HIIT (cuenta
+// regresiva de 3s, tick cada 200ms, pausa acumulada en `pausaMs`), pero
+// recorriendo la lista de fases expandida en vez de dos duraciones fijas.
+function iniciarWr(rutina) {
+  if (!rutina) return S.toast('Elige una rutina primero', true);
+  let planeadoSeg;
+  try { planeadoSeg = calcularDuracionWr(rutina); } catch (err) { return S.toast(err.message, true); }
+  S.wr = {
+    id: uid(), rutinaId: rutina.id, nombre: rutina.nombre,
+    fases: fasesWr(rutina), planeadoSeg, vueltas: rutina.vueltas,
+    inicioMs: Date.now(), actividadInicioMs: null, pausaMs: 0, pausaInicio: null,
+    faseIndice: -1, cuentaFinMs: Date.now() + 3000, estado: 'cuenta', creadoEn: iso(),
+  };
+  S.sonidosEmitidos.clear();
+  iniciarGpsWr();
+  clearInterval(S.intervalo); S.intervalo = setInterval(tickWr, 200); solicitarWake(); tickWr();
+}
+
+// Segundos REALES transcurridos de la sesión (descontando pausas), o 0 si
+// todavía está en la cuenta regresiva inicial.
+function transcurridoWr() {
+  const w = S.wr;
+  if (!w || w.estado === 'cuenta') return 0;
+  const ahora = w.pausaInicio || Date.now();
+  return Math.max(0, Math.floor((ahora - w.actividadInicioMs - w.pausaMs) / 1000));
+}
+
+function tickWr() {
+  if (!S.wr || S.wr.pausaInicio) return renderWrActivo();
+  const w = S.wr;
+  if (w.estado === 'cuenta') {
+    const restante = Math.max(0, Math.ceil((w.cuentaFinMs - Date.now()) / 1000));
+    emitirUnaVez(`wr-cuenta-${restante}`, avisoWrCuentaFinal(restante));
+    if (restante <= 0) {
+      w.estado = 'activo'; w.actividadInicioMs = Date.now(); w.pausaMs = 0; w.faseIndice = -1;
+    }
+    return renderWrActivo();
+  }
+  const e = faseEnSegundo(w.fases, transcurridoWr());
+  if (!e) return finalizarWr(false);
+  // Al ENTRAR a una fase nueva suena su aviso (una sola vez por fase).
+  if (e.indice !== w.faseIndice) { w.faseIndice = e.indice; emitirSonidos(avisoWrAlEntrarAFase(e.tipo)); }
+  emitirUnaVez(`wr-${e.indice}-${e.restante}`, avisoWrCuentaFinal(e.restante));
+  renderWrActivo();
+}
+
+function renderWrActivo() {
+  const p = document.getElementById('ejercicio-panel'), w = S.wr;
+  if (!w) return renderWr();
+  if (w.estado === 'cuenta') {
+    const restante = Math.max(0, Math.ceil((w.cuentaFinMs - (w.pausaInicio || Date.now())) / 1000));
+    p.innerHTML = `<section class="wr-activo cuenta"><small>${w.pausaInicio ? 'PAUSADO' : 'PREPÁRATE'}</small><strong>${restante}</strong><span>${escapeHTML(w.nombre)}</span><div class="acciones"><button id="wr-pausa">${w.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="wr-detener">Detener</button></div></section>`;
+  } else {
+    const e = faseEnSegundo(w.fases, transcurridoWr());
+    if (!e) return;
+    const min = Math.floor(e.restante / 60), seg = e.restante % 60;
+    const reloj = `${min}:${String(seg).padStart(2, '0')}`;
+    const vueltaTexto = e.vuelta ? `Vuelta ${e.vuelta}/${w.vueltas}` : e.nombre;
+    const siguienteTexto = e.siguiente ? `Sigue: ${escapeHTML(e.siguiente.nombre)}` : 'Última fase';
+    const gps = w.gps;
+    const kmTexto = gps && gps.activo && gps.distanciaM > 0 ? `${(gps.distanciaM / 1000).toFixed(2)} km` : '';
+    const ritmoActual = (gps && gps.activo && (e.tipo === 'caminar' || e.tipo === 'correr'))
+      ? ritmoSegPorKm(tiempoPorTipoWr(w.fases, transcurridoWr())[e.tipo], gps.porTipo[e.tipo]) : null;
+    const ritmoTexto = ritmoActual ? `${Math.floor(ritmoActual / 60)}:${String(ritmoActual % 60).padStart(2, '0')} min/km` : '';
+    const gpsHtml = (kmTexto || ritmoTexto) ? `<p class="wr-gps">${kmTexto}${kmTexto && ritmoTexto ? ' · ' : ''}${ritmoTexto}</p>` : '';
+    p.innerHTML = `<section class="wr-activo ${e.tipo}"><small>${w.pausaInicio ? 'PAUSADO' : escapeHTML(e.nombre.toUpperCase())}</small><strong>${reloj}</strong><span>${escapeHTML(vueltaTexto)}</span><p class="wr-siguiente">${siguienteTexto}</p>${gpsHtml}<div class="acciones"><button id="wr-pausa">${w.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="wr-detener">Detener</button></div></section>`;
+  }
+  p.querySelector('#wr-pausa').onclick = alternarPausaWr;
+  p.querySelector('#wr-detener').onclick = () => finalizarWr(true);
+}
+
+function alternarPausaWr() {
+  const w = S.wr;
+  if (w.pausaInicio) {
+    const pausa = Date.now() - w.pausaInicio;
+    if (w.estado === 'cuenta') w.cuentaFinMs += pausa; else w.pausaMs += pausa;
+    w.pausaInicio = null; solicitarWake();
+  } else { w.pausaInicio = Date.now(); liberarWake(); }
+  renderWrActivo();
+}
+
+function finalizarWr(detenido) {
+  const w = S.wr;
+  if (!w) return;
+  const realSeg = detenido ? Math.min(w.planeadoSeg, transcurridoWr()) : w.planeadoSeg;
+  const porTipo = tiempoPorTipoWr(w.fases, realSeg);
+  // Cuántas vueltas COMPLETAS se alcanzaron: la vuelta de la última fase
+  // terminada, no la que iba a medias.
+  const faseActual = faseEnSegundo(w.fases, realSeg);
+  const vueltasCompletadas = faseActual ? Math.max(0, (faseActual.vuelta || 1) - 1) : w.vueltas;
+  const registro = {
+    id: w.id, rutinaId: w.rutinaId, nombre: w.nombre || 'Caminar/Correr',
+    fecha: iso(), fin: iso(),
+    planeadoSeg: w.planeadoSeg, realSeg,
+    caminarSeg: porTipo.caminar, correrSeg: porTipo.correr,
+    vueltasCompletadas,
+    porcentaje: w.planeadoSeg ? Math.min(100, Math.round(realSeg / w.planeadoSeg * 100)) : 0,
+    estado: detenido ? 'detenida' : 'completada',
+    creadoEn: w.creadoEn, modificadoEn: iso(),
+  };
+  // Solo se guardan campos de GPS si de verdad hubo señal -- si no, el
+  // registro queda idéntico al de una sesión sin GPS, sin campos vacíos.
+  const gps = w.gps;
+  if (gps && gps.activo && gps.distanciaM > 0) {
+    registro.distanciaM = Math.round(gps.distanciaM);
+    registro.distanciaCaminarM = Math.round(gps.porTipo.caminar);
+    registro.distanciaCorrerM = Math.round(gps.porTipo.correr);
+    registro.ritmoCaminarSegPorKm = ritmoSegPorKm(porTipo.caminar, gps.porTipo.caminar);
+    registro.ritmoCorrerSegPorKm = ritmoSegPorKm(porTipo.correr, gps.porTipo.correr);
+  }
+  detenerGpsWr();
+  guardar((d) => { d.wrs = d.wrs || []; d.wrs.push(registro); }, 'guardar_wr', registro.id);
+  S.wr = null; clearInterval(S.intervalo); liberarWake(); beep('final');
+  S.toast(detenido ? 'Sesión guardada como incompleta' : 'Sesión completada');
+  renderWr();
+}
+
 function renderHiit() {
   const p = document.getElementById('ejercicio-panel');
   if (S.hiit) return renderHiitActivo();
@@ -2245,12 +2673,12 @@ async function solicitarWake() { try { S.wake = await navigator.wakeLock?.reques
 function liberarWake() { S.wake?.release().catch(() => {}); S.wake = null; }
 
 function renderProgreso() {
-  const p = document.getElementById('ejercicio-panel'), sesiones = filtrarPeriodo(S.datos.sesiones || [], S.periodo), hiits = filtrarPeriodo(S.datos.hiits || [], S.periodo), series = seriesContables(sesiones), m = resumenModalidades(series), h = resumenHiit(hiits);
-  p.innerHTML = `<section class="progreso-ejercicio"><header><div><small>TU CONSTANCIA</small><h1>Progreso</h1></div><div class="filtros-periodo"><button data-periodo="semana" class="${S.periodo === 'semana' ? 'activo' : ''}" aria-pressed="${S.periodo === 'semana'}">Semana</button><button data-periodo="mes" class="${S.periodo === 'mes' ? 'activo' : ''}" aria-pressed="${S.periodo === 'mes'}">Mes</button><button data-periodo="total" class="${S.periodo === 'total' ? 'activo' : ''}" aria-pressed="${S.periodo === 'total'}">Total</button></div></header><button type="button" id="ver-analisis-completo" class="btn-discreto">📊 Ver análisis completo</button><div class="kpis-ejercicio"><div><b>${sesiones.filter((s) => s.estado === 'completada').length}</b><span>Sesiones</span></div><div><b>${series.length}</b><span>Series</span></div><div><b>${descansoPromedio(series)}s</b><span>Descanso promedio</span></div><div><b>${h.minutos}m</b><span>HIIT activo</span></div><div><b>${h.porcentajePromedio}%</b><span>HIIT promedio</span></div><div><b>${h.abandonos}</b><span>Abandonos</span></div></div><article class="tarjeta marca-resumen"><h3>Mejores esfuerzos</h3><p>Discos × reps: grandes ${m.discos.grande}, chicos ${m.discos.chico}</p><p>Nivel máximo ${m.niveles.mejor} · PC ${m.PC.repeticiones} reps</p></article><article class="tarjeta"><h3>Historial</h3><div class="historial-entrenamiento">${[...sesiones, ...hiits].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map((r) => `<div><span><b>${escapeHTML(r.nombre || 'Entrenamiento')}</b><small>${escapeHTML(String(r.fecha || '').slice(0, 10))} · ${escapeHTML(r.estado)}</small></span><div><button data-editar-registro="${r.id}">Editar</button><button data-eliminar="${r.id}">Eliminar</button></div></div>`).join('') || '<p class="estado-vacio">Sin registros en este periodo.</p>'}</div></article></section>`;
+  const p = document.getElementById('ejercicio-panel'), sesiones = filtrarPeriodo(S.datos.sesiones || [], S.periodo), hiits = filtrarPeriodo(S.datos.hiits || [], S.periodo), wrs = filtrarPeriodo(S.datos.wrs || [], S.periodo), series = seriesContables(sesiones), m = resumenModalidades(series), h = resumenHiit(hiits), w = resumenWr(wrs);
+  p.innerHTML = `<section class="progreso-ejercicio"><header><div><small>TU CONSTANCIA</small><h1>Progreso</h1></div><div class="filtros-periodo"><button data-periodo="semana" class="${S.periodo === 'semana' ? 'activo' : ''}" aria-pressed="${S.periodo === 'semana'}">Semana</button><button data-periodo="mes" class="${S.periodo === 'mes' ? 'activo' : ''}" aria-pressed="${S.periodo === 'mes'}">Mes</button><button data-periodo="total" class="${S.periodo === 'total' ? 'activo' : ''}" aria-pressed="${S.periodo === 'total'}">Total</button></div></header><button type="button" id="ver-analisis-completo" class="btn-discreto">📊 Ver análisis completo</button><div class="kpis-ejercicio"><div><b>${sesiones.filter((s) => s.estado === 'completada').length}</b><span>Sesiones</span></div><div><b>${series.length}</b><span>Series</span></div><div><b>${descansoPromedio(series)}s</b><span>Descanso promedio</span></div><div><b>${h.minutos}m</b><span>HIIT activo</span></div><div><b>${h.porcentajePromedio}%</b><span>HIIT promedio</span></div><div><b>${h.abandonos}</b><span>Abandonos</span></div></div><article class="tarjeta marca-resumen"><h3>Mejores esfuerzos</h3><p>Discos × reps: grandes ${m.discos.grande}, chicos ${m.discos.chico}</p><p>Nivel máximo ${m.niveles.mejor} · PC ${m.PC.repeticiones} reps</p></article><article class="tarjeta"><h3>Historial</h3><div class="historial-entrenamiento">${[...sesiones, ...hiits, ...wrs].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map((r) => `<div><span><b>${escapeHTML(r.nombre || 'Entrenamiento')}</b><small>${escapeHTML(String(r.fecha || '').slice(0, 10))} · ${escapeHTML(r.estado)}</small></span><div><button data-editar-registro="${r.id}">Editar</button><button data-eliminar="${r.id}">Eliminar</button></div></div>`).join('') || '<p class="estado-vacio">Sin registros en este periodo.</p>'}</div></article><article class="tarjeta"><h3>Caminar / Correr</h3><div class="kpis-ejercicio"><div><b>${w.sesiones}</b><span>Sesiones</span></div><div><b>${w.minutosCaminando}m</b><span>Caminando</span></div><div><b>${w.minutosCorriendo}m</b><span>Corriendo</span></div><div><b>${w.minutosTotales}m</b><span>Total</span></div></div>${w.ultima ? `<p class="texto-suave">Última: ${escapeHTML(w.ultima.nombre || 'Sesión')} · ${escapeHTML(String(w.ultima.fecha || '').slice(0, 10))} · ${w.ultima.porcentaje}% completado</p>` : '<p class="estado-vacio">Sin sesiones de caminar/correr en este periodo.</p>'}</article></section>`;
   p.querySelectorAll('[data-periodo]').forEach((b) => b.onclick = () => { S.periodo = b.dataset.periodo; renderProgreso(); });
   p.querySelector('#ver-analisis-completo').onclick = abrirAnalisisCompleto;
   p.querySelectorAll('[data-editar-registro]').forEach((b) => b.onclick = () => abrirEditarRegistro(b.dataset.editarRegistro));
-  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { d.sesiones = d.sesiones.filter((x) => x.id !== b.dataset.eliminar); d.hiits = d.hiits.filter((x) => x.id !== b.dataset.eliminar); }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
+  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { d.sesiones = d.sesiones.filter((x) => x.id !== b.dataset.eliminar); d.hiits = d.hiits.filter((x) => x.id !== b.dataset.eliminar); d.wrs = (d.wrs || []).filter((x) => x.id !== b.dataset.eliminar); }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
 }
 
 // Análisis deportivo completo: volumen semanal por músculo, balance,

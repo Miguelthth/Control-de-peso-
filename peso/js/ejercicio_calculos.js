@@ -31,6 +31,20 @@ export function resumenHiit(hiits = []) {
   return { minutos: Math.round(hiits.reduce((n, h) => n + Number(h.duracionRealSeg || 0), 0) / 60), porcentajePromedio: Math.round(hiits.reduce((n, h) => n + Number(h.porcentaje || 0), 0) / hiits.length), completadas: hiits.filter((h) => h.estado === 'completada').length, abandonos: hiits.filter((h) => h.estado === 'detenida').length };
 }
 
+export function resumenWr(wrs = []) {
+  if (!wrs.length) return { sesiones: 0, completadas: 0, minutosTotales: 0, minutosCaminando: 0, minutosCorriendo: 0, ultima: null };
+  const suma = (campo) => wrs.reduce((n, w) => n + Number(w[campo] || 0), 0);
+  const ultima = wrs.slice().sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))).at(-1);
+  return {
+    sesiones: wrs.length,
+    completadas: wrs.filter((w) => w.estado === 'completada').length,
+    minutosTotales: Math.round(suma('realSeg') / 60),
+    minutosCaminando: Math.round(suma('caminarSeg') / 60),
+    minutosCorriendo: Math.round(suma('correrSeg') / 60),
+    ultima,
+  };
+}
+
 export function serieProgreso(sesiones = [], ejercicioId) {
   return sesiones.filter((s) => s.estado === 'completada').flatMap((s) => (s.series || []).filter((x) => x.ejercicioId === ejercicioId).map((x) => ({ fecha: s.fecha || s.fin, valor: x.modalidad === 'niveles' ? Number(x.carga || 0) : Number(x.repeticiones || 0), unidad: x.modalidad })));
 }

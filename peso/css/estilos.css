@@ -365,8 +365,11 @@ img, svg, video, canvas { max-width: 100%; }
 .ejercicio-hero { display: flex; justify-content: space-between; align-items: end; gap: 12px; padding: 8px 2px 14px; }
 .ejercicio-hero h2 { margin: 2px 0 0; font-size: 1.35rem; letter-spacing: -.03em; }
 .ejercicio-kicker, .ejercicio-hero small, .progreso-ejercicio header small { color: var(--primario); font-size: .66rem; font-weight: 900; letter-spacing: .14em; }
-.ejercicio-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 5px; margin-bottom: 16px; background: var(--superficie-alt); border: 1px solid var(--borde); border-radius: 16px; }
-.ejercicio-tabs button { min-height: 42px; border: 0; border-radius: 12px; background: transparent; color: var(--texto-suave); font-weight: 800; }
+/* Se reparte entre las pestañas que existan (hoy 4: Entrenar, HIIT, W/R,
+   Progreso) -- con un número fijo de columnas, agregar una pestaña la
+   empujaba a un segundo renglón. */
+.ejercicio-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 5px; padding: 5px; margin-bottom: 16px; background: var(--superficie-alt); border: 1px solid var(--borde); border-radius: 16px; }
+.ejercicio-tabs button { min-height: 42px; min-width: 0; padding: 0 4px; border: 0; border-radius: 12px; background: transparent; color: var(--texto-suave); font-weight: 800; font-size: .82rem; }
 .ejercicio-tabs button[aria-selected="true"] { color: #fff; background: linear-gradient(135deg, var(--primario), var(--primario-2)); box-shadow: 0 6px 14px color-mix(in srgb, var(--primario) 30%, transparent); }
 .entrenar-portada, .hiit-config { text-align: center; padding: 22px 4px 8px; }
 .entrenar-icono, .hiit-emblema { width: 72px; height: 72px; margin: 0 auto 14px; display: grid; place-items: center; border-radius: 24px; background: linear-gradient(145deg, var(--primario), var(--acento)); color: #fff; font-size: 2rem; font-weight: 950; box-shadow: 0 18px 35px color-mix(in srgb, var(--primario) 28%, transparent); transform: rotate(-3deg); }
@@ -464,6 +467,38 @@ img, svg, video, canvas { max-width: 100%; }
 .hiit-activo.actividad > strong { color: var(--acento); }
 .hiit-activo.descanso > strong { color: var(--primario); }
 .hiit-activo .acciones { display: grid; grid-template-columns: 1fr 1fr; width: min(320px, 90vw); }
+
+/* ── Caminar/Correr (W/R) ── */
+.wr-config { text-align: center; padding: 8px 0 16px; }
+.wr-emblema {
+  display: inline-block; font-weight: 800; letter-spacing: .08em; font-size: .78rem;
+  padding: 6px 14px; border-radius: 999px; background: var(--superficie-alt);
+  border: 1px solid var(--borde); margin-bottom: 10px;
+}
+.wr-config h1 { font-size: 1.3rem; margin: 0 0 6px; }
+.wr-config > p { color: var(--texto-suave); font-size: .88rem; margin: 0 0 16px; }
+
+.wr-activo {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; min-height: 62vh; border-radius: var(--radio-lg); padding: 24px 16px;
+  background: var(--superficie-alt); border: 1px solid var(--borde);
+}
+.wr-activo small { font-weight: 800; letter-spacing: .1em; font-size: .78rem; color: var(--texto-suave); }
+.wr-activo strong { font-size: 4.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.wr-activo > span { font-weight: 600; }
+.wr-activo .wr-siguiente { margin: 2px 0 0; font-size: .82rem; color: var(--texto-suave); }
+.wr-activo .wr-gps { margin: 2px 0 0; font-size: .84rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wr-activo .acciones { display: flex; gap: 10px; margin-top: 18px; }
+.wr-activo .acciones button {
+  min-height: 48px; padding: 0 22px; border-radius: var(--radio-sm);
+  border: 1px solid var(--borde); background: var(--superficie); font-weight: 700; cursor: pointer;
+}
+/* El color de fondo dice de un vistazo qué toca hacer, sin leer nada. */
+.wr-activo.correr { background: color-mix(in srgb, var(--peligro) 16%, var(--superficie-alt)); }
+.wr-activo.caminar { background: color-mix(in srgb, var(--exito) 16%, var(--superficie-alt)); }
+.wr-activo.calentamiento,
+.wr-activo.enfriamiento { background: color-mix(in srgb, var(--primario) 12%, var(--superficie-alt)); }
+
 .progreso-ejercicio > header { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
 .progreso-ejercicio h1 { margin: 2px 0 0; }
 .filtros-periodo { display: flex; gap: 4px; }

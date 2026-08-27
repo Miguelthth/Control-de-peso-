@@ -2,7 +2,7 @@
 // Edita los archivos fuente y vuelve a correr: python build.py
 
 // ── shared/autorizacion.js ──────────────────────────────────────────
-const autorizacion = (function () {
+const __modulo_autorizacion = (function () {
 const CLAVE_TOKEN = 'ma_token';
 const PUBLICAS = new Set(['validarUsuario', 'validarPin', 'validarActivacion']);
 const MENSAJE_BACKEND_ANTIGUO = 'El servidor necesita actualizarse primero. Pide al administrador desplegar la nueva versión de Apps Script.';
@@ -102,33 +102,112 @@ function reunirTexto(chunks) {
 
   return { guardarToken, leerToken, borrarToken, requiereAutorizacion, agregarCredenciales, exigirBackendActual, validarSesion, puedeValidarPin, siguienteBloqueoPin, pinNuevoValido, usuarioValido, fechaISOValida, numeroEnRango, blobCifradoValido, dividirTexto, reunirTexto };
 })();
-const guardarToken = autorizacion.guardarToken;
-const leerToken = autorizacion.leerToken;
-const borrarToken = autorizacion.borrarToken;
-const requiereAutorizacion = autorizacion.requiereAutorizacion;
-const agregarCredenciales = autorizacion.agregarCredenciales;
-const exigirBackendActual = autorizacion.exigirBackendActual;
-const validarSesion = autorizacion.validarSesion;
-const puedeValidarPin = autorizacion.puedeValidarPin;
-const siguienteBloqueoPin = autorizacion.siguienteBloqueoPin;
-const pinNuevoValido = autorizacion.pinNuevoValido;
-const usuarioValido = autorizacion.usuarioValido;
-const fechaISOValida = autorizacion.fechaISOValida;
-const numeroEnRango = autorizacion.numeroEnRango;
-const blobCifradoValido = autorizacion.blobCifradoValido;
-const dividirTexto = autorizacion.dividirTexto;
-const reunirTexto = autorizacion.reunirTexto;
+const guardarToken = __modulo_autorizacion.guardarToken;
+const leerToken = __modulo_autorizacion.leerToken;
+const borrarToken = __modulo_autorizacion.borrarToken;
+const requiereAutorizacion = __modulo_autorizacion.requiereAutorizacion;
+const agregarCredenciales = __modulo_autorizacion.agregarCredenciales;
+const exigirBackendActual = __modulo_autorizacion.exigirBackendActual;
+const validarSesion = __modulo_autorizacion.validarSesion;
+const puedeValidarPin = __modulo_autorizacion.puedeValidarPin;
+const siguienteBloqueoPin = __modulo_autorizacion.siguienteBloqueoPin;
+const pinNuevoValido = __modulo_autorizacion.pinNuevoValido;
+const usuarioValido = __modulo_autorizacion.usuarioValido;
+const fechaISOValida = __modulo_autorizacion.fechaISOValida;
+const numeroEnRango = __modulo_autorizacion.numeroEnRango;
+const blobCifradoValido = __modulo_autorizacion.blobCifradoValido;
+const dividirTexto = __modulo_autorizacion.dividirTexto;
+const reunirTexto = __modulo_autorizacion.reunirTexto;
+
+// ── shared/acceso_local.js ──────────────────────────────────────────
+const __modulo_acceso_local = (function () {
+// Verificador local para poder abrir la app sin señal después de un inicio
+// correcto en este mismo teléfono. Nunca guarda la contraseña ni un token del
+// servidor: solo un derivado PBKDF2 con sal aleatoria.
+
+const VERSION = 1;
+const ITERACIONES = 210000;
+const BYTES_SAL = 16;
+const BITS_DERIVADOS = 256;
+
+function aBase64(bytes) {
+  let binario = '';
+  for (const byte of bytes) binario += String.fromCharCode(byte);
+  return btoa(binario);
+}
+
+function desdeBase64(texto) {
+  if (typeof texto !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(texto)) return null;
+  try {
+    const binario = atob(texto);
+    return Uint8Array.from(binario, (caracter) => caracter.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+async function derivar(password, sal) {
+  const claveBase = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(String(password)),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: sal, iterations: ITERACIONES },
+    claveBase,
+    BITS_DERIVADOS,
+  );
+  return new Uint8Array(bits);
+}
+
+function iguales(a, b) {
+  if (a.length !== b.length) return false;
+  let diferencia = 0;
+  for (let i = 0; i < a.length; i += 1) diferencia |= a[i] ^ b[i];
+  return diferencia === 0;
+}
+
+async function crearVerificadorLocal(password) {
+  if (typeof password !== 'string' || password.length === 0) throw new Error('La contraseña es obligatoria.');
+  const sal = crypto.getRandomValues(new Uint8Array(BYTES_SAL));
+  const derivado = await derivar(password, sal);
+  return { v: VERSION, salt: aBase64(sal), derivado: aBase64(derivado) };
+}
+
+async function verificarAccesoLocal(password, verificador) {
+  if (!verificador || verificador.v !== VERSION || typeof password !== 'string' || password.length === 0) return false;
+  const sal = desdeBase64(verificador.salt);
+  const esperado = desdeBase64(verificador.derivado);
+  if (!sal || sal.length !== BYTES_SAL || !esperado || esperado.length !== BITS_DERIVADOS / 8) return false;
+  try {
+    return iguales(await derivar(password, sal), esperado);
+  } catch {
+    return false;
+  }
+}
+
+  return { crearVerificadorLocal, verificarAccesoLocal };
+})();
+const crearVerificadorLocal = __modulo_acceso_local.crearVerificadorLocal;
+const verificarAccesoLocal = __modulo_acceso_local.verificarAccesoLocal;
 
 // ── shared/sesion.js ──────────────────────────────────────────
-const sesion = (function () {
+const __modulo_sesion = (function () {
 // Sesión compartida entre el launcher, Gastos y Peso (mismo origen -- misma
 // localStorage). Login pasa UNA vez en el launcher; las sub-apps solo leen.
+
+
 
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
 const CLAVE_PERFILES = 'ma_perfiles_conocidos';
 const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
+const CLAVE_SESION_LOCAL = 'ma_sesion_local';
+const PREFIJO_ACCESO_LOCAL = 'ma_acceso_local_v1:';
+const TOKEN_SESION_LOCAL = 'local-sin-conexion';
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
 // -- si el iPhone borra localStorage entre usos (pasa en algunos ajustes de
@@ -180,13 +259,48 @@ function leerPerfilConocido(usuario) {
 function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
+  sessionStorage.removeItem(CLAVE_SESION_LOCAL);
   if (token) guardarToken(token);
   guardarPerfilConocido(usuario, rol, true);
+}
+
+function claveAccesoLocal(usuario) {
+  return `${PREFIJO_ACCESO_LOCAL}${String(usuario || '').trim().toLocaleLowerCase()}`;
+}
+
+async function guardarAccesoLocal(usuario, password) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) throw new Error('Falta el usuario.');
+  const verificador = await crearVerificadorLocal(password);
+  localStorage.setItem(claveAccesoLocal(nombre), JSON.stringify(verificador));
+}
+
+async function validarAccesoLocal(usuario, password) {
+  try {
+    const crudo = localStorage.getItem(claveAccesoLocal(usuario));
+    return verificarAccesoLocal(password, JSON.parse(crudo));
+  } catch {
+    return false;
+  }
+}
+
+function iniciarSesionLocal(usuario, rol) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) throw new Error('Falta el usuario.');
+  localStorage.setItem(CLAVE_USUARIO, nombre);
+  localStorage.setItem(CLAVE_ROL, String(rol || 'normal'));
+  sessionStorage.setItem(CLAVE_SESION_LOCAL, '1');
+  guardarToken(TOKEN_SESION_LOCAL);
+}
+
+function esSesionLocal() {
+  return sessionStorage.getItem(CLAVE_SESION_LOCAL) === '1' && leerToken() === TOKEN_SESION_LOCAL;
 }
 
 function cerrarSesion() {
   localStorage.removeItem(CLAVE_USUARIO);
   localStorage.removeItem(CLAVE_ROL);
+  sessionStorage.removeItem(CLAVE_SESION_LOCAL);
   borrarClaveSesion();
   borrarToken();
 }
@@ -253,32 +367,38 @@ function exigirSesion(rutaLauncher) {
   return true;
 }
 
-  return { getUrl, setUrl, getUsuario, getRol, esAdmin, guardarPerfilConocido, leerPerfilConocido, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
+  return { getUrl, setUrl, getUsuario, getRol, esAdmin, guardarPerfilConocido, leerPerfilConocido, iniciarSesion, guardarAccesoLocal, validarAccesoLocal, iniciarSesionLocal, esSesionLocal, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
 })();
-const getUrl = sesion.getUrl;
-const setUrl = sesion.setUrl;
-const getUsuario = sesion.getUsuario;
-const getRol = sesion.getRol;
-const esAdmin = sesion.esAdmin;
-const guardarPerfilConocido = sesion.guardarPerfilConocido;
-const leerPerfilConocido = sesion.leerPerfilConocido;
-const iniciarSesion = sesion.iniciarSesion;
-const cerrarSesion = sesion.cerrarSesion;
-const cerrarSesionEnSegundoPlano = sesion.cerrarSesionEnSegundoPlano;
-const debeConfirmarNavegacion = sesion.debeConfirmarNavegacion;
-const ejecutarUnaVez = sesion.ejecutarUnaVez;
-const sesionAutenticada = sesion.sesionAutenticada;
-const accesoFaceIdValido = sesion.accesoFaceIdValido;
-const guardarClaveSesion = sesion.guardarClaveSesion;
-const leerClaveSesion = sesion.leerClaveSesion;
-const borrarClaveSesion = sesion.borrarClaveSesion;
-const exigirSesion = sesion.exigirSesion;
+const getUrl = __modulo_sesion.getUrl;
+const setUrl = __modulo_sesion.setUrl;
+const getUsuario = __modulo_sesion.getUsuario;
+const getRol = __modulo_sesion.getRol;
+const esAdmin = __modulo_sesion.esAdmin;
+const guardarPerfilConocido = __modulo_sesion.guardarPerfilConocido;
+const leerPerfilConocido = __modulo_sesion.leerPerfilConocido;
+const iniciarSesion = __modulo_sesion.iniciarSesion;
+const guardarAccesoLocal = __modulo_sesion.guardarAccesoLocal;
+const validarAccesoLocal = __modulo_sesion.validarAccesoLocal;
+const iniciarSesionLocal = __modulo_sesion.iniciarSesionLocal;
+const esSesionLocal = __modulo_sesion.esSesionLocal;
+const cerrarSesion = __modulo_sesion.cerrarSesion;
+const cerrarSesionEnSegundoPlano = __modulo_sesion.cerrarSesionEnSegundoPlano;
+const debeConfirmarNavegacion = __modulo_sesion.debeConfirmarNavegacion;
+const ejecutarUnaVez = __modulo_sesion.ejecutarUnaVez;
+const sesionAutenticada = __modulo_sesion.sesionAutenticada;
+const accesoFaceIdValido = __modulo_sesion.accesoFaceIdValido;
+const guardarClaveSesion = __modulo_sesion.guardarClaveSesion;
+const leerClaveSesion = __modulo_sesion.leerClaveSesion;
+const borrarClaveSesion = __modulo_sesion.borrarClaveSesion;
+const exigirSesion = __modulo_sesion.exigirSesion;
 
 // ── shared/api.js ──────────────────────────────────────────
-const api = (function () {
+const __modulo_api = (function () {
 // Llamadas HTTP crudas al Web App de Apps Script único (Gastos + Peso).
 // Sin caché, sin cola -- eso vive en cola.js de cada app. Aquí solo se habla
 // con el servidor.
+
+
 
 const TIMEOUT_MS = 12000;
 let manejadorAuth = null;
@@ -446,32 +566,32 @@ function leerGastos(usuario) {
 
   return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerEjercicio, guardarEjercicio, guardarOperacionEjercicio, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
-const configurarManejadorAuth = api.configurarManejadorAuth;
-const ApiError = api.ApiError;
-const solicitarJson = api.solicitarJson;
-const cerrarSesionServidor = api.cerrarSesionServidor;
-const leerDatos = api.leerDatos;
-const leerEjercicio = api.leerEjercicio;
-const guardarEjercicio = api.guardarEjercicio;
-const guardarOperacionEjercicio = api.guardarOperacionEjercicio;
-const leerVersion = api.leerVersion;
-const guardarFechasReto = api.guardarFechasReto;
-const validarUsuario = api.validarUsuario;
-const validarPin = api.validarPin;
-const validarActivacion = api.validarActivacion;
-const crearPin = api.crearPin;
-const cambiarPin = api.cambiarPin;
-const guardarPeso = api.guardarPeso;
-const guardarMeta = api.guardarMeta;
-const guardarUnidad = api.guardarUnidad;
-const borrarPesos = api.borrarPesos;
-const borrarPesoFecha = api.borrarPesoFecha;
-const crearUsuario = api.crearUsuario;
-const guardarGastos = api.guardarGastos;
-const leerGastos = api.leerGastos;
+const configurarManejadorAuth = __modulo_api.configurarManejadorAuth;
+const ApiError = __modulo_api.ApiError;
+const solicitarJson = __modulo_api.solicitarJson;
+const cerrarSesionServidor = __modulo_api.cerrarSesionServidor;
+const leerDatos = __modulo_api.leerDatos;
+const leerEjercicio = __modulo_api.leerEjercicio;
+const guardarEjercicio = __modulo_api.guardarEjercicio;
+const guardarOperacionEjercicio = __modulo_api.guardarOperacionEjercicio;
+const leerVersion = __modulo_api.leerVersion;
+const guardarFechasReto = __modulo_api.guardarFechasReto;
+const validarUsuario = __modulo_api.validarUsuario;
+const validarPin = __modulo_api.validarPin;
+const validarActivacion = __modulo_api.validarActivacion;
+const crearPin = __modulo_api.crearPin;
+const cambiarPin = __modulo_api.cambiarPin;
+const guardarPeso = __modulo_api.guardarPeso;
+const guardarMeta = __modulo_api.guardarMeta;
+const guardarUnidad = __modulo_api.guardarUnidad;
+const borrarPesos = __modulo_api.borrarPesos;
+const borrarPesoFecha = __modulo_api.borrarPesoFecha;
+const crearUsuario = __modulo_api.crearUsuario;
+const guardarGastos = __modulo_api.guardarGastos;
+const leerGastos = __modulo_api.leerGastos;
 
 // ── shared/cifrado.js ──────────────────────────────────────────
-const cifrado = (function () {
+const __modulo_cifrado = (function () {
 // Cifrado local de los datos con una contraseña (AES-GCM + PBKDF2, Web Crypto nativo).
 // No hay forma de recuperar los datos si se pierde la contraseña: no queda en ningún
 // lado, ni "pista", ni respaldo en claro. Esa es la garantía de que es privado de verdad.
@@ -586,16 +706,16 @@ function necesitaMigrarClave(claveSesion, claveUsada) {
 
   return { cifrar, descifrar, crearClaveSesion, cifrarConClave, descifrarConClave, esPaqueteCifrado, necesitaMigrarClave };
 })();
-const cifrar = cifrado.cifrar;
-const descifrar = cifrado.descifrar;
-const crearClaveSesion = cifrado.crearClaveSesion;
-const cifrarConClave = cifrado.cifrarConClave;
-const descifrarConClave = cifrado.descifrarConClave;
-const esPaqueteCifrado = cifrado.esPaqueteCifrado;
-const necesitaMigrarClave = cifrado.necesitaMigrarClave;
+const cifrar = __modulo_cifrado.cifrar;
+const descifrar = __modulo_cifrado.descifrar;
+const crearClaveSesion = __modulo_cifrado.crearClaveSesion;
+const cifrarConClave = __modulo_cifrado.cifrarConClave;
+const descifrarConClave = __modulo_cifrado.descifrarConClave;
+const esPaqueteCifrado = __modulo_cifrado.esPaqueteCifrado;
+const necesitaMigrarClave = __modulo_cifrado.necesitaMigrarClave;
 
 // ── shared/passkey.js ──────────────────────────────────────────
-const passkey = (function () {
+const __modulo_passkey = (function () {
 // Face ID / Touch ID vía WebAuthn -- candado LOCAL por dispositivo, no una
 // autenticación remota real: no hay servidor (Apps Script no es buen lugar
 // para verificar firmas WebAuthn) validando la respuesta del sensor. Lo que
@@ -732,16 +852,16 @@ function mensajeError(e) {
 
   return { disponible, porQueNoDisponible, tieneRegistro, olvidar, usuariosRegistrados, registrar, verificar };
 })();
-const disponible = passkey.disponible;
-const porQueNoDisponible = passkey.porQueNoDisponible;
-const tieneRegistro = passkey.tieneRegistro;
-const olvidar = passkey.olvidar;
-const usuariosRegistrados = passkey.usuariosRegistrados;
-const registrar = passkey.registrar;
-const verificar = passkey.verificar;
+const disponible = __modulo_passkey.disponible;
+const porQueNoDisponible = __modulo_passkey.porQueNoDisponible;
+const tieneRegistro = __modulo_passkey.tieneRegistro;
+const olvidar = __modulo_passkey.olvidar;
+const usuariosRegistrados = __modulo_passkey.usuariosRegistrados;
+const registrar = __modulo_passkey.registrar;
+const verificar = __modulo_passkey.verificar;
 
 // ── shared/candado.js ──────────────────────────────────────────
-const candado = (function () {
+const __modulo_candado = (function () {
 // Guarda localmente (por usuario, por app) el secreto que Face ID va a
 // "revelar" en vez de pedirte que lo teclees: el PIN de sesión del launcher,
 // o la contraseña de cifrado de Gastos. Vive en localStorage -- protegido
@@ -792,14 +912,14 @@ function faceIdConfirmadoReciente() {
 
   return { guardarCandado, leerCandado, borrarCandado, marcarFaceIdConfirmado, faceIdConfirmadoReciente };
 })();
-const guardarCandado = candado.guardarCandado;
-const leerCandado = candado.leerCandado;
-const borrarCandado = candado.borrarCandado;
-const marcarFaceIdConfirmado = candado.marcarFaceIdConfirmado;
-const faceIdConfirmadoReciente = candado.faceIdConfirmadoReciente;
+const guardarCandado = __modulo_candado.guardarCandado;
+const leerCandado = __modulo_candado.leerCandado;
+const borrarCandado = __modulo_candado.borrarCandado;
+const marcarFaceIdConfirmado = __modulo_candado.marcarFaceIdConfirmado;
+const faceIdConfirmadoReciente = __modulo_candado.faceIdConfirmadoReciente;
 
 // ── shared/fondo.js ──────────────────────────────────────────
-const fondo = (function () {
+const __modulo_fondo = (function () {
 // Fondo de pantalla personalizado (tu propia foto) -- vive en IndexedDB, no
 // en localStorage: una foto pesa más de lo que localStorage aguanta cómodo
 // sin arriesgar llenarlo y afectar lo demás guardado ahí (sesión, Face ID,
@@ -879,13 +999,13 @@ function comprimirImagen(archivo, maxAncho = 900, calidad = 0.72) {
 
   return { guardarFondo, leerFondo, borrarFondo, comprimirImagen };
 })();
-const guardarFondo = fondo.guardarFondo;
-const leerFondo = fondo.leerFondo;
-const borrarFondo = fondo.borrarFondo;
-const comprimirImagen = fondo.comprimirImagen;
+const guardarFondo = __modulo_fondo.guardarFondo;
+const leerFondo = __modulo_fondo.leerFondo;
+const borrarFondo = __modulo_fondo.borrarFondo;
+const comprimirImagen = __modulo_fondo.comprimirImagen;
 
 // ── shared/ui_seguridad.js ──────────────────────────────────────────
-const ui_seguridad = (function () {
+const __modulo_ui_seguridad = (function () {
 function escapeHTML(valor) {
   return String(valor ?? '').replace(/[&<>"']/g, (caracter) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -915,14 +1035,14 @@ function colorSeguro(valor, respaldo = '#999999') {
 
   return { escapeHTML, escapeAtributo, idSeguro, urlLocalSegura, colorSeguro };
 })();
-const escapeHTML = ui_seguridad.escapeHTML;
-const escapeAtributo = ui_seguridad.escapeAtributo;
-const idSeguro = ui_seguridad.idSeguro;
-const urlLocalSegura = ui_seguridad.urlLocalSegura;
-const colorSeguro = ui_seguridad.colorSeguro;
+const escapeHTML = __modulo_ui_seguridad.escapeHTML;
+const escapeAtributo = __modulo_ui_seguridad.escapeAtributo;
+const idSeguro = __modulo_ui_seguridad.idSeguro;
+const urlLocalSegura = __modulo_ui_seguridad.urlLocalSegura;
+const colorSeguro = __modulo_ui_seguridad.colorSeguro;
 
 // ── shared/actualizacion.js ──────────────────────────────────────────
-const actualizacion = (function () {
+const __modulo_actualizacion = (function () {
 const URL_METADATA = '../__app_meta__.json';
 
 function normalizarMetadata(valor) {
@@ -967,14 +1087,14 @@ async function buscarActualizacion(registro) {
 
   return { normalizarMetadata, formatearFechaActualizacion, obtenerEstadoActualizacion, leerMetadataActualizacion, buscarActualizacion };
 })();
-const normalizarMetadata = actualizacion.normalizarMetadata;
-const formatearFechaActualizacion = actualizacion.formatearFechaActualizacion;
-const obtenerEstadoActualizacion = actualizacion.obtenerEstadoActualizacion;
-const leerMetadataActualizacion = actualizacion.leerMetadataActualizacion;
-const buscarActualizacion = actualizacion.buscarActualizacion;
+const normalizarMetadata = __modulo_actualizacion.normalizarMetadata;
+const formatearFechaActualizacion = __modulo_actualizacion.formatearFechaActualizacion;
+const obtenerEstadoActualizacion = __modulo_actualizacion.obtenerEstadoActualizacion;
+const leerMetadataActualizacion = __modulo_actualizacion.leerMetadataActualizacion;
+const buscarActualizacion = __modulo_actualizacion.buscarActualizacion;
 
 // ── gastos/js/modelo.js ──────────────────────────────────────────
-const modelo = (function () {
+const __modulo_modelo = (function () {
 // Forma de los datos, valores por defecto y validación. Sin DOM, sin storage.
 
 const CATEGORIAS_DEFECTO = [
@@ -1063,20 +1183,21 @@ function normalizarDatos(datos) {
 
   return { CATEGORIAS_DEFECTO, METODOS, generarId, crearDatosVacios, mesDeFecha, hoyISO, mesActualStr, validarMovimiento, normalizarDatos };
 })();
-const CATEGORIAS_DEFECTO = modelo.CATEGORIAS_DEFECTO;
-const METODOS = modelo.METODOS;
-const generarId = modelo.generarId;
-const crearDatosVacios = modelo.crearDatosVacios;
-const mesDeFecha = modelo.mesDeFecha;
-const hoyISO = modelo.hoyISO;
-const mesActualStr = modelo.mesActualStr;
-const validarMovimiento = modelo.validarMovimiento;
-const normalizarDatos = modelo.normalizarDatos;
+const CATEGORIAS_DEFECTO = __modulo_modelo.CATEGORIAS_DEFECTO;
+const METODOS = __modulo_modelo.METODOS;
+const generarId = __modulo_modelo.generarId;
+const crearDatosVacios = __modulo_modelo.crearDatosVacios;
+const mesDeFecha = __modulo_modelo.mesDeFecha;
+const hoyISO = __modulo_modelo.hoyISO;
+const mesActualStr = __modulo_modelo.mesActualStr;
+const validarMovimiento = __modulo_modelo.validarMovimiento;
+const normalizarDatos = __modulo_modelo.normalizarDatos;
 
 // ── gastos/js/calculos.js ──────────────────────────────────────────
-const calculos = (function () {
+const __modulo_calculos = (function () {
 // Toda la aritmética de dinero. Puro: recibe datos, regresa números. Sin DOM, sin storage.
 // Todas las sumas se hacen en centavos enteros para evitar errores de punto flotante.
+
 
 function aCentavos(pesos) {
   return Math.round(pesos * 100);
@@ -1256,31 +1377,33 @@ function fijosVsVariables(movimientos, mesStr) {
 
   return { aCentavos, aPesos, sumaCentavos, filtrarPorMes, totalPorTipo, neto, totalPorCategoria, ultimosMeses, totalesPorMes, promedioDiario, diasEnMes, proyeccionCierre, gastoHormiga, topGastos, diaSemanaMasCaro, rachaSinGastar, promedioCategoriaMesesPrevios, estadoPresupuestos, generarMovimientosRecurrentes, costoAnualSuscripciones, fijosVsVariables };
 })();
-const aCentavos = calculos.aCentavos;
-const aPesos = calculos.aPesos;
-const sumaCentavos = calculos.sumaCentavos;
-const filtrarPorMes = calculos.filtrarPorMes;
-const totalPorTipo = calculos.totalPorTipo;
-const neto = calculos.neto;
-const totalPorCategoria = calculos.totalPorCategoria;
-const ultimosMeses = calculos.ultimosMeses;
-const totalesPorMes = calculos.totalesPorMes;
-const promedioDiario = calculos.promedioDiario;
-const diasEnMes = calculos.diasEnMes;
-const proyeccionCierre = calculos.proyeccionCierre;
-const gastoHormiga = calculos.gastoHormiga;
-const topGastos = calculos.topGastos;
-const diaSemanaMasCaro = calculos.diaSemanaMasCaro;
-const rachaSinGastar = calculos.rachaSinGastar;
-const promedioCategoriaMesesPrevios = calculos.promedioCategoriaMesesPrevios;
-const estadoPresupuestos = calculos.estadoPresupuestos;
-const generarMovimientosRecurrentes = calculos.generarMovimientosRecurrentes;
-const costoAnualSuscripciones = calculos.costoAnualSuscripciones;
-const fijosVsVariables = calculos.fijosVsVariables;
+const aCentavos = __modulo_calculos.aCentavos;
+const aPesos = __modulo_calculos.aPesos;
+const sumaCentavos = __modulo_calculos.sumaCentavos;
+const filtrarPorMes = __modulo_calculos.filtrarPorMes;
+const totalPorTipo = __modulo_calculos.totalPorTipo;
+const neto = __modulo_calculos.neto;
+const totalPorCategoria = __modulo_calculos.totalPorCategoria;
+const ultimosMeses = __modulo_calculos.ultimosMeses;
+const totalesPorMes = __modulo_calculos.totalesPorMes;
+const promedioDiario = __modulo_calculos.promedioDiario;
+const diasEnMes = __modulo_calculos.diasEnMes;
+const proyeccionCierre = __modulo_calculos.proyeccionCierre;
+const gastoHormiga = __modulo_calculos.gastoHormiga;
+const topGastos = __modulo_calculos.topGastos;
+const diaSemanaMasCaro = __modulo_calculos.diaSemanaMasCaro;
+const rachaSinGastar = __modulo_calculos.rachaSinGastar;
+const promedioCategoriaMesesPrevios = __modulo_calculos.promedioCategoriaMesesPrevios;
+const estadoPresupuestos = __modulo_calculos.estadoPresupuestos;
+const generarMovimientosRecurrentes = __modulo_calculos.generarMovimientosRecurrentes;
+const costoAnualSuscripciones = __modulo_calculos.costoAnualSuscripciones;
+const fijosVsVariables = __modulo_calculos.fijosVsVariables;
 
 // ── gastos/js/insights.js ──────────────────────────────────────────
-const insights = (function () {
+const __modulo_insights = (function () {
 // Frases automáticas sobre el mes, con reglas fijas (no IA). Puro: recibe datos, regresa insights.
+
+
 
 function nombreCategoria(categorias, id) {
   return categorias.find((c) => c.id === id)?.nombre || id;
@@ -1399,10 +1522,10 @@ function generarInsights(datos, mesStr, hoy = hoyISO()) {
 
   return { generarInsights };
 })();
-const generarInsights = insights.generarInsights;
+const generarInsights = __modulo_insights.generarInsights;
 
 // ── gastos/js/graficas.js ──────────────────────────────────────────
-const graficas = (function () {
+const __modulo_graficas = (function () {
 // Gráficas en SVG escrito a mano. Cada función regresa un string de SVG listo para innerHTML.
 // Sin librerías: así la app no depende de nada externo para verse.
 
@@ -1566,20 +1689,23 @@ function svgMapaCalor(movimientosPorDia, anio, { celda = 12, hueco = 3 } = {}) {
 
   return { svgDona, svgBarras12Meses, svgLineaAcumulada, svgBarrasHorizontales, svgMapaCalor };
 })();
-const svgDona = graficas.svgDona;
-const svgBarras12Meses = graficas.svgBarras12Meses;
-const svgLineaAcumulada = graficas.svgLineaAcumulada;
-const svgBarrasHorizontales = graficas.svgBarrasHorizontales;
-const svgMapaCalor = graficas.svgMapaCalor;
+const svgDona = __modulo_graficas.svgDona;
+const svgBarras12Meses = __modulo_graficas.svgBarras12Meses;
+const svgLineaAcumulada = __modulo_graficas.svgLineaAcumulada;
+const svgBarrasHorizontales = __modulo_graficas.svgBarrasHorizontales;
+const svgMapaCalor = __modulo_graficas.svgMapaCalor;
 
 // ── gastos/js/almacen.js ──────────────────────────────────────────
-const almacen = (function () {
+const __modulo_almacen = (function () {
 // Lee/escribe los Gastos de un usuario en su Hoja privada (backend en
 // shared/api.js). El contenido SIEMPRE viaja cifrado (shared/cifrado.js) --
 // este archivo nunca ve un movimiento en claro, solo el "paquete" cifrado.
 //
 // Cola offline: si guardar falla (sin señal), el paquete se queda en
 // localStorage y se reintenta solo -- mismo espíritu que Control de Peso.
+
+
+
 
 function clavePendiente(usuario) {
   return `gastos_pendiente_${usuario}`;
@@ -1836,22 +1962,35 @@ function leerArchivoSubido(archivo) {
 
   return { crearLecturaApertura, intentarEntradaGuardada, existeGastos, cargar, crearRegistroColas, crearColaGuardados, crearAlmacenSesion, guardar, sincronizarPendiente, crearSincronizadorAutomatico, iniciarSincronizacionAutomatica, exportarPaquete, leerArchivoSubido };
 })();
-const crearLecturaApertura = almacen.crearLecturaApertura;
-const intentarEntradaGuardada = almacen.intentarEntradaGuardada;
-const existeGastos = almacen.existeGastos;
-const cargar = almacen.cargar;
-const crearRegistroColas = almacen.crearRegistroColas;
-const crearColaGuardados = almacen.crearColaGuardados;
-const crearAlmacenSesion = almacen.crearAlmacenSesion;
-const guardar = almacen.guardar;
-const sincronizarPendiente = almacen.sincronizarPendiente;
-const crearSincronizadorAutomatico = almacen.crearSincronizadorAutomatico;
-const iniciarSincronizacionAutomatica = almacen.iniciarSincronizacionAutomatica;
-const exportarPaquete = almacen.exportarPaquete;
-const leerArchivoSubido = almacen.leerArchivoSubido;
+const crearLecturaApertura = __modulo_almacen.crearLecturaApertura;
+const intentarEntradaGuardada = __modulo_almacen.intentarEntradaGuardada;
+const existeGastos = __modulo_almacen.existeGastos;
+const cargar = __modulo_almacen.cargar;
+const crearRegistroColas = __modulo_almacen.crearRegistroColas;
+const crearColaGuardados = __modulo_almacen.crearColaGuardados;
+const crearAlmacenSesion = __modulo_almacen.crearAlmacenSesion;
+const guardar = __modulo_almacen.guardar;
+const sincronizarPendiente = __modulo_almacen.sincronizarPendiente;
+const crearSincronizadorAutomatico = __modulo_almacen.crearSincronizadorAutomatico;
+const iniciarSincronizacionAutomatica = __modulo_almacen.iniciarSincronizacionAutomatica;
+const exportarPaquete = __modulo_almacen.exportarPaquete;
+const leerArchivoSubido = __modulo_almacen.leerArchivoSubido;
 
 // ── gastos/js/ui.js ──────────────────────────────────────────
 ﻿// Estado, render y eventos. El único archivo que toca el DOM.
+
+const almacen = __modulo_almacen;
+const calculos = __modulo_calculos;
+const graficas = __modulo_graficas;
+
+
+
+
+const api = __modulo_api;
+const passkey = __modulo_passkey;
+const candado = __modulo_candado;
+const fondo = __modulo_fondo;
+
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);

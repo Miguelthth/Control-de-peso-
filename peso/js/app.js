@@ -367,7 +367,7 @@ function exigirSesion(rutaLauncher) {
   return true;
 }
 
-  return { getUrl, setUrl, getUsuario, getRol, esAdmin, guardarPerfilConocido, leerPerfilConocido, iniciarSesion, guardarAccesoLocal, validarAccesoLocal, iniciarSesionLocal, esSesionLocal, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
+  return { getUrl, setUrl, getUsuario, getRol, esAdmin, guardarPerfilConocido, leerPerfilConocido, iniciarSesion, guardarAccesoLocal, validarAccesoLocal, iniciarSesionLocal, esSesionLocal, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion, guardarToken, leerToken, borrarToken };
 })();
 const getUrl = __modulo_sesion.getUrl;
 const setUrl = __modulo_sesion.setUrl;
@@ -1377,7 +1377,7 @@ function esCampoAjusteDiferible(id, type) {
   return type !== 'file' && CAMPOS_AJUSTE_DIFERIBLES.has(String(id || ''));
 }
 
-  return { hayCapturaPesoPendiente, decidirRecargaActualizacion, esCampoAjusteDiferible };
+  return { hayCapturaPesoPendiente, decidirRecargaActualizacion, esCampoAjusteDiferible, normalizarMetadata, formatearFechaActualizacion, obtenerEstadoActualizacion, leerMetadataActualizacion, buscarActualizacion };
 })();
 const hayCapturaPesoPendiente = __modulo_actualizacion_peso.hayCapturaPesoPendiente;
 const decidirRecargaActualizacion = __modulo_actualizacion_peso.decidirRecargaActualizacion;

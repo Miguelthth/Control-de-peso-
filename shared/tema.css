@@ -95,7 +95,15 @@ button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .58; }
 a, button { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid var(--primario); outline-offset: 2px; }
-input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primario) !important; box-shadow: var(--anillo); }
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--primario) !important;
+  transition: box-shadow .18s ease;
+  /* Borde que brilla al tocar -- en celular el toque dispara :focus de
+     inmediato (el teclado numérico aparece), a diferencia del brillo que
+     sigue al mouse en shared/liquid.js, que necesita pointermove real y por
+     eso nunca se ve en pantallas táctiles. */
+  box-shadow: var(--anillo), 0 0 0 1px color-mix(in srgb, var(--primario) 55%, transparent), 0 0 14px color-mix(in srgb, var(--primario) 45%, transparent);
+}
 .oculto { display: none !important; }
 .texto-suave { color: var(--texto-suave); }
 .texto-error { color: var(--peligro); }
@@ -193,6 +201,23 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 }
 .tarjeta.lg-activa::after, .popup-caja.lg-activa::after, .btn-primario.lg-activa::after,
 .btn-secundario.lg-activa::after, .encabezado.lg-activa::after, .nav-inferior.lg-activa::after { opacity: 1; }
+
+/* Brillo al TOCAR, no solo al pasar el mouse -- :active dispara con el dedo
+   igual que con el mouse (a diferencia de pointermove), así que esto es lo
+   que de verdad se ve en un celular al presionar una tarjeta o un botón. Se
+   suma un borde luminoso además del reflejo radial porque en un toque no hay
+   posición de cursor que darle vida al gradiente (queda centrado). Una
+   tarjeta que solo contiene un input enfocado también brilla completa
+   (:focus-within) -- así "tocar el tablero de números" ilumina la tarjeta
+   que lo envuelve, no solo el campo. */
+.tarjeta:active::after, .popup-caja:active::after, .btn-primario:active::after, .btn-secundario:active::after,
+.tarjeta:focus-within::after, .popup-caja:focus-within::after {
+  opacity: 1;
+}
+.tarjeta:active, .popup-caja:active, .tarjeta:focus-within, .popup-caja:focus-within {
+  border-color: color-mix(in srgb, var(--primario) 55%, var(--lg-borde));
+  box-shadow: var(--sombra), inset 0 1px 0 var(--lg-luz), 0 0 0 1px color-mix(in srgb, var(--primario) 35%, transparent);
+}
 
 .tarjeta > *, .popup-caja > *, .btn-primario > *, .btn-secundario > *, .encabezado > *, .nav-inferior > * {
   position: relative;

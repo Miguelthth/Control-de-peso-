@@ -1,6 +1,6 @@
 // Launcher: login (URL → usuario → PIN) y los dos botones grandes.
 
-import { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, cerrarSesionEnSegundoPlano, guardarClaveSesion, ejecutarUnaVez, leerToken, sesionAutenticada, accesoFaceIdValido, guardarPerfilConocido, leerPerfilConocido } from '../shared/sesion.js';
+import { getUrl, setUrl, getUsuario, getRol, esAdmin, iniciarSesion, iniciarSesionLocal, cerrarSesionEnSegundoPlano, guardarClaveSesion, guardarAccesoLocal, validarAccesoLocal, ejecutarUnaVez, leerToken, sesionAutenticada, accesoFaceIdValido, guardarPerfilConocido, leerPerfilConocido } from '../shared/sesion.js';
 import * as api from '../shared/api.js';
 import * as passkey from '../shared/passkey.js';
 import * as candado from '../shared/candado.js';
@@ -324,6 +324,16 @@ async function continuarPin() {
   const boton = document.getElementById('btn-pin-continuar');
   boton.textContent = 'Verificando…';
   try {
+    if (!navigator.onLine) {
+      if (!(await validarAccesoLocal(usuarioTemp, pin))) {
+        mostrarErrorPin('PIN incorrecto o este teléfono no está preparado para entrar sin internet.');
+        return;
+      }
+      iniciarSesionLocal(usuarioTemp, rolTemp);
+      guardarClaveSesion(pin);
+      mostrarInicio();
+      return;
+    }
     const r = await api.validarPin(usuarioTemp, pin);
     exigirBackendActual(r, { requiereToken: true });
     if (!r.ok) {
@@ -331,6 +341,7 @@ async function continuarPin() {
       return;
     }
     iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
+    try { await guardarAccesoLocal(usuarioTemp, pin); } catch { /* El acceso en línea sigue siendo válido. */ }
     guardarClaveSesion(pin); // Gastos la prueba sola al abrir, sin volver a preguntar
     mostrarInicio();
     ofrecerFaceId(usuarioTemp, rolTemp, pin);
@@ -377,6 +388,7 @@ async function guardarPinNuevo() {
   exigirBackendActual(r, { requiereToken: true });
   if (!r.ok || !r.token) throw new Error(r.error || 'No se pudo crear el PIN');
   iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
+  try { await guardarAccesoLocal(usuarioTemp, pin); } catch { /* El acceso en línea sigue siendo válido. */ }
   guardarClaveSesion(pin); // Gastos la prueba sola al abrir, sin volver a preguntar
   mostrarInicio();
   ofrecerFaceId(usuarioTemp, rolTemp, pin);

@@ -1,8 +1,8 @@
 import * as api from '../../shared/api.js';
 import { getUsuario } from '../../shared/sesion.js';
 import { escapeHTML, escapeAtributo } from '../../shared/ui_seguridad.js';
-import { acumularPuntoGps, ajustarCantidad, calcularDuracionHiit, calcularDuracionWr, crearDocumentoEjercicio, fasesWr, faseEnSegundo, ritmoSegPorKm, tiempoPorTipoWr, avisoWrAlEntrarAFase, avisoWrCuentaFinal, normalizarEjercicio, normalizarRutina, normalizarRutinaHiit, normalizarRutinaWr, normalizarSerie, siguientePasoRutina, sonidosEnSegundo, TIPOS_FASE_WR, BANCO_EJERCICIOS_HIIT } from './ejercicio_modelo.js';
-import { guardarLocal, leerLocal, leerPendientes, mezclarDocumento, mutarLocal, sincronizarPendientes } from './ejercicio_almacen.js';
+import { acumularPuntoGps, ajustarCantidad, calcularDuracionHiit, calcularDuracionWr, crearDocumentoEjercicio, fasesWr, faseEnSegundo, ritmoSegPorKm, tiempoPorTipoWr, vueltasCompletadasWr, avisoWrAlEntrarAFase, avisoWrCuentaFinal, normalizarEjercicio, normalizarRutina, normalizarRutinaHiit, normalizarRutinaWr, normalizarSerie, normalizarSesionActiva, calcularEstadoFinalSesion, siguientePasoRutina, sonidosEnSegundo, TIPOS_FASE_WR, BANCO_EJERCICIOS_HIIT } from './ejercicio_modelo.js';
+import { borrarSesionActiva, guardarLocal, guardarSesionActiva, leerLocal, leerPendientes, leerSesionActiva, mezclarDocumento, mutarLocal, sincronizarPendientes } from './ejercicio_almacen.js';
 import {
   descansoPromedio, filtrarPeriodo, resumenHiit, resumenModalidades, seriesContables,
   volumenPorGrupo, frecuenciaPorGrupo, balancePatron, balanceSuperiorInferior, musculosAtrasados,
@@ -13,6 +13,43 @@ import {
 const S = { datos: null, tab: 'entrenar', toast: () => {}, audio: null, intervalo: null, wake: null, hiit: null, wr: null, entrenamiento: null, descanso: null, rutinaSeleccionada: '', periodo: 'semana', sonidosEmitidos: new Set(), redLista: false };
 const uid = () => crypto.randomUUID();
 const iso = () => new Date().toISOString();
+
+function modalidadActiva() {
+  if (S.entrenamiento) return 'fuerza';
+  if (S.hiit) return 'hiit';
+  if (S.wr) return 'wr';
+  return null;
+}
+
+function persistirSesionActiva() {
+  const modalidad = modalidadActiva();
+  if (!modalidad) return borrarSesionActiva(getUsuario());
+  const base = modalidad === 'fuerza'
+    ? { ...S.entrenamiento, modalidad, estado: 'en_curso', descanso: S.descanso }
+    : modalidad === 'hiit'
+      ? { ...S.hiit, modalidad }
+      : { ...S.wr, modalidad };
+  const sesion = modalidad === 'fuerza' ? normalizarSesionActiva(base, iso()) : { ...base, modificadoEn: iso() };
+  guardarSesionActiva(getUsuario(), sesion);
+}
+
+function restaurarSesionActiva() {
+  if (hayEntrenamientoActivo()) return;
+  const sesion = leerSesionActiva(getUsuario());
+  if (!sesion?.modalidad) return;
+  if (sesion.modalidad === 'fuerza') { S.entrenamiento = sesion; S.descanso = sesion.descanso || null; S.tab = 'entrenar'; }
+  else if (sesion.modalidad === 'hiit') { S.hiit = sesion; S.tab = 'hiit'; }
+  else if (sesion.modalidad === 'wr') { S.wr = sesion; S.tab = 'wr'; }
+  else return borrarSesionActiva(getUsuario());
+  S.toast('Entrenamiento recuperado');
+}
+
+function activarTemporizadorActivo() {
+  clearInterval(S.intervalo);
+  if (S.entrenamiento) S.intervalo = setInterval(tickEntrenamiento, 250);
+  else if (S.hiit) S.intervalo = setInterval(tickHiit, 250);
+  else if (S.wr) S.intervalo = setInterval(tickWr, 250);
+}
 
 function guardar(mutador, tipo = 'editar', entidadId = 'documento') {
   const r = mutarLocal(getUsuario(), mutador, { tipo, entidadId });
@@ -68,6 +105,8 @@ export async function iniciarModuloEjercicio(toast) {
   else if (rellenarCatalogoFaltante(S.datos)) guardarLocal(getUsuario(), S.datos);
   try { const r = await api.leerEjercicio(); if (r.ok) { S.datos = mezclarDocumento(S.datos, r.datos); guardarLocal(getUsuario(), S.datos); } } catch {}
   await sincronizar().catch(() => {});
+  restaurarSesionActiva();
+  activarTemporizadorActivo();
   if (!S.redLista) { S.redLista = true; addEventListener('online', () => refrescarRemoto().catch(() => {})); document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescarRemoto().catch(() => {}); }); }
 }
 
@@ -82,7 +121,7 @@ export function renderModuloEjercicio() {
   if (!S.datos) S.datos = leerLocal(getUsuario());
   const raiz = document.getElementById('ejercicio-contenido');
   raiz.innerHTML = `<header class="ejercicio-hero"><div><span class="ejercicio-kicker">ENTRENAMIENTO</span><h2>Muévete. Registra. Mejora.</h2></div><small id="ejercicio-sync"></small></header><nav id="ejercicio-tabs" class="ejercicio-tabs" role="tablist"><button role="tab" data-etab="entrenar">Entrenar</button><button role="tab" data-etab="hiit">HIIT</button><button role="tab" data-etab="wr">W/R</button><button role="tab" data-etab="progreso">Progreso</button></nav><main id="ejercicio-panel"></main><dialog id="ejercicio-modal" class="ejercicio-modal"><div class="modal-ejercicio-contenido"><header><div><small id="modal-kicker">CONFIGURAR</small><h2 id="modal-titulo"></h2></div><button type="button" class="modal-cerrar" aria-label="Cerrar">×</button></header><div id="modal-cuerpo"></div></div></dialog>`;
-  raiz.querySelectorAll('[data-etab]').forEach((b) => { b.setAttribute('aria-selected', String(b.dataset.etab === S.tab)); b.onclick = () => { S.tab = b.dataset.etab; renderModuloEjercicio(); }; });
+  raiz.querySelectorAll('[data-etab]').forEach((b) => { b.setAttribute('aria-selected', String(b.dataset.etab === S.tab)); b.onclick = () => { const activa = modalidadActiva(); if (activa && b.dataset.etab !== (activa === 'fuerza' ? 'entrenar' : activa)) { S.toast('Termina o guarda la sesión activa antes de cambiar de entrenamiento', true); return; } S.tab = b.dataset.etab; renderModuloEjercicio(); }; });
   actualizarSync();
   raiz.querySelector('.modal-cerrar').onclick = cerrarModal;
   if (S.tab === 'entrenar') renderEntrenar(); else if (S.tab === 'hiit') renderHiit(); else if (S.tab === 'wr') renderWr(); else renderProgreso();
@@ -191,10 +230,11 @@ function abrirSelectorEjercicio(borrador, volver) {
 }
 
 function comenzarEntrenamiento() {
+  if (hayEntrenamientoActivo()) return S.toast('Ya tienes un entrenamiento activo', true);
   const rutina = S.datos.rutinas.find((r) => r.id === S.rutinaSeleccionada); if (!rutina?.entradas?.length) return;
-  S.entrenamiento = { id: uid(), rutinaId: rutina.id, nombre: rutina.nombre, entradas: structuredClone(rutina.entradas), ejercicioIndice: 0, serieNumero: 1, fase: 'cuenta', cuenta: 3, series: [], fecha: iso(), creadoEn: iso(), modificadoEn: iso() };
+  S.entrenamiento = { id: uid(), rutinaId: rutina.id, nombre: rutina.nombre, entradas: structuredClone(rutina.entradas), ejercicioIndice: 0, serieNumero: 1, fase: 'cuenta', cuenta: 3, series: [], omisiones: [], fecha: iso(), creadoEn: iso(), modificadoEn: iso() };
   S.sonidosEmitidos.clear();
-  clearInterval(S.intervalo); S.intervalo = setInterval(tickEntrenamiento, 250); S.entrenamiento.cuentaFinMs = Date.now() + 3000; solicitarWake(); renderEntrenamientoActivo();
+  S.entrenamiento.cuentaFinMs = Date.now() + 3000; persistirSesionActiva(); activarTemporizadorActivo(); solicitarWake(); renderEntrenamientoActivo();
 }
 
 function tickEntrenamiento() {
@@ -202,7 +242,7 @@ function tickEntrenamiento() {
   if (S.entrenamiento.fase === 'cuenta') {
     const n = Math.max(0, Math.ceil((S.entrenamiento.cuentaFinMs - Date.now()) / 1000));
     emitirUnaVez(`inicio-${n}`, sonidosEnSegundo({ tipo: 'cuenta', restanteSeg: n }));
-    if (n <= 0) { S.entrenamiento.fase = 'serie'; beep('largo'); }
+    if (n <= 0) { S.entrenamiento.fase = 'serie'; persistirSesionActiva(); beep('largo'); }
   } else if (S.entrenamiento.fase === 'descanso') tickDescanso();
   renderEntrenamientoActivo();
 }
@@ -252,17 +292,19 @@ function renderEntrenamientoActivo() {
 
 function salirRutina() {
   const t = S.entrenamiento;
-  if (!t.series.length) { if (!confirm('¿Terminar esta rutina sin guardarla?')) return; S.entrenamiento = null; clearInterval(S.intervalo); liberarWake(); return renderEntrenar(); }
+  if (!t.series.length) { if (!confirm('¿Cancelar esta rutina sin guardarla?')) return; S.entrenamiento = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); return renderEntrenar(); }
   if (!confirm(`¿Salir? Se guardarán ${t.series.length} serie(s) ya completadas como rutina incompleta.`)) return;
-  const sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: 'descartada', series: t.series, creadoEn: t.creadoEn, modificadoEn: iso() };
+  const sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: calcularEstadoFinalSesion(t), series: t.series, omisiones: t.omisiones || [], creadoEn: t.creadoEn, modificadoEn: iso() };
   guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id);
-  S.entrenamiento = null; S.descanso = null; clearInterval(S.intervalo); liberarWake(); S.toast('Rutina guardada como incompleta'); renderEntrenar();
+  S.entrenamiento = null; S.descanso = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); S.toast('Rutina guardada como incompleta'); renderEntrenar();
 }
 
 function saltarEjercicio() {
   if (!confirm('¿Saltar este ejercicio? No se registrarán series para él.')) return;
   const t = S.entrenamiento;
+  t.omisiones.push({ ejercicioId: t.entradas[t.ejercicioIndice].ejercicioId, desdeSerie: t.serieNumero, en: iso() });
   Object.assign(t, { ejercicioIndice: t.ejercicioIndice + 1, serieNumero: 1, fase: 'serie' });
+  persistirSesionActiva();
   renderEntrenamientoActivo();
 }
 
@@ -288,7 +330,9 @@ function terminarSerieGuiada() {
   const { entrada, ejercicio } = ejercicioActual();
   let carga = null; if (ejercicio.modalidad === 'discos') carga = { grande: Number(document.getElementById('carga-grande').value), chico: Number(document.getElementById('carga-chico').value) }; else if (ejercicio.modalidad === 'niveles') carga = Number(document.getElementById('carga-nivel').value);
   try { S.entrenamiento.series.push(normalizarSerie({ ejercicioId: ejercicio.id, repeticiones: Number(document.getElementById('serie-reps').value), modalidad: ejercicio.modalidad, carga, descansoPlaneadoSeg: entrada.descansoSeg })); } catch (err) { return S.toast(err.message, true); }
-  S.entrenamiento.fase = 'descanso'; S.descanso = { inicioMs: Date.now(), finMs: Date.now() + entrada.descansoSeg * 1000, extraSeg: 0 }; S.sonidosEmitidos.clear(); emitirSonidos(['rapido', 'rapido', 'rapido']); renderEntrenamientoActivo();
+  const paso = siguientePasoRutina(S.entrenamiento, S.entrenamiento.entradas);
+  if (paso.terminada) return finalizarEntrenamiento();
+  S.entrenamiento.fase = 'descanso'; S.descanso = { inicioMs: Date.now(), finMs: Date.now() + entrada.descansoSeg * 1000, extraSeg: 0 }; persistirSesionActiva(); S.sonidosEmitidos.clear(); emitirSonidos(['rapido', 'rapido', 'rapido']); renderEntrenamientoActivo();
 }
 
 function tickDescanso() {
@@ -302,17 +346,17 @@ function cerrarDescanso() {
   const paso = siguientePasoRutina(S.entrenamiento, S.entrenamiento.entradas);
   S.descanso = null;
   if (paso.terminada) return finalizarEntrenamiento();
-  if (paso.ejercicioIndice !== S.entrenamiento.ejercicioIndice) { S.entrenamiento.fase = 'confirmar'; S.entrenamiento.pasoSiguiente = paso; beep('final'); return renderEntrenamientoActivo(); }
-  Object.assign(S.entrenamiento, paso, { fase: 'serie' }); beep('largo'); renderEntrenamientoActivo();
+  if (paso.ejercicioIndice !== S.entrenamiento.ejercicioIndice) { S.entrenamiento.fase = 'confirmar'; S.entrenamiento.pasoSiguiente = paso; persistirSesionActiva(); beep('final'); return renderEntrenamientoActivo(); }
+  Object.assign(S.entrenamiento, paso, { fase: 'serie' }); persistirSesionActiva(); beep('largo'); renderEntrenamientoActivo();
 }
 
 function confirmarSiguienteEjercicio() {
-  Object.assign(S.entrenamiento, S.entrenamiento.pasoSiguiente, { fase: 'serie' }); delete S.entrenamiento.pasoSiguiente; renderEntrenamientoActivo();
+  Object.assign(S.entrenamiento, S.entrenamiento.pasoSiguiente, { fase: 'serie' }); delete S.entrenamiento.pasoSiguiente; persistirSesionActiva(); renderEntrenamientoActivo();
 }
 
 function finalizarEntrenamiento() {
-  const t = S.entrenamiento, sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: 'completada', series: t.series, creadoEn: t.creadoEn, modificadoEn: iso() };
-  guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id); S.entrenamiento = null; S.descanso = null; clearInterval(S.intervalo); liberarWake(); beep('final'); S.toast('Rutina completada'); renderEntrenar();
+  const t = S.entrenamiento, sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: calcularEstadoFinalSesion(t, { terminada: true }), series: t.series, omisiones: t.omisiones || [], creadoEn: t.creadoEn, modificadoEn: iso() };
+  guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id); S.entrenamiento = null; S.descanso = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); beep('final'); S.toast(sesion.estado === 'completada' ? 'Rutina completada' : 'Rutina completada con cambios'); renderEntrenar();
 }
 
 // ────────── Caminar/Correr (W/R) ──────────
@@ -422,6 +466,7 @@ function iniciarGpsWr() {
       (pos) => {
         if (!S.wr || !S.wr.gps) return;
         const punto = { lat: pos.coords.latitude, lon: pos.coords.longitude, tMs: pos.timestamp || Date.now(), accuracy: pos.coords.accuracy };
+        if (S.wr.estado !== 'activo' || S.wr.pausaInicio) return;
         const antes = S.wr.gps.distanciaM;
         const nuevo = acumularPuntoGps(S.wr.gps, punto);
         S.wr.gps = { ...S.wr.gps, ...nuevo };
@@ -449,6 +494,7 @@ function detenerGpsWr() {
 // regresiva de 3s, tick cada 200ms, pausa acumulada en `pausaMs`), pero
 // recorriendo la lista de fases expandida en vez de dos duraciones fijas.
 function iniciarWr(rutina) {
+  if (hayEntrenamientoActivo()) return S.toast('Ya tienes un entrenamiento activo', true);
   if (!rutina) return S.toast('Elige una rutina primero', true);
   let planeadoSeg;
   try { planeadoSeg = calcularDuracionWr(rutina); } catch (err) { return S.toast(err.message, true); }
@@ -460,7 +506,7 @@ function iniciarWr(rutina) {
   };
   S.sonidosEmitidos.clear();
   iniciarGpsWr();
-  clearInterval(S.intervalo); S.intervalo = setInterval(tickWr, 200); solicitarWake(); tickWr();
+  persistirSesionActiva(); activarTemporizadorActivo(); solicitarWake(); tickWr();
 }
 
 // Segundos REALES transcurridos de la sesión (descontando pausas), o 0 si
@@ -479,7 +525,7 @@ function tickWr() {
     const restante = Math.max(0, Math.ceil((w.cuentaFinMs - Date.now()) / 1000));
     emitirUnaVez(`wr-cuenta-${restante}`, avisoWrCuentaFinal(restante));
     if (restante <= 0) {
-      w.estado = 'activo'; w.actividadInicioMs = Date.now(); w.pausaMs = 0; w.faseIndice = -1;
+      w.estado = 'activo'; w.actividadInicioMs = Date.now(); w.pausaMs = 0; w.faseIndice = -1; persistirSesionActiva();
     }
     return renderWrActivo();
   }
@@ -523,6 +569,7 @@ function alternarPausaWr() {
     if (w.estado === 'cuenta') w.cuentaFinMs += pausa; else w.pausaMs += pausa;
     w.pausaInicio = null; solicitarWake();
   } else { w.pausaInicio = Date.now(); liberarWake(); }
+  persistirSesionActiva();
   renderWrActivo();
 }
 
@@ -533,8 +580,7 @@ function finalizarWr(detenido) {
   const porTipo = tiempoPorTipoWr(w.fases, realSeg);
   // Cuántas vueltas COMPLETAS se alcanzaron: la vuelta de la última fase
   // terminada, no la que iba a medias.
-  const faseActual = faseEnSegundo(w.fases, realSeg);
-  const vueltasCompletadas = faseActual ? Math.max(0, (faseActual.vuelta || 1) - 1) : w.vueltas;
+  const vueltasCompletadas = vueltasCompletadasWr(w.fases, realSeg, w.vueltas);
   const registro = {
     id: w.id, rutinaId: w.rutinaId, nombre: w.nombre || 'Caminar/Correr',
     fecha: iso(), fin: iso(),
@@ -542,7 +588,7 @@ function finalizarWr(detenido) {
     caminarSeg: porTipo.caminar, correrSeg: porTipo.correr,
     vueltasCompletadas,
     porcentaje: w.planeadoSeg ? Math.min(100, Math.round(realSeg / w.planeadoSeg * 100)) : 0,
-    estado: detenido ? 'detenida' : 'completada',
+    estado: calcularEstadoFinalSesion({ duracionRealSeg: realSeg }, { terminada: !detenido }),
     creadoEn: w.creadoEn, modificadoEn: iso(),
   };
   // Solo se guardan campos de GPS si de verdad hubo señal -- si no, el
@@ -556,9 +602,9 @@ function finalizarWr(detenido) {
     registro.ritmoCorrerSegPorKm = ritmoSegPorKm(porTipo.correr, gps.porTipo.correr);
   }
   detenerGpsWr();
-  guardar((d) => { d.wrs = d.wrs || []; d.wrs.push(registro); }, 'guardar_wr', registro.id);
-  S.wr = null; clearInterval(S.intervalo); liberarWake(); beep('final');
-  S.toast(detenido ? 'Sesión guardada como incompleta' : 'Sesión completada');
+  if (registro.estado !== 'cancelada') guardar((d) => { d.wrs = d.wrs || []; d.wrs.push(registro); }, 'guardar_wr', registro.id);
+  S.wr = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); beep('final');
+  S.toast(registro.estado === 'cancelada' ? 'Sesión cancelada' : detenido ? 'Sesión guardada como incompleta' : 'Sesión completada');
   renderWr();
 }
 
@@ -618,6 +664,7 @@ function abrirFormularioRutinaHiit() {
 }
 
 function iniciarHiit(rutina) {
+  if (hayEntrenamientoActivo()) return S.toast('Ya tienes un entrenamiento activo', true);
   const config = rutina
     ? { vueltas: rutina.vueltas, actividadSeg: rutina.actividadSeg, descansoSeg: rutina.descansoSeg }
     : { vueltas: Number(document.getElementById('hiit-vueltas').value), actividadSeg: Number(document.getElementById('hiit-actividad').value), descansoSeg: Number(document.getElementById('hiit-descanso').value) };
@@ -628,12 +675,12 @@ function iniciarHiit(rutina) {
     nombre: rutina?.nombre || '', ejercicios: rutina?.ejercicios || null,
   };
   S.sonidosEmitidos.clear();
-  clearInterval(S.intervalo); S.intervalo = setInterval(tickHiit, 200); solicitarWake(); tickHiit();
+  persistirSesionActiva(); activarTemporizadorActivo(); solicitarWake(); tickHiit();
 }
 
 function fasesHiit(h) { const xs = []; for (let i = 1; i <= h.vueltas; i++) { xs.push({ tipo: 'actividad', seg: h.actividadSeg, vuelta: i }); if (i < h.vueltas) xs.push({ tipo: 'descanso', seg: h.descansoSeg, vuelta: i }); } return xs; }
 function estadoHiit() { const h = S.hiit, ahora = h.pausaInicio || Date.now(); if (h.estado === 'cuenta') return { tipo: 'cuenta', restante: Math.max(0, Math.ceil((h.cuentaFinMs - ahora) / 1000)), vuelta: 0, transcurrido: 0 }; let t = Math.max(0, Math.floor((ahora - h.actividadInicioMs - h.pausaMs) / 1000)), indice = 0; for (const f of fasesHiit(h)) { if (t < f.seg) return { ...f, restante: f.seg - t, indice, transcurrido: Math.floor((ahora - h.actividadInicioMs - h.pausaMs) / 1000) }; t -= f.seg; indice++; } return { tipo: 'final', restante: 0, transcurrido: h.planeadoSeg }; }
-function tickHiit() { if (!S.hiit || S.hiit.pausaInicio) return renderHiitActivo(); const e = estadoHiit(); if (S.hiit.estado === 'cuenta' && e.restante <= 0) { S.hiit.estado = 'activo'; S.hiit.actividadInicioMs = Date.now(); S.hiit.pausaMs = 0; S.hiit.faseIndice = 0; beep('largo'); } else { const clave = `${e.indice ?? -1}-${e.tipo}-${e.restante}`; if (e.tipo === 'descanso' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; emitirSonidos(['rapido', 'rapido', 'rapido']); } else if (e.tipo === 'actividad' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; beep('largo'); } emitirUnaVez(clave, sonidosEnSegundo({ tipo: e.tipo, restanteSeg: e.restante })); if (e.tipo === 'final') return finalizarHiit(false); } renderHiitActivo(); }
+function tickHiit() { if (!S.hiit || S.hiit.pausaInicio) return renderHiitActivo(); const e = estadoHiit(); if (S.hiit.estado === 'cuenta' && e.restante <= 0) { S.hiit.estado = 'activo'; S.hiit.actividadInicioMs = Date.now(); S.hiit.pausaMs = 0; S.hiit.faseIndice = 0; persistirSesionActiva(); beep('largo'); } else { const clave = `${e.indice ?? -1}-${e.tipo}-${e.restante}`; if (e.tipo === 'descanso' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; persistirSesionActiva(); emitirSonidos(['rapido', 'rapido', 'rapido']); } else if (e.tipo === 'actividad' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; persistirSesionActiva(); beep('largo'); } emitirUnaVez(clave, sonidosEnSegundo({ tipo: e.tipo, restanteSeg: e.restante })); if (e.tipo === 'final') return finalizarHiit(false); } renderHiitActivo(); }
 
 function renderHiitActivo() {
   const p = document.getElementById('ejercicio-panel'), e = estadoHiit();
@@ -645,8 +692,8 @@ function renderHiitActivo() {
   p.innerHTML = `<section class="hiit-activo ${e.tipo}"><small>${S.hiit.pausaInicio ? 'PAUSADO' : e.tipo === 'cuenta' ? 'PREPÁRATE' : e.tipo.toUpperCase()}</small><strong>${e.restante}</strong><span>${e.vuelta ? `Vuelta ${e.vuelta}/${S.hiit.vueltas}` : 'Comienza en'}</span>${ejercicioHtml}<div class="acciones"><button id="hiit-pausa">${S.hiit.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="hiit-detener">Detener</button></div></section>`;
   p.querySelector('#hiit-pausa').onclick = alternarPausaHiit; p.querySelector('#hiit-detener').onclick = () => finalizarHiit(true);
 }
-function alternarPausaHiit() { const h = S.hiit; if (h.pausaInicio) { const pausa = Date.now() - h.pausaInicio; if (h.estado === 'cuenta') h.cuentaFinMs += pausa; else h.pausaMs += pausa; h.pausaInicio = null; solicitarWake(); } else { h.pausaInicio = Date.now(); liberarWake(); } renderHiitActivo(); }
-function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const r = { id: h.id, nombre: h.nombre || 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: detenido ? Math.round(real / h.planeadoSeg * 100) : 100, estado: detenido ? 'detenida' : 'completada', creadoEn: iso(), modificadoEn: iso() }; guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
+function alternarPausaHiit() { const h = S.hiit; if (h.pausaInicio) { const pausa = Date.now() - h.pausaInicio; if (h.estado === 'cuenta') h.cuentaFinMs += pausa; else h.pausaMs += pausa; h.pausaInicio = null; solicitarWake(); } else { h.pausaInicio = Date.now(); liberarWake(); } persistirSesionActiva(); renderHiitActivo(); }
+function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const estado = calcularEstadoFinalSesion({ duracionRealSeg: real }, { terminada: !detenido }); const r = { id: h.id, nombre: h.nombre || 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: h.planeadoSeg ? Math.round(real / h.planeadoSeg * 100) : 0, estado, creadoEn: iso(), modificadoEn: iso() }; if (estado !== 'cancelada') guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
 
 const SONIDOS = { rapido: 'audio/rapido.mp3', cuenta: 'audio/cuenta.mp3', largo: 'audio/largo.mp3', final: 'audio/final.mp3' };
 function beep(tipo) { try { const a = new Audio(SONIDOS[tipo]); a.volume = .6; a.play().catch(() => {}); } catch {} }
@@ -661,7 +708,7 @@ function renderProgreso() {
   p.querySelectorAll('[data-periodo]').forEach((b) => b.onclick = () => { S.periodo = b.dataset.periodo; renderProgreso(); });
   p.querySelector('#ver-analisis-completo').onclick = abrirAnalisisCompleto;
   p.querySelectorAll('[data-editar-registro]').forEach((b) => b.onclick = () => abrirEditarRegistro(b.dataset.editarRegistro));
-  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { d.sesiones = d.sesiones.filter((x) => x.id !== b.dataset.eliminar); d.hiits = d.hiits.filter((x) => x.id !== b.dataset.eliminar); d.wrs = (d.wrs || []).filter((x) => x.id !== b.dataset.eliminar); }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
+  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { for (const lista of [d.sesiones, d.hiits, d.wrs || []]) { const x = lista?.find((registro) => registro.id === b.dataset.eliminar); if (x) { x.eliminadoEn = iso(); x.modificadoEn = x.eliminadoEn; } } }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
 }
 
 // Análisis deportivo completo: volumen semanal por músculo, balance,
@@ -725,8 +772,14 @@ function abrirAnalisisCompleto() {
 }
 
 function abrirEditarRegistro(id) {
-  const lista = S.datos.sesiones.some((x) => x.id === id) ? 'sesiones' : 'hiits';
-  const registro = structuredClone(S.datos[lista].find((x) => x.id === id));
+  const lista = ['sesiones', 'hiits', 'wrs'].find((campo) => (S.datos[campo] || []).some((x) => x.id === id));
+  const registroOriginal = lista && S.datos[lista].find((x) => x.id === id);
+  if (!registroOriginal) return S.toast('No se encontró el registro', true);
+  const registro = structuredClone(registroOriginal);
+  if (lista === 'wrs') {
+    abrirModal('Editar Caminar/Correr', `<form id="form-registro" class="form-modal"><label>Nombre<input id="registro-nombre" value="${escapeAtributo(registro.nombre || 'Caminar/Correr')}"></label><label>Duración real (s)<input id="registro-real" type="number" min="0" value="${registro.realSeg || 0}"></label><div class="grid-form"><label>Caminar (s)<input id="registro-caminar" type="number" min="0" value="${registro.caminarSeg || 0}"></label><label>Correr (s)<input id="registro-correr" type="number" min="0" value="${registro.correrSeg || 0}"></label></div><button class="btn-primario">Guardar cambios</button></form>`, (c) => { c.querySelector('#form-registro').onsubmit = (e) => { e.preventDefault(); Object.assign(registro, { nombre: c.querySelector('#registro-nombre').value.trim(), realSeg: Number(c.querySelector('#registro-real').value), caminarSeg: Number(c.querySelector('#registro-caminar').value), correrSeg: Number(c.querySelector('#registro-correr').value), modificadoEn: iso() }); registro.porcentaje = registro.planeadoSeg ? Math.min(100, Math.round(registro.realSeg / registro.planeadoSeg * 100)) : 0; guardar((d) => { d.wrs[d.wrs.findIndex((x) => x.id === id)] = registro; }, 'editar_registro', id); cerrarModal(); renderProgreso(); }; }, 'HISTORIAL');
+    return;
+  }
   if (lista === 'hiits') {
     abrirModal('Editar HIIT', `<form id="form-registro" class="form-modal"><label>Nombre<input id="registro-nombre" value="${escapeAtributo(registro.nombre || 'HIIT')}"></label><label>Vueltas<input id="registro-vueltas" type="number" min="1" value="${registro.vueltas}"></label><label>Actividad (s)<input id="registro-actividad" type="number" min="1" value="${registro.actividadSeg}"></label><label>Descanso (s)<input id="registro-descanso" type="number" min="0" value="${registro.descansoSeg}"></label><label>Duración real (s)<input id="registro-real" type="number" min="0" value="${registro.duracionRealSeg}"></label><button class="btn-primario">Guardar cambios</button></form>`, (c) => { c.querySelector('#form-registro').onsubmit = (e) => { e.preventDefault(); Object.assign(registro, { nombre: c.querySelector('#registro-nombre').value.trim(), vueltas: Number(c.querySelector('#registro-vueltas').value), actividadSeg: Number(c.querySelector('#registro-actividad').value), descansoSeg: Number(c.querySelector('#registro-descanso').value), duracionRealSeg: Number(c.querySelector('#registro-real').value), modificadoEn: iso() }); registro.duracionPlaneadaSeg = calcularDuracionHiit(registro); registro.porcentaje = Math.min(100, Math.round(registro.duracionRealSeg / registro.duracionPlaneadaSeg * 100)); guardar((d) => { d.hiits[d.hiits.findIndex((x) => x.id === id)] = registro; }, 'editar_registro', id); cerrarModal(); renderProgreso(); }; }, 'HISTORIAL');
   } else {

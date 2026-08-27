@@ -1,13 +1,14 @@
 export function filtrarPeriodo(registros, periodo = 'total', ahora = new Date()) {
-  if (periodo === 'total') return [...registros];
+  const visibles = registros.filter((r) => !r.eliminadoEn);
+  if (periodo === 'total') return [...visibles];
   const limite = new Date(ahora);
   if (periodo === 'semana') limite.setDate(limite.getDate() - 7);
   else if (periodo === 'mes') limite.setMonth(limite.getMonth() - 1);
-  return registros.filter((r) => new Date(r.fecha || r.inicio || r.creadoEn) >= limite);
+  return visibles.filter((r) => new Date(r.fecha || r.inicio || r.creadoEn) >= limite);
 }
 
 export function seriesContables(sesiones = []) {
-  return sesiones.filter((s) => s.estado === 'completada').flatMap((s) => s.series || []);
+  return sesiones.filter((s) => ['completada', 'completada_con_cambios', 'incompleta'].includes(s.estado)).flatMap((s) => s.series || []);
 }
 
 export function resumenModalidades(series = []) {

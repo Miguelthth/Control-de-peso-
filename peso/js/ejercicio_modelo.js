@@ -164,6 +164,37 @@ export function normalizarSerie(serie, fecha = ahoraISO()) {
   return { ...serie, id: serie.id || idNuevo(), repeticiones, carga, descansoPlaneadoSeg: Math.max(0, Number(serie.descansoPlaneadoSeg || 0)), descansoRealSeg: Math.max(0, Number(serie.descansoRealSeg || 0)), extraSeg: Math.max(0, Number(serie.extraSeg || 0)), creadoEn: serie.creadoEn || fecha, modificadoEn: fecha };
 }
 
+const MODALIDADES_SESION = ['fuerza', 'hiit', 'wr'];
+
+export function calcularEstadoFinalSesion(sesion = {}, { terminada = false } = {}) {
+  const series = Array.isArray(sesion.series) ? sesion.series : [];
+  const actividad = series.length > 0
+    || Number(sesion.duracionRealSeg || 0) > 0
+    || Number(sesion.distanciaM || 0) > 0;
+  if (!actividad) return 'cancelada';
+  if (!terminada) return 'incompleta';
+  return Array.isArray(sesion.omisiones) && sesion.omisiones.length ? 'completada_con_cambios' : 'completada';
+}
+
+export function normalizarSesionActiva(sesion, fecha = ahoraISO()) {
+  const modalidad = String(sesion?.modalidad || '').trim();
+  if (!MODALIDADES_SESION.includes(modalidad)) throw new Error('Modalidad de sesión inválida');
+  const id = String(sesion?.id || '').trim();
+  if (!id) throw new Error('La sesión activa requiere id');
+  const estado = String(sesion?.estado || 'en_curso');
+  if (!['en_curso', 'pausada'].includes(estado)) throw new Error('Estado de sesión activa inválido');
+  return {
+    ...sesion,
+    id,
+    modalidad,
+    estado,
+    series: Array.isArray(sesion.series) ? sesion.series : [],
+    omisiones: Array.isArray(sesion.omisiones) ? sesion.omisiones : [],
+    creadoEn: sesion.creadoEn || fecha,
+    modificadoEn: fecha,
+  };
+}
+
 export function crearHiit(config, inicioMs = Date.now()) {
   const planeadoSeg = calcularDuracionHiit(config);
   return { id: config.id || idNuevo(), nombre: String(config.nombre || '').trim(), vueltas: Number(config.vueltas), actividadSeg: Number(config.actividadSeg), descansoSeg: Number(config.descansoSeg), cuentaRegresivaSeg: Math.max(0, Number(config.cuentaRegresivaSeg || 0)), planeadoSeg, estado: Number(config.cuentaRegresivaSeg || 0) > 0 ? 'cuenta_regresiva' : 'actividad', fase: Number(config.cuentaRegresivaSeg || 0) > 0 ? 'cuenta_regresiva' : 'actividad', vuelta: 1, inicioMs, faseInicioMs: inicioMs, activoAcumuladoMs: 0, pausaInicioMs: null };
@@ -326,6 +357,17 @@ export function tiempoPorTipoWr(fases, transcurridoSeg) {
     restante -= usado;
   }
   return acumulado;
+}
+
+export function vueltasCompletadasWr(fases, transcurridoSeg, vueltasPlaneadas) {
+  let transcurrido = Math.max(0, Math.floor(transcurridoSeg));
+  let completadas = 0;
+  for (const fase of fases) {
+    if (transcurrido < fase.seg) break;
+    transcurrido -= fase.seg;
+    if (fase.vuelta) completadas = Math.max(completadas, fase.vuelta);
+  }
+  return Math.min(Number(vueltasPlaneadas) || 0, completadas);
 }
 
 // El aviso al ENTRAR a una fase le dice al cuerpo qué hacer sin tener que

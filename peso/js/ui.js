@@ -12,7 +12,7 @@ import { hoyISO, validarPeso, kgALb, lbAKg, aKg, normalizarEntradaPeso } from '.
 import {
   pesosDeUsuario, ultimoPeso, racha, promedioMovil, avanceMeta, promedioSemanal,
 } from './calculos.js';
-import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
+import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, guardarAccesoLocal, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
 import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
 import { pinNuevoValido } from '../../shared/autorizacion.js';
@@ -678,7 +678,10 @@ async function cambiarPinAjustes() {
   }
   try {
     const r = await api.cambiarPin(getUsuario(), actual, nuevo);
-    if (r.ok) toast('Contraseña actualizada ✓');
+    if (r.ok) {
+      try { await guardarAccesoLocal(getUsuario(), nuevo); } catch { /* La contraseña remota ya cambió correctamente. */ }
+      toast('Contraseña actualizada ✓');
+    }
     else toast(r.error || 'Contraseña actual incorrecta', true);
   } catch (e) {
     toast('No se pudo cambiar (¿sin conexión?): ' + e.message, true);

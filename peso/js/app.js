@@ -2,7 +2,7 @@
 // Edita los archivos fuente y vuelve a correr: python build.py
 
 // ── shared/autorizacion.js ──────────────────────────────────────────
-const autorizacion = (function () {
+const __modulo_autorizacion = (function () {
 const CLAVE_TOKEN = 'ma_token';
 const PUBLICAS = new Set(['validarUsuario', 'validarPin', 'validarActivacion']);
 const MENSAJE_BACKEND_ANTIGUO = 'El servidor necesita actualizarse primero. Pide al administrador desplegar la nueva versión de Apps Script.';
@@ -102,33 +102,112 @@ function reunirTexto(chunks) {
 
   return { guardarToken, leerToken, borrarToken, requiereAutorizacion, agregarCredenciales, exigirBackendActual, validarSesion, puedeValidarPin, siguienteBloqueoPin, pinNuevoValido, usuarioValido, fechaISOValida, numeroEnRango, blobCifradoValido, dividirTexto, reunirTexto };
 })();
-const guardarToken = autorizacion.guardarToken;
-const leerToken = autorizacion.leerToken;
-const borrarToken = autorizacion.borrarToken;
-const requiereAutorizacion = autorizacion.requiereAutorizacion;
-const agregarCredenciales = autorizacion.agregarCredenciales;
-const exigirBackendActual = autorizacion.exigirBackendActual;
-const validarSesion = autorizacion.validarSesion;
-const puedeValidarPin = autorizacion.puedeValidarPin;
-const siguienteBloqueoPin = autorizacion.siguienteBloqueoPin;
-const pinNuevoValido = autorizacion.pinNuevoValido;
-const usuarioValido = autorizacion.usuarioValido;
-const fechaISOValida = autorizacion.fechaISOValida;
-const numeroEnRango = autorizacion.numeroEnRango;
-const blobCifradoValido = autorizacion.blobCifradoValido;
-const dividirTexto = autorizacion.dividirTexto;
-const reunirTexto = autorizacion.reunirTexto;
+const guardarToken = __modulo_autorizacion.guardarToken;
+const leerToken = __modulo_autorizacion.leerToken;
+const borrarToken = __modulo_autorizacion.borrarToken;
+const requiereAutorizacion = __modulo_autorizacion.requiereAutorizacion;
+const agregarCredenciales = __modulo_autorizacion.agregarCredenciales;
+const exigirBackendActual = __modulo_autorizacion.exigirBackendActual;
+const validarSesion = __modulo_autorizacion.validarSesion;
+const puedeValidarPin = __modulo_autorizacion.puedeValidarPin;
+const siguienteBloqueoPin = __modulo_autorizacion.siguienteBloqueoPin;
+const pinNuevoValido = __modulo_autorizacion.pinNuevoValido;
+const usuarioValido = __modulo_autorizacion.usuarioValido;
+const fechaISOValida = __modulo_autorizacion.fechaISOValida;
+const numeroEnRango = __modulo_autorizacion.numeroEnRango;
+const blobCifradoValido = __modulo_autorizacion.blobCifradoValido;
+const dividirTexto = __modulo_autorizacion.dividirTexto;
+const reunirTexto = __modulo_autorizacion.reunirTexto;
+
+// ── shared/acceso_local.js ──────────────────────────────────────────
+const __modulo_acceso_local = (function () {
+// Verificador local para poder abrir la app sin señal después de un inicio
+// correcto en este mismo teléfono. Nunca guarda la contraseña ni un token del
+// servidor: solo un derivado PBKDF2 con sal aleatoria.
+
+const VERSION = 1;
+const ITERACIONES = 210000;
+const BYTES_SAL = 16;
+const BITS_DERIVADOS = 256;
+
+function aBase64(bytes) {
+  let binario = '';
+  for (const byte of bytes) binario += String.fromCharCode(byte);
+  return btoa(binario);
+}
+
+function desdeBase64(texto) {
+  if (typeof texto !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(texto)) return null;
+  try {
+    const binario = atob(texto);
+    return Uint8Array.from(binario, (caracter) => caracter.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+async function derivar(password, sal) {
+  const claveBase = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(String(password)),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: sal, iterations: ITERACIONES },
+    claveBase,
+    BITS_DERIVADOS,
+  );
+  return new Uint8Array(bits);
+}
+
+function iguales(a, b) {
+  if (a.length !== b.length) return false;
+  let diferencia = 0;
+  for (let i = 0; i < a.length; i += 1) diferencia |= a[i] ^ b[i];
+  return diferencia === 0;
+}
+
+async function crearVerificadorLocal(password) {
+  if (typeof password !== 'string' || password.length === 0) throw new Error('La contraseña es obligatoria.');
+  const sal = crypto.getRandomValues(new Uint8Array(BYTES_SAL));
+  const derivado = await derivar(password, sal);
+  return { v: VERSION, salt: aBase64(sal), derivado: aBase64(derivado) };
+}
+
+async function verificarAccesoLocal(password, verificador) {
+  if (!verificador || verificador.v !== VERSION || typeof password !== 'string' || password.length === 0) return false;
+  const sal = desdeBase64(verificador.salt);
+  const esperado = desdeBase64(verificador.derivado);
+  if (!sal || sal.length !== BYTES_SAL || !esperado || esperado.length !== BITS_DERIVADOS / 8) return false;
+  try {
+    return iguales(await derivar(password, sal), esperado);
+  } catch {
+    return false;
+  }
+}
+
+  return { crearVerificadorLocal, verificarAccesoLocal };
+})();
+const crearVerificadorLocal = __modulo_acceso_local.crearVerificadorLocal;
+const verificarAccesoLocal = __modulo_acceso_local.verificarAccesoLocal;
 
 // ── shared/sesion.js ──────────────────────────────────────────
-const sesion = (function () {
+const __modulo_sesion = (function () {
 // Sesión compartida entre el launcher, Gastos y Peso (mismo origen -- misma
 // localStorage). Login pasa UNA vez en el launcher; las sub-apps solo leen.
+
+
 
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
 const CLAVE_PERFILES = 'ma_perfiles_conocidos';
 const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
+const CLAVE_SESION_LOCAL = 'ma_sesion_local';
+const PREFIJO_ACCESO_LOCAL = 'ma_acceso_local_v1:';
+const TOKEN_SESION_LOCAL = 'local-sin-conexion';
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
 // -- si el iPhone borra localStorage entre usos (pasa en algunos ajustes de
@@ -180,13 +259,48 @@ function leerPerfilConocido(usuario) {
 function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
+  sessionStorage.removeItem(CLAVE_SESION_LOCAL);
   if (token) guardarToken(token);
   guardarPerfilConocido(usuario, rol, true);
+}
+
+function claveAccesoLocal(usuario) {
+  return `${PREFIJO_ACCESO_LOCAL}${String(usuario || '').trim().toLocaleLowerCase()}`;
+}
+
+async function guardarAccesoLocal(usuario, password) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) throw new Error('Falta el usuario.');
+  const verificador = await crearVerificadorLocal(password);
+  localStorage.setItem(claveAccesoLocal(nombre), JSON.stringify(verificador));
+}
+
+async function validarAccesoLocal(usuario, password) {
+  try {
+    const crudo = localStorage.getItem(claveAccesoLocal(usuario));
+    return verificarAccesoLocal(password, JSON.parse(crudo));
+  } catch {
+    return false;
+  }
+}
+
+function iniciarSesionLocal(usuario, rol) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) throw new Error('Falta el usuario.');
+  localStorage.setItem(CLAVE_USUARIO, nombre);
+  localStorage.setItem(CLAVE_ROL, String(rol || 'normal'));
+  sessionStorage.setItem(CLAVE_SESION_LOCAL, '1');
+  guardarToken(TOKEN_SESION_LOCAL);
+}
+
+function esSesionLocal() {
+  return sessionStorage.getItem(CLAVE_SESION_LOCAL) === '1' && leerToken() === TOKEN_SESION_LOCAL;
 }
 
 function cerrarSesion() {
   localStorage.removeItem(CLAVE_USUARIO);
   localStorage.removeItem(CLAVE_ROL);
+  sessionStorage.removeItem(CLAVE_SESION_LOCAL);
   borrarClaveSesion();
   borrarToken();
 }
@@ -253,32 +367,38 @@ function exigirSesion(rutaLauncher) {
   return true;
 }
 
-  return { getUrl, setUrl, getUsuario, getRol, esAdmin, guardarPerfilConocido, leerPerfilConocido, iniciarSesion, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
+  return { getUrl, setUrl, getUsuario, getRol, esAdmin, guardarPerfilConocido, leerPerfilConocido, iniciarSesion, guardarAccesoLocal, validarAccesoLocal, iniciarSesionLocal, esSesionLocal, cerrarSesion, cerrarSesionEnSegundoPlano, debeConfirmarNavegacion, ejecutarUnaVez, sesionAutenticada, accesoFaceIdValido, guardarClaveSesion, leerClaveSesion, borrarClaveSesion, exigirSesion };
 })();
-const getUrl = sesion.getUrl;
-const setUrl = sesion.setUrl;
-const getUsuario = sesion.getUsuario;
-const getRol = sesion.getRol;
-const esAdmin = sesion.esAdmin;
-const guardarPerfilConocido = sesion.guardarPerfilConocido;
-const leerPerfilConocido = sesion.leerPerfilConocido;
-const iniciarSesion = sesion.iniciarSesion;
-const cerrarSesion = sesion.cerrarSesion;
-const cerrarSesionEnSegundoPlano = sesion.cerrarSesionEnSegundoPlano;
-const debeConfirmarNavegacion = sesion.debeConfirmarNavegacion;
-const ejecutarUnaVez = sesion.ejecutarUnaVez;
-const sesionAutenticada = sesion.sesionAutenticada;
-const accesoFaceIdValido = sesion.accesoFaceIdValido;
-const guardarClaveSesion = sesion.guardarClaveSesion;
-const leerClaveSesion = sesion.leerClaveSesion;
-const borrarClaveSesion = sesion.borrarClaveSesion;
-const exigirSesion = sesion.exigirSesion;
+const getUrl = __modulo_sesion.getUrl;
+const setUrl = __modulo_sesion.setUrl;
+const getUsuario = __modulo_sesion.getUsuario;
+const getRol = __modulo_sesion.getRol;
+const esAdmin = __modulo_sesion.esAdmin;
+const guardarPerfilConocido = __modulo_sesion.guardarPerfilConocido;
+const leerPerfilConocido = __modulo_sesion.leerPerfilConocido;
+const iniciarSesion = __modulo_sesion.iniciarSesion;
+const guardarAccesoLocal = __modulo_sesion.guardarAccesoLocal;
+const validarAccesoLocal = __modulo_sesion.validarAccesoLocal;
+const iniciarSesionLocal = __modulo_sesion.iniciarSesionLocal;
+const esSesionLocal = __modulo_sesion.esSesionLocal;
+const cerrarSesion = __modulo_sesion.cerrarSesion;
+const cerrarSesionEnSegundoPlano = __modulo_sesion.cerrarSesionEnSegundoPlano;
+const debeConfirmarNavegacion = __modulo_sesion.debeConfirmarNavegacion;
+const ejecutarUnaVez = __modulo_sesion.ejecutarUnaVez;
+const sesionAutenticada = __modulo_sesion.sesionAutenticada;
+const accesoFaceIdValido = __modulo_sesion.accesoFaceIdValido;
+const guardarClaveSesion = __modulo_sesion.guardarClaveSesion;
+const leerClaveSesion = __modulo_sesion.leerClaveSesion;
+const borrarClaveSesion = __modulo_sesion.borrarClaveSesion;
+const exigirSesion = __modulo_sesion.exigirSesion;
 
 // ── shared/api.js ──────────────────────────────────────────
-const api = (function () {
+const __modulo_api = (function () {
 // Llamadas HTTP crudas al Web App de Apps Script único (Gastos + Peso).
 // Sin caché, sin cola -- eso vive en cola.js de cada app. Aquí solo se habla
 // con el servidor.
+
+
 
 const TIMEOUT_MS = 12000;
 let manejadorAuth = null;
@@ -446,32 +566,32 @@ function leerGastos(usuario) {
 
   return { configurarManejadorAuth, ApiError, solicitarJson, cerrarSesionServidor, leerDatos, leerEjercicio, guardarEjercicio, guardarOperacionEjercicio, leerVersion, guardarFechasReto, validarUsuario, validarPin, validarActivacion, crearPin, cambiarPin, guardarPeso, guardarMeta, guardarUnidad, borrarPesos, borrarPesoFecha, crearUsuario, guardarGastos, leerGastos };
 })();
-const configurarManejadorAuth = api.configurarManejadorAuth;
-const ApiError = api.ApiError;
-const solicitarJson = api.solicitarJson;
-const cerrarSesionServidor = api.cerrarSesionServidor;
-const leerDatos = api.leerDatos;
-const leerEjercicio = api.leerEjercicio;
-const guardarEjercicio = api.guardarEjercicio;
-const guardarOperacionEjercicio = api.guardarOperacionEjercicio;
-const leerVersion = api.leerVersion;
-const guardarFechasReto = api.guardarFechasReto;
-const validarUsuario = api.validarUsuario;
-const validarPin = api.validarPin;
-const validarActivacion = api.validarActivacion;
-const crearPin = api.crearPin;
-const cambiarPin = api.cambiarPin;
-const guardarPeso = api.guardarPeso;
-const guardarMeta = api.guardarMeta;
-const guardarUnidad = api.guardarUnidad;
-const borrarPesos = api.borrarPesos;
-const borrarPesoFecha = api.borrarPesoFecha;
-const crearUsuario = api.crearUsuario;
-const guardarGastos = api.guardarGastos;
-const leerGastos = api.leerGastos;
+const configurarManejadorAuth = __modulo_api.configurarManejadorAuth;
+const ApiError = __modulo_api.ApiError;
+const solicitarJson = __modulo_api.solicitarJson;
+const cerrarSesionServidor = __modulo_api.cerrarSesionServidor;
+const leerDatos = __modulo_api.leerDatos;
+const leerEjercicio = __modulo_api.leerEjercicio;
+const guardarEjercicio = __modulo_api.guardarEjercicio;
+const guardarOperacionEjercicio = __modulo_api.guardarOperacionEjercicio;
+const leerVersion = __modulo_api.leerVersion;
+const guardarFechasReto = __modulo_api.guardarFechasReto;
+const validarUsuario = __modulo_api.validarUsuario;
+const validarPin = __modulo_api.validarPin;
+const validarActivacion = __modulo_api.validarActivacion;
+const crearPin = __modulo_api.crearPin;
+const cambiarPin = __modulo_api.cambiarPin;
+const guardarPeso = __modulo_api.guardarPeso;
+const guardarMeta = __modulo_api.guardarMeta;
+const guardarUnidad = __modulo_api.guardarUnidad;
+const borrarPesos = __modulo_api.borrarPesos;
+const borrarPesoFecha = __modulo_api.borrarPesoFecha;
+const crearUsuario = __modulo_api.crearUsuario;
+const guardarGastos = __modulo_api.guardarGastos;
+const leerGastos = __modulo_api.leerGastos;
 
 // ── shared/fondo.js ──────────────────────────────────────────
-const fondo = (function () {
+const __modulo_fondo = (function () {
 // Fondo de pantalla personalizado (tu propia foto) -- vive en IndexedDB, no
 // en localStorage: una foto pesa más de lo que localStorage aguanta cómodo
 // sin arriesgar llenarlo y afectar lo demás guardado ahí (sesión, Face ID,
@@ -551,13 +671,13 @@ function comprimirImagen(archivo, maxAncho = 900, calidad = 0.72) {
 
   return { guardarFondo, leerFondo, borrarFondo, comprimirImagen };
 })();
-const guardarFondo = fondo.guardarFondo;
-const leerFondo = fondo.leerFondo;
-const borrarFondo = fondo.borrarFondo;
-const comprimirImagen = fondo.comprimirImagen;
+const guardarFondo = __modulo_fondo.guardarFondo;
+const leerFondo = __modulo_fondo.leerFondo;
+const borrarFondo = __modulo_fondo.borrarFondo;
+const comprimirImagen = __modulo_fondo.comprimirImagen;
 
 // ── shared/ui_seguridad.js ──────────────────────────────────────────
-const ui_seguridad = (function () {
+const __modulo_ui_seguridad = (function () {
 function escapeHTML(valor) {
   return String(valor ?? '').replace(/[&<>"']/g, (caracter) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -587,14 +707,14 @@ function colorSeguro(valor, respaldo = '#999999') {
 
   return { escapeHTML, escapeAtributo, idSeguro, urlLocalSegura, colorSeguro };
 })();
-const escapeHTML = ui_seguridad.escapeHTML;
-const escapeAtributo = ui_seguridad.escapeAtributo;
-const idSeguro = ui_seguridad.idSeguro;
-const urlLocalSegura = ui_seguridad.urlLocalSegura;
-const colorSeguro = ui_seguridad.colorSeguro;
+const escapeHTML = __modulo_ui_seguridad.escapeHTML;
+const escapeAtributo = __modulo_ui_seguridad.escapeAtributo;
+const idSeguro = __modulo_ui_seguridad.idSeguro;
+const urlLocalSegura = __modulo_ui_seguridad.urlLocalSegura;
+const colorSeguro = __modulo_ui_seguridad.colorSeguro;
 
 // ── shared/actualizacion.js ──────────────────────────────────────────
-const actualizacion = (function () {
+const __modulo_actualizacion = (function () {
 const URL_METADATA = '../__app_meta__.json';
 
 function normalizarMetadata(valor) {
@@ -639,14 +759,14 @@ async function buscarActualizacion(registro) {
 
   return { normalizarMetadata, formatearFechaActualizacion, obtenerEstadoActualizacion, leerMetadataActualizacion, buscarActualizacion };
 })();
-const normalizarMetadata = actualizacion.normalizarMetadata;
-const formatearFechaActualizacion = actualizacion.formatearFechaActualizacion;
-const obtenerEstadoActualizacion = actualizacion.obtenerEstadoActualizacion;
-const leerMetadataActualizacion = actualizacion.leerMetadataActualizacion;
-const buscarActualizacion = actualizacion.buscarActualizacion;
+const normalizarMetadata = __modulo_actualizacion.normalizarMetadata;
+const formatearFechaActualizacion = __modulo_actualizacion.formatearFechaActualizacion;
+const obtenerEstadoActualizacion = __modulo_actualizacion.obtenerEstadoActualizacion;
+const leerMetadataActualizacion = __modulo_actualizacion.leerMetadataActualizacion;
+const buscarActualizacion = __modulo_actualizacion.buscarActualizacion;
 
 // ── peso/js/modelo.js ──────────────────────────────────────────
-const modelo = (function () {
+const __modulo_modelo = (function () {
 // Forma de los datos y validación. Sin DOM, sin red.
 
 function hoyISO() {
@@ -699,17 +819,18 @@ function formatoPesoDual(pesoKg, decimales = 1) {
 
   return { hoyISO, validarPeso, normalizarEntradaPeso, kgALb, lbAKg, aKg, formatoPesoDual };
 })();
-const hoyISO = modelo.hoyISO;
-const validarPeso = modelo.validarPeso;
-const normalizarEntradaPeso = modelo.normalizarEntradaPeso;
-const kgALb = modelo.kgALb;
-const lbAKg = modelo.lbAKg;
-const aKg = modelo.aKg;
-const formatoPesoDual = modelo.formatoPesoDual;
+const hoyISO = __modulo_modelo.hoyISO;
+const validarPeso = __modulo_modelo.validarPeso;
+const normalizarEntradaPeso = __modulo_modelo.normalizarEntradaPeso;
+const kgALb = __modulo_modelo.kgALb;
+const lbAKg = __modulo_modelo.lbAKg;
+const aKg = __modulo_modelo.aKg;
+const formatoPesoDual = __modulo_modelo.formatoPesoDual;
 
 // ── peso/js/calculos.js ──────────────────────────────────────────
-const calculos = (function () {
+const __modulo_calculos = (function () {
 // Toda la aritmética de peso/progreso. Puro: recibe datos, regresa números.
+
 
 function pesosDeUsuario(pesos, usuario) {
   return pesos
@@ -785,15 +906,15 @@ function promedioSemanal(serie, semanas = 12) {
 
   return { pesosDeUsuario, ultimoPeso, racha, promedioMovil, avanceMeta, promedioSemanal };
 })();
-const pesosDeUsuario = calculos.pesosDeUsuario;
-const ultimoPeso = calculos.ultimoPeso;
-const racha = calculos.racha;
-const promedioMovil = calculos.promedioMovil;
-const avanceMeta = calculos.avanceMeta;
-const promedioSemanal = calculos.promedioSemanal;
+const pesosDeUsuario = __modulo_calculos.pesosDeUsuario;
+const ultimoPeso = __modulo_calculos.ultimoPeso;
+const racha = __modulo_calculos.racha;
+const promedioMovil = __modulo_calculos.promedioMovil;
+const avanceMeta = __modulo_calculos.avanceMeta;
+const promedioSemanal = __modulo_calculos.promedioSemanal;
 
 // ── peso/js/graficas.js ──────────────────────────────────────────
-const graficas = (function () {
+const __modulo_graficas = (function () {
 // Gráficas en SVG escrito a mano. Sin librerías. A diferencia de una gráfica
 // de dinero, el eje Y aquí NO arranca en 0 (un peso de 0 no significa nada) --
 // se ajusta al rango de los datos con un margen, para que se note el cambio.
@@ -802,6 +923,7 @@ const graficas = (function () {
 // no se amontonen) y el contenedor hace scroll horizontal si no caben --
 // ver .grafica-scroll en css/estilos.css. Con pocos puntos se ve completa
 // sin necesidad de scroll.
+
 
 const NS = 'http://www.w3.org/2000/svg';
 const MIN_ANCHO = 320;
@@ -1000,18 +1122,19 @@ function svgBarraVersus(pctA, pctB, nombreA, nombreB, { width = 300, colorA = '#
 
   return { svgLineaPeso, svgLineaComparativa, svgBarraAvance, svgBarraVersus };
 })();
-const svgLineaPeso = graficas.svgLineaPeso;
-const svgLineaComparativa = graficas.svgLineaComparativa;
-const svgBarraAvance = graficas.svgBarraAvance;
-const svgBarraVersus = graficas.svgBarraVersus;
+const svgLineaPeso = __modulo_graficas.svgLineaPeso;
+const svgLineaComparativa = __modulo_graficas.svgLineaComparativa;
+const svgBarraAvance = __modulo_graficas.svgBarraAvance;
+const svgBarraVersus = __modulo_graficas.svgBarraVersus;
 
 // ── peso/js/cola.js ──────────────────────────────────────────
-const cola = (function () {
+const __modulo_cola = (function () {
 // Cola offline (mismo patrón que el Cotizador): capturar nunca espera al
 // servidor. Se guarda de una en localStorage, se ve en la app al instante, y
 // se sincroniza cuando hay señal -- reintentando solo, sin que el usuario
 // tenga que hacer nada.
 
+const api = __modulo_api;
 const CLAVE_COLA = 'cp_cola_pesos';
 const CLAVE_CACHE = 'cp_cache_datos';
 
@@ -1212,26 +1335,27 @@ function iniciarSincronizacionAutomatica(usuario, alSincronizar) {
 
   return { compactarOperaciones, leerCola, encolarPeso, encolarBorrado, leerCache, refrescarDatos, hayCambiosRemotos, tieneBloqueoAuth, tieneOperacionAtorada, sincronizar, iniciarSincronizacionAutomatica };
 })();
-const compactarOperaciones = cola.compactarOperaciones;
-const leerCola = cola.leerCola;
-const encolarPeso = cola.encolarPeso;
-const encolarBorrado = cola.encolarBorrado;
-const leerCache = cola.leerCache;
-const refrescarDatos = cola.refrescarDatos;
-const hayCambiosRemotos = cola.hayCambiosRemotos;
-const tieneBloqueoAuth = cola.tieneBloqueoAuth;
-const tieneOperacionAtorada = cola.tieneOperacionAtorada;
-const sincronizar = cola.sincronizar;
-const iniciarSincronizacionAutomatica = cola.iniciarSincronizacionAutomatica;
+const compactarOperaciones = __modulo_cola.compactarOperaciones;
+const leerCola = __modulo_cola.leerCola;
+const encolarPeso = __modulo_cola.encolarPeso;
+const encolarBorrado = __modulo_cola.encolarBorrado;
+const leerCache = __modulo_cola.leerCache;
+const refrescarDatos = __modulo_cola.refrescarDatos;
+const hayCambiosRemotos = __modulo_cola.hayCambiosRemotos;
+const tieneBloqueoAuth = __modulo_cola.tieneBloqueoAuth;
+const tieneOperacionAtorada = __modulo_cola.tieneOperacionAtorada;
+const sincronizar = __modulo_cola.sincronizar;
+const iniciarSincronizacionAutomatica = __modulo_cola.iniciarSincronizacionAutomatica;
 
 // ── peso/js/actualizacion_peso.js ──────────────────────────────────────────
-const actualizacion_peso = (function () {
+const __modulo_actualizacion_peso = (function () {
 // Las funciones genéricas de "hay una versión nueva" viven en
 // shared/actualizacion.js (las usan Peso y Gastos por igual). Aquí solo se
 // re-exportan, junto con las que sí son específicas de Peso (abajo). El
 // import + export por separado (no "export {...} from") es a propósito:
 // build.py solo sabe borrar en el bundle un "export { nombre };" suelto,
 // no la sintaxis combinada con "from".
+
 
 function hayCapturaPesoPendiente(captura) {
   if (!captura) return false;
@@ -1255,12 +1379,13 @@ function esCampoAjusteDiferible(id, type) {
 
   return { hayCapturaPesoPendiente, decidirRecargaActualizacion, esCampoAjusteDiferible };
 })();
-const hayCapturaPesoPendiente = actualizacion_peso.hayCapturaPesoPendiente;
-const decidirRecargaActualizacion = actualizacion_peso.decidirRecargaActualizacion;
-const esCampoAjusteDiferible = actualizacion_peso.esCampoAjusteDiferible;
+const hayCapturaPesoPendiente = __modulo_actualizacion_peso.hayCapturaPesoPendiente;
+const decidirRecargaActualizacion = __modulo_actualizacion_peso.decidirRecargaActualizacion;
+const esCampoAjusteDiferible = __modulo_actualizacion_peso.esCampoAjusteDiferible;
 
 // ── peso/js/ui_helpers.js ──────────────────────────────────────────
-const ui_helpers = (function () {
+const __modulo_ui_helpers = (function () {
+
 function prepararEdicion(registro, unidad) {
   const valor = unidad === 'lb' ? kgALb(registro.pesoKg) : registro.pesoKg;
   return { fecha: registro.fecha, pesoStr: Number(valor).toFixed(2).replace(/0$/, '') };
@@ -1281,12 +1406,12 @@ function planificarEdicion(fechaOriginal, fechaNueva, pesoKg) {
 
   return { prepararEdicion, mensajeBorrado, planificarEdicion };
 })();
-const prepararEdicion = ui_helpers.prepararEdicion;
-const mensajeBorrado = ui_helpers.mensajeBorrado;
-const planificarEdicion = ui_helpers.planificarEdicion;
+const prepararEdicion = __modulo_ui_helpers.prepararEdicion;
+const mensajeBorrado = __modulo_ui_helpers.mensajeBorrado;
+const planificarEdicion = __modulo_ui_helpers.planificarEdicion;
 
 // ── peso/js/ejercicio_modelo.js ──────────────────────────────────────────
-const ejercicio_modelo = (function () {
+const __modulo_ejercicio_modelo = (function () {
 // Reglas puras del módulo Ejercicio: sin DOM, almacenamiento ni red.
 
 const MODALIDADES_CARGA = ['discos', 'niveles', 'PC'];
@@ -1453,6 +1578,37 @@ function normalizarSerie(serie, fecha = ahoraISO()) {
   return { ...serie, id: serie.id || idNuevo(), repeticiones, carga, descansoPlaneadoSeg: Math.max(0, Number(serie.descansoPlaneadoSeg || 0)), descansoRealSeg: Math.max(0, Number(serie.descansoRealSeg || 0)), extraSeg: Math.max(0, Number(serie.extraSeg || 0)), creadoEn: serie.creadoEn || fecha, modificadoEn: fecha };
 }
 
+const MODALIDADES_SESION = ['fuerza', 'hiit', 'wr'];
+
+function calcularEstadoFinalSesion(sesion = {}, { terminada = false } = {}) {
+  const series = Array.isArray(sesion.series) ? sesion.series : [];
+  const actividad = series.length > 0
+    || Number(sesion.duracionRealSeg || 0) > 0
+    || Number(sesion.distanciaM || 0) > 0;
+  if (!actividad) return 'cancelada';
+  if (!terminada) return 'incompleta';
+  return Array.isArray(sesion.omisiones) && sesion.omisiones.length ? 'completada_con_cambios' : 'completada';
+}
+
+function normalizarSesionActiva(sesion, fecha = ahoraISO()) {
+  const modalidad = String(sesion?.modalidad || '').trim();
+  if (!MODALIDADES_SESION.includes(modalidad)) throw new Error('Modalidad de sesión inválida');
+  const id = String(sesion?.id || '').trim();
+  if (!id) throw new Error('La sesión activa requiere id');
+  const estado = String(sesion?.estado || 'en_curso');
+  if (!['en_curso', 'pausada'].includes(estado)) throw new Error('Estado de sesión activa inválido');
+  return {
+    ...sesion,
+    id,
+    modalidad,
+    estado,
+    series: Array.isArray(sesion.series) ? sesion.series : [],
+    omisiones: Array.isArray(sesion.omisiones) ? sesion.omisiones : [],
+    creadoEn: sesion.creadoEn || fecha,
+    modificadoEn: fecha,
+  };
+}
+
 function crearHiit(config, inicioMs = Date.now()) {
   const planeadoSeg = calcularDuracionHiit(config);
   return { id: config.id || idNuevo(), nombre: String(config.nombre || '').trim(), vueltas: Number(config.vueltas), actividadSeg: Number(config.actividadSeg), descansoSeg: Number(config.descansoSeg), cuentaRegresivaSeg: Math.max(0, Number(config.cuentaRegresivaSeg || 0)), planeadoSeg, estado: Number(config.cuentaRegresivaSeg || 0) > 0 ? 'cuenta_regresiva' : 'actividad', fase: Number(config.cuentaRegresivaSeg || 0) > 0 ? 'cuenta_regresiva' : 'actividad', vuelta: 1, inicioMs, faseInicioMs: inicioMs, activoAcumuladoMs: 0, pausaInicioMs: null };
@@ -1617,6 +1773,17 @@ function tiempoPorTipoWr(fases, transcurridoSeg) {
   return acumulado;
 }
 
+function vueltasCompletadasWr(fases, transcurridoSeg, vueltasPlaneadas) {
+  let transcurrido = Math.max(0, Math.floor(transcurridoSeg));
+  let completadas = 0;
+  for (const fase of fases) {
+    if (transcurrido < fase.seg) break;
+    transcurrido -= fase.seg;
+    if (fase.vuelta) completadas = Math.max(completadas, fase.vuelta);
+  }
+  return Math.min(Number(vueltasPlaneadas) || 0, completadas);
+}
+
 // El aviso al ENTRAR a una fase le dice al cuerpo qué hacer sin tener que
 // mirar la pantalla: un tono largo para acelerar, tres cortos para bajar.
 function avisoWrAlEntrarAFase(tipo) {
@@ -1665,41 +1832,46 @@ function ritmoSegPorKm(segundos, metros) {
   return Math.round(segundos / (metros / 1000));
 }
 
-  return { MODALIDADES_CARGA, CATEGORIAS_INICIALES, crearDocumentoEjercicio, calcularDuracionHiit, normalizarEjercicio, normalizarSerie, crearHiit, pausarHiit, reanudarHiit, finalizarHiit, sumarExtensionDescanso, ajustarCantidad, sonidosEnSegundo, normalizarRutina, BANCO_EJERCICIOS_HIIT, normalizarRutinaHiit, siguientePasoRutina, TIPOS_FASE_WR, normalizarRutinaWr, fasesWr, calcularDuracionWr, faseEnSegundo, tiempoPorTipoWr, avisoWrAlEntrarAFase, avisoWrCuentaFinal, distanciaMetros, acumularPuntoGps, ritmoSegPorKm };
+  return { MODALIDADES_CARGA, CATEGORIAS_INICIALES, crearDocumentoEjercicio, calcularDuracionHiit, normalizarEjercicio, normalizarSerie, calcularEstadoFinalSesion, normalizarSesionActiva, crearHiit, pausarHiit, reanudarHiit, finalizarHiit, sumarExtensionDescanso, ajustarCantidad, sonidosEnSegundo, normalizarRutina, BANCO_EJERCICIOS_HIIT, normalizarRutinaHiit, siguientePasoRutina, TIPOS_FASE_WR, normalizarRutinaWr, fasesWr, calcularDuracionWr, faseEnSegundo, tiempoPorTipoWr, vueltasCompletadasWr, avisoWrAlEntrarAFase, avisoWrCuentaFinal, distanciaMetros, acumularPuntoGps, ritmoSegPorKm };
 })();
-const MODALIDADES_CARGA = ejercicio_modelo.MODALIDADES_CARGA;
-const CATEGORIAS_INICIALES = ejercicio_modelo.CATEGORIAS_INICIALES;
-const crearDocumentoEjercicio = ejercicio_modelo.crearDocumentoEjercicio;
-const calcularDuracionHiit = ejercicio_modelo.calcularDuracionHiit;
-const normalizarEjercicio = ejercicio_modelo.normalizarEjercicio;
-const normalizarSerie = ejercicio_modelo.normalizarSerie;
-const crearHiit = ejercicio_modelo.crearHiit;
-const pausarHiit = ejercicio_modelo.pausarHiit;
-const reanudarHiit = ejercicio_modelo.reanudarHiit;
-const finalizarHiit = ejercicio_modelo.finalizarHiit;
-const sumarExtensionDescanso = ejercicio_modelo.sumarExtensionDescanso;
-const ajustarCantidad = ejercicio_modelo.ajustarCantidad;
-const sonidosEnSegundo = ejercicio_modelo.sonidosEnSegundo;
-const normalizarRutina = ejercicio_modelo.normalizarRutina;
-const BANCO_EJERCICIOS_HIIT = ejercicio_modelo.BANCO_EJERCICIOS_HIIT;
-const normalizarRutinaHiit = ejercicio_modelo.normalizarRutinaHiit;
-const siguientePasoRutina = ejercicio_modelo.siguientePasoRutina;
-const TIPOS_FASE_WR = ejercicio_modelo.TIPOS_FASE_WR;
-const normalizarRutinaWr = ejercicio_modelo.normalizarRutinaWr;
-const fasesWr = ejercicio_modelo.fasesWr;
-const calcularDuracionWr = ejercicio_modelo.calcularDuracionWr;
-const faseEnSegundo = ejercicio_modelo.faseEnSegundo;
-const tiempoPorTipoWr = ejercicio_modelo.tiempoPorTipoWr;
-const avisoWrAlEntrarAFase = ejercicio_modelo.avisoWrAlEntrarAFase;
-const avisoWrCuentaFinal = ejercicio_modelo.avisoWrCuentaFinal;
-const distanciaMetros = ejercicio_modelo.distanciaMetros;
-const acumularPuntoGps = ejercicio_modelo.acumularPuntoGps;
-const ritmoSegPorKm = ejercicio_modelo.ritmoSegPorKm;
+const MODALIDADES_CARGA = __modulo_ejercicio_modelo.MODALIDADES_CARGA;
+const CATEGORIAS_INICIALES = __modulo_ejercicio_modelo.CATEGORIAS_INICIALES;
+const crearDocumentoEjercicio = __modulo_ejercicio_modelo.crearDocumentoEjercicio;
+const calcularDuracionHiit = __modulo_ejercicio_modelo.calcularDuracionHiit;
+const normalizarEjercicio = __modulo_ejercicio_modelo.normalizarEjercicio;
+const normalizarSerie = __modulo_ejercicio_modelo.normalizarSerie;
+const calcularEstadoFinalSesion = __modulo_ejercicio_modelo.calcularEstadoFinalSesion;
+const normalizarSesionActiva = __modulo_ejercicio_modelo.normalizarSesionActiva;
+const crearHiit = __modulo_ejercicio_modelo.crearHiit;
+const pausarHiit = __modulo_ejercicio_modelo.pausarHiit;
+const reanudarHiit = __modulo_ejercicio_modelo.reanudarHiit;
+const finalizarHiit = __modulo_ejercicio_modelo.finalizarHiit;
+const sumarExtensionDescanso = __modulo_ejercicio_modelo.sumarExtensionDescanso;
+const ajustarCantidad = __modulo_ejercicio_modelo.ajustarCantidad;
+const sonidosEnSegundo = __modulo_ejercicio_modelo.sonidosEnSegundo;
+const normalizarRutina = __modulo_ejercicio_modelo.normalizarRutina;
+const BANCO_EJERCICIOS_HIIT = __modulo_ejercicio_modelo.BANCO_EJERCICIOS_HIIT;
+const normalizarRutinaHiit = __modulo_ejercicio_modelo.normalizarRutinaHiit;
+const siguientePasoRutina = __modulo_ejercicio_modelo.siguientePasoRutina;
+const TIPOS_FASE_WR = __modulo_ejercicio_modelo.TIPOS_FASE_WR;
+const normalizarRutinaWr = __modulo_ejercicio_modelo.normalizarRutinaWr;
+const fasesWr = __modulo_ejercicio_modelo.fasesWr;
+const calcularDuracionWr = __modulo_ejercicio_modelo.calcularDuracionWr;
+const faseEnSegundo = __modulo_ejercicio_modelo.faseEnSegundo;
+const tiempoPorTipoWr = __modulo_ejercicio_modelo.tiempoPorTipoWr;
+const vueltasCompletadasWr = __modulo_ejercicio_modelo.vueltasCompletadasWr;
+const avisoWrAlEntrarAFase = __modulo_ejercicio_modelo.avisoWrAlEntrarAFase;
+const avisoWrCuentaFinal = __modulo_ejercicio_modelo.avisoWrCuentaFinal;
+const distanciaMetros = __modulo_ejercicio_modelo.distanciaMetros;
+const acumularPuntoGps = __modulo_ejercicio_modelo.acumularPuntoGps;
+const ritmoSegPorKm = __modulo_ejercicio_modelo.ritmoSegPorKm;
 
 // ── peso/js/ejercicio_almacen.js ──────────────────────────────────────────
-const ejercicio_almacen = (function () {
+const __modulo_ejercicio_almacen = (function () {
+
 const claveDatos = (u) => `cp_ejercicio_datos:${u}`;
 const claveCola = (u) => `cp_ejercicio_cola:${u}`;
+const claveSesionActiva = (u) => `cp_ejercicio_activa:${u}`;
 const obtenerStorage = (s) => s || localStorage;
 
 function leerJSON(storage, clave, defecto) {
@@ -1717,6 +1889,19 @@ function guardarLocal(usuario, datos, storage) {
 
 function leerPendientes(usuario, storage) {
   return leerJSON(obtenerStorage(storage), claveCola(usuario), []);
+}
+
+function leerSesionActiva(usuario, storage) {
+  return leerJSON(obtenerStorage(storage), claveSesionActiva(usuario), null);
+}
+
+function guardarSesionActiva(usuario, sesion, storage) {
+  obtenerStorage(storage).setItem(claveSesionActiva(usuario), JSON.stringify(sesion));
+  return sesion;
+}
+
+function borrarSesionActiva(usuario, storage) {
+  obtenerStorage(storage).removeItem(claveSesionActiva(usuario));
 }
 
 function guardarPendientes(usuario, cola, storage) {
@@ -1768,28 +1953,32 @@ async function sincronizarPendientes(usuario, api, { storage, alCambiar } = {}) 
   return leerPendientes(usuario, s).length;
 }
 
-  return { leerLocal, guardarLocal, leerPendientes, mutarLocal, confirmarOperacion, mezclarDocumento, sincronizarPendientes };
+  return { leerLocal, guardarLocal, leerPendientes, leerSesionActiva, guardarSesionActiva, borrarSesionActiva, mutarLocal, confirmarOperacion, mezclarDocumento, sincronizarPendientes };
 })();
-const leerLocal = ejercicio_almacen.leerLocal;
-const guardarLocal = ejercicio_almacen.guardarLocal;
-const leerPendientes = ejercicio_almacen.leerPendientes;
-const mutarLocal = ejercicio_almacen.mutarLocal;
-const confirmarOperacion = ejercicio_almacen.confirmarOperacion;
-const mezclarDocumento = ejercicio_almacen.mezclarDocumento;
-const sincronizarPendientes = ejercicio_almacen.sincronizarPendientes;
+const leerLocal = __modulo_ejercicio_almacen.leerLocal;
+const guardarLocal = __modulo_ejercicio_almacen.guardarLocal;
+const leerPendientes = __modulo_ejercicio_almacen.leerPendientes;
+const leerSesionActiva = __modulo_ejercicio_almacen.leerSesionActiva;
+const guardarSesionActiva = __modulo_ejercicio_almacen.guardarSesionActiva;
+const borrarSesionActiva = __modulo_ejercicio_almacen.borrarSesionActiva;
+const mutarLocal = __modulo_ejercicio_almacen.mutarLocal;
+const confirmarOperacion = __modulo_ejercicio_almacen.confirmarOperacion;
+const mezclarDocumento = __modulo_ejercicio_almacen.mezclarDocumento;
+const sincronizarPendientes = __modulo_ejercicio_almacen.sincronizarPendientes;
 
 // ── peso/js/ejercicio_calculos.js ──────────────────────────────────────────
-const ejercicio_calculos = (function () {
+const __modulo_ejercicio_calculos = (function () {
 function filtrarPeriodo(registros, periodo = 'total', ahora = new Date()) {
-  if (periodo === 'total') return [...registros];
+  const visibles = registros.filter((r) => !r.eliminadoEn);
+  if (periodo === 'total') return [...visibles];
   const limite = new Date(ahora);
   if (periodo === 'semana') limite.setDate(limite.getDate() - 7);
   else if (periodo === 'mes') limite.setMonth(limite.getMonth() - 1);
-  return registros.filter((r) => new Date(r.fecha || r.inicio || r.creadoEn) >= limite);
+  return visibles.filter((r) => new Date(r.fecha || r.inicio || r.creadoEn) >= limite);
 }
 
 function seriesContables(sesiones = []) {
-  return sesiones.filter((s) => s.estado === 'completada').flatMap((s) => s.series || []);
+  return sesiones.filter((s) => ['completada', 'completada_con_cambios', 'incompleta'].includes(s.estado)).flatMap((s) => s.series || []);
 }
 
 function resumenModalidades(series = []) {
@@ -1990,29 +2179,30 @@ function constancia(sesiones = [], hiits = [], ahora = new Date()) {
 
   return { filtrarPeriodo, seriesContables, resumenModalidades, descansoPromedio, resumenHiit, resumenWr, serieProgreso, volumenPorGrupo, frecuenciaPorGrupo, balancePatron, balanceSuperiorInferior, musculosAtrasados, ultimaMarcaEjercicio, consejoRepeticiones, mejorSerieHistorica, detectarEstancamiento, zonaRepeticiones, descansoRealVsProgramado, ratioTrabajoDescansoHiit, constancia };
 })();
-const filtrarPeriodo = ejercicio_calculos.filtrarPeriodo;
-const seriesContables = ejercicio_calculos.seriesContables;
-const resumenModalidades = ejercicio_calculos.resumenModalidades;
-const descansoPromedio = ejercicio_calculos.descansoPromedio;
-const resumenHiit = ejercicio_calculos.resumenHiit;
-const resumenWr = ejercicio_calculos.resumenWr;
-const serieProgreso = ejercicio_calculos.serieProgreso;
-const volumenPorGrupo = ejercicio_calculos.volumenPorGrupo;
-const frecuenciaPorGrupo = ejercicio_calculos.frecuenciaPorGrupo;
-const balancePatron = ejercicio_calculos.balancePatron;
-const balanceSuperiorInferior = ejercicio_calculos.balanceSuperiorInferior;
-const musculosAtrasados = ejercicio_calculos.musculosAtrasados;
-const ultimaMarcaEjercicio = ejercicio_calculos.ultimaMarcaEjercicio;
-const consejoRepeticiones = ejercicio_calculos.consejoRepeticiones;
-const mejorSerieHistorica = ejercicio_calculos.mejorSerieHistorica;
-const detectarEstancamiento = ejercicio_calculos.detectarEstancamiento;
-const zonaRepeticiones = ejercicio_calculos.zonaRepeticiones;
-const descansoRealVsProgramado = ejercicio_calculos.descansoRealVsProgramado;
-const ratioTrabajoDescansoHiit = ejercicio_calculos.ratioTrabajoDescansoHiit;
-const constancia = ejercicio_calculos.constancia;
+const filtrarPeriodo = __modulo_ejercicio_calculos.filtrarPeriodo;
+const seriesContables = __modulo_ejercicio_calculos.seriesContables;
+const resumenModalidades = __modulo_ejercicio_calculos.resumenModalidades;
+const descansoPromedio = __modulo_ejercicio_calculos.descansoPromedio;
+const resumenHiit = __modulo_ejercicio_calculos.resumenHiit;
+const resumenWr = __modulo_ejercicio_calculos.resumenWr;
+const serieProgreso = __modulo_ejercicio_calculos.serieProgreso;
+const volumenPorGrupo = __modulo_ejercicio_calculos.volumenPorGrupo;
+const frecuenciaPorGrupo = __modulo_ejercicio_calculos.frecuenciaPorGrupo;
+const balancePatron = __modulo_ejercicio_calculos.balancePatron;
+const balanceSuperiorInferior = __modulo_ejercicio_calculos.balanceSuperiorInferior;
+const musculosAtrasados = __modulo_ejercicio_calculos.musculosAtrasados;
+const ultimaMarcaEjercicio = __modulo_ejercicio_calculos.ultimaMarcaEjercicio;
+const consejoRepeticiones = __modulo_ejercicio_calculos.consejoRepeticiones;
+const mejorSerieHistorica = __modulo_ejercicio_calculos.mejorSerieHistorica;
+const detectarEstancamiento = __modulo_ejercicio_calculos.detectarEstancamiento;
+const zonaRepeticiones = __modulo_ejercicio_calculos.zonaRepeticiones;
+const descansoRealVsProgramado = __modulo_ejercicio_calculos.descansoRealVsProgramado;
+const ratioTrabajoDescansoHiit = __modulo_ejercicio_calculos.ratioTrabajoDescansoHiit;
+const constancia = __modulo_ejercicio_calculos.constancia;
 
 // ── peso/js/ejercicio_graficas.js ──────────────────────────────────────────
-const ejercicio_graficas = (function () {
+const __modulo_ejercicio_graficas = (function () {
+
 function svgProgreso(puntos = [], { unidad = '', titulo = 'Progreso' } = {}) {
   if (!puntos.length) return '<p class="texto-suave">Aún no hay datos para esta gráfica.</p>';
   const width = Math.max(320, puntos.length * 56), height = 180, pad = 28;
@@ -2023,13 +2213,56 @@ function svgProgreso(puntos = [], { unidad = '', titulo = 'Progreso' } = {}) {
 
   return { svgProgreso };
 })();
-const svgProgreso = ejercicio_graficas.svgProgreso;
+const svgProgreso = __modulo_ejercicio_graficas.svgProgreso;
 
 // ── peso/js/ejercicio_ui.js ──────────────────────────────────────────
-const ejercicio_ui = (function () {
+const __modulo_ejercicio_ui = (function () {
+const api = __modulo_api;
+
+
+
+
+
 const S = { datos: null, tab: 'entrenar', toast: () => {}, audio: null, intervalo: null, wake: null, hiit: null, wr: null, entrenamiento: null, descanso: null, rutinaSeleccionada: '', periodo: 'semana', sonidosEmitidos: new Set(), redLista: false };
 const uid = () => crypto.randomUUID();
 const iso = () => new Date().toISOString();
+
+function modalidadActiva() {
+  if (S.entrenamiento) return 'fuerza';
+  if (S.hiit) return 'hiit';
+  if (S.wr) return 'wr';
+  return null;
+}
+
+function persistirSesionActiva() {
+  const modalidad = modalidadActiva();
+  if (!modalidad) return borrarSesionActiva(getUsuario());
+  const base = modalidad === 'fuerza'
+    ? { ...S.entrenamiento, modalidad, estado: 'en_curso', descanso: S.descanso }
+    : modalidad === 'hiit'
+      ? { ...S.hiit, modalidad }
+      : { ...S.wr, modalidad };
+  const sesion = modalidad === 'fuerza' ? normalizarSesionActiva(base, iso()) : { ...base, modificadoEn: iso() };
+  guardarSesionActiva(getUsuario(), sesion);
+}
+
+function restaurarSesionActiva() {
+  if (hayEntrenamientoActivo()) return;
+  const sesion = leerSesionActiva(getUsuario());
+  if (!sesion?.modalidad) return;
+  if (sesion.modalidad === 'fuerza') { S.entrenamiento = sesion; S.descanso = sesion.descanso || null; S.tab = 'entrenar'; }
+  else if (sesion.modalidad === 'hiit') { S.hiit = sesion; S.tab = 'hiit'; }
+  else if (sesion.modalidad === 'wr') { S.wr = sesion; S.tab = 'wr'; }
+  else return borrarSesionActiva(getUsuario());
+  S.toast('Entrenamiento recuperado');
+}
+
+function activarTemporizadorActivo() {
+  clearInterval(S.intervalo);
+  if (S.entrenamiento) S.intervalo = setInterval(tickEntrenamiento, 250);
+  else if (S.hiit) S.intervalo = setInterval(tickHiit, 250);
+  else if (S.wr) S.intervalo = setInterval(tickWr, 250);
+}
 
 function guardar(mutador, tipo = 'editar', entidadId = 'documento') {
   const r = mutarLocal(getUsuario(), mutador, { tipo, entidadId });
@@ -2085,6 +2318,8 @@ async function iniciarModuloEjercicio(toast) {
   else if (rellenarCatalogoFaltante(S.datos)) guardarLocal(getUsuario(), S.datos);
   try { const r = await api.leerEjercicio(); if (r.ok) { S.datos = mezclarDocumento(S.datos, r.datos); guardarLocal(getUsuario(), S.datos); } } catch {}
   await sincronizar().catch(() => {});
+  restaurarSesionActiva();
+  activarTemporizadorActivo();
   if (!S.redLista) { S.redLista = true; addEventListener('online', () => refrescarRemoto().catch(() => {})); document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescarRemoto().catch(() => {}); }); }
 }
 
@@ -2099,7 +2334,7 @@ function renderModuloEjercicio() {
   if (!S.datos) S.datos = leerLocal(getUsuario());
   const raiz = document.getElementById('ejercicio-contenido');
   raiz.innerHTML = `<header class="ejercicio-hero"><div><span class="ejercicio-kicker">ENTRENAMIENTO</span><h2>Muévete. Registra. Mejora.</h2></div><small id="ejercicio-sync"></small></header><nav id="ejercicio-tabs" class="ejercicio-tabs" role="tablist"><button role="tab" data-etab="entrenar">Entrenar</button><button role="tab" data-etab="hiit">HIIT</button><button role="tab" data-etab="wr">W/R</button><button role="tab" data-etab="progreso">Progreso</button></nav><main id="ejercicio-panel"></main><dialog id="ejercicio-modal" class="ejercicio-modal"><div class="modal-ejercicio-contenido"><header><div><small id="modal-kicker">CONFIGURAR</small><h2 id="modal-titulo"></h2></div><button type="button" class="modal-cerrar" aria-label="Cerrar">×</button></header><div id="modal-cuerpo"></div></div></dialog>`;
-  raiz.querySelectorAll('[data-etab]').forEach((b) => { b.setAttribute('aria-selected', String(b.dataset.etab === S.tab)); b.onclick = () => { S.tab = b.dataset.etab; renderModuloEjercicio(); }; });
+  raiz.querySelectorAll('[data-etab]').forEach((b) => { b.setAttribute('aria-selected', String(b.dataset.etab === S.tab)); b.onclick = () => { const activa = modalidadActiva(); if (activa && b.dataset.etab !== (activa === 'fuerza' ? 'entrenar' : activa)) { S.toast('Termina o guarda la sesión activa antes de cambiar de entrenamiento', true); return; } S.tab = b.dataset.etab; renderModuloEjercicio(); }; });
   actualizarSync();
   raiz.querySelector('.modal-cerrar').onclick = cerrarModal;
   if (S.tab === 'entrenar') renderEntrenar(); else if (S.tab === 'hiit') renderHiit(); else if (S.tab === 'wr') renderWr(); else renderProgreso();
@@ -2208,10 +2443,11 @@ function abrirSelectorEjercicio(borrador, volver) {
 }
 
 function comenzarEntrenamiento() {
+  if (hayEntrenamientoActivo()) return S.toast('Ya tienes un entrenamiento activo', true);
   const rutina = S.datos.rutinas.find((r) => r.id === S.rutinaSeleccionada); if (!rutina?.entradas?.length) return;
-  S.entrenamiento = { id: uid(), rutinaId: rutina.id, nombre: rutina.nombre, entradas: structuredClone(rutina.entradas), ejercicioIndice: 0, serieNumero: 1, fase: 'cuenta', cuenta: 3, series: [], fecha: iso(), creadoEn: iso(), modificadoEn: iso() };
+  S.entrenamiento = { id: uid(), rutinaId: rutina.id, nombre: rutina.nombre, entradas: structuredClone(rutina.entradas), ejercicioIndice: 0, serieNumero: 1, fase: 'cuenta', cuenta: 3, series: [], omisiones: [], fecha: iso(), creadoEn: iso(), modificadoEn: iso() };
   S.sonidosEmitidos.clear();
-  clearInterval(S.intervalo); S.intervalo = setInterval(tickEntrenamiento, 250); S.entrenamiento.cuentaFinMs = Date.now() + 3000; solicitarWake(); renderEntrenamientoActivo();
+  S.entrenamiento.cuentaFinMs = Date.now() + 3000; persistirSesionActiva(); activarTemporizadorActivo(); solicitarWake(); renderEntrenamientoActivo();
 }
 
 function tickEntrenamiento() {
@@ -2219,7 +2455,7 @@ function tickEntrenamiento() {
   if (S.entrenamiento.fase === 'cuenta') {
     const n = Math.max(0, Math.ceil((S.entrenamiento.cuentaFinMs - Date.now()) / 1000));
     emitirUnaVez(`inicio-${n}`, sonidosEnSegundo({ tipo: 'cuenta', restanteSeg: n }));
-    if (n <= 0) { S.entrenamiento.fase = 'serie'; beep('largo'); }
+    if (n <= 0) { S.entrenamiento.fase = 'serie'; persistirSesionActiva(); beep('largo'); }
   } else if (S.entrenamiento.fase === 'descanso') tickDescanso();
   renderEntrenamientoActivo();
 }
@@ -2269,17 +2505,19 @@ function renderEntrenamientoActivo() {
 
 function salirRutina() {
   const t = S.entrenamiento;
-  if (!t.series.length) { if (!confirm('¿Terminar esta rutina sin guardarla?')) return; S.entrenamiento = null; clearInterval(S.intervalo); liberarWake(); return renderEntrenar(); }
+  if (!t.series.length) { if (!confirm('¿Cancelar esta rutina sin guardarla?')) return; S.entrenamiento = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); return renderEntrenar(); }
   if (!confirm(`¿Salir? Se guardarán ${t.series.length} serie(s) ya completadas como rutina incompleta.`)) return;
-  const sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: 'descartada', series: t.series, creadoEn: t.creadoEn, modificadoEn: iso() };
+  const sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: calcularEstadoFinalSesion(t), series: t.series, omisiones: t.omisiones || [], creadoEn: t.creadoEn, modificadoEn: iso() };
   guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id);
-  S.entrenamiento = null; S.descanso = null; clearInterval(S.intervalo); liberarWake(); S.toast('Rutina guardada como incompleta'); renderEntrenar();
+  S.entrenamiento = null; S.descanso = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); S.toast('Rutina guardada como incompleta'); renderEntrenar();
 }
 
 function saltarEjercicio() {
   if (!confirm('¿Saltar este ejercicio? No se registrarán series para él.')) return;
   const t = S.entrenamiento;
+  t.omisiones.push({ ejercicioId: t.entradas[t.ejercicioIndice].ejercicioId, desdeSerie: t.serieNumero, en: iso() });
   Object.assign(t, { ejercicioIndice: t.ejercicioIndice + 1, serieNumero: 1, fase: 'serie' });
+  persistirSesionActiva();
   renderEntrenamientoActivo();
 }
 
@@ -2305,7 +2543,9 @@ function terminarSerieGuiada() {
   const { entrada, ejercicio } = ejercicioActual();
   let carga = null; if (ejercicio.modalidad === 'discos') carga = { grande: Number(document.getElementById('carga-grande').value), chico: Number(document.getElementById('carga-chico').value) }; else if (ejercicio.modalidad === 'niveles') carga = Number(document.getElementById('carga-nivel').value);
   try { S.entrenamiento.series.push(normalizarSerie({ ejercicioId: ejercicio.id, repeticiones: Number(document.getElementById('serie-reps').value), modalidad: ejercicio.modalidad, carga, descansoPlaneadoSeg: entrada.descansoSeg })); } catch (err) { return S.toast(err.message, true); }
-  S.entrenamiento.fase = 'descanso'; S.descanso = { inicioMs: Date.now(), finMs: Date.now() + entrada.descansoSeg * 1000, extraSeg: 0 }; S.sonidosEmitidos.clear(); emitirSonidos(['rapido', 'rapido', 'rapido']); renderEntrenamientoActivo();
+  const paso = siguientePasoRutina(S.entrenamiento, S.entrenamiento.entradas);
+  if (paso.terminada) return finalizarEntrenamiento();
+  S.entrenamiento.fase = 'descanso'; S.descanso = { inicioMs: Date.now(), finMs: Date.now() + entrada.descansoSeg * 1000, extraSeg: 0 }; persistirSesionActiva(); S.sonidosEmitidos.clear(); emitirSonidos(['rapido', 'rapido', 'rapido']); renderEntrenamientoActivo();
 }
 
 function tickDescanso() {
@@ -2319,17 +2559,17 @@ function cerrarDescanso() {
   const paso = siguientePasoRutina(S.entrenamiento, S.entrenamiento.entradas);
   S.descanso = null;
   if (paso.terminada) return finalizarEntrenamiento();
-  if (paso.ejercicioIndice !== S.entrenamiento.ejercicioIndice) { S.entrenamiento.fase = 'confirmar'; S.entrenamiento.pasoSiguiente = paso; beep('final'); return renderEntrenamientoActivo(); }
-  Object.assign(S.entrenamiento, paso, { fase: 'serie' }); beep('largo'); renderEntrenamientoActivo();
+  if (paso.ejercicioIndice !== S.entrenamiento.ejercicioIndice) { S.entrenamiento.fase = 'confirmar'; S.entrenamiento.pasoSiguiente = paso; persistirSesionActiva(); beep('final'); return renderEntrenamientoActivo(); }
+  Object.assign(S.entrenamiento, paso, { fase: 'serie' }); persistirSesionActiva(); beep('largo'); renderEntrenamientoActivo();
 }
 
 function confirmarSiguienteEjercicio() {
-  Object.assign(S.entrenamiento, S.entrenamiento.pasoSiguiente, { fase: 'serie' }); delete S.entrenamiento.pasoSiguiente; renderEntrenamientoActivo();
+  Object.assign(S.entrenamiento, S.entrenamiento.pasoSiguiente, { fase: 'serie' }); delete S.entrenamiento.pasoSiguiente; persistirSesionActiva(); renderEntrenamientoActivo();
 }
 
 function finalizarEntrenamiento() {
-  const t = S.entrenamiento, sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: 'completada', series: t.series, creadoEn: t.creadoEn, modificadoEn: iso() };
-  guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id); S.entrenamiento = null; S.descanso = null; clearInterval(S.intervalo); liberarWake(); beep('final'); S.toast('Rutina completada'); renderEntrenar();
+  const t = S.entrenamiento, sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: calcularEstadoFinalSesion(t, { terminada: true }), series: t.series, omisiones: t.omisiones || [], creadoEn: t.creadoEn, modificadoEn: iso() };
+  guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id); S.entrenamiento = null; S.descanso = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); beep('final'); S.toast(sesion.estado === 'completada' ? 'Rutina completada' : 'Rutina completada con cambios'); renderEntrenar();
 }
 
 // ────────── Caminar/Correr (W/R) ──────────
@@ -2439,6 +2679,7 @@ function iniciarGpsWr() {
       (pos) => {
         if (!S.wr || !S.wr.gps) return;
         const punto = { lat: pos.coords.latitude, lon: pos.coords.longitude, tMs: pos.timestamp || Date.now(), accuracy: pos.coords.accuracy };
+        if (S.wr.estado !== 'activo' || S.wr.pausaInicio) return;
         const antes = S.wr.gps.distanciaM;
         const nuevo = acumularPuntoGps(S.wr.gps, punto);
         S.wr.gps = { ...S.wr.gps, ...nuevo };
@@ -2466,6 +2707,7 @@ function detenerGpsWr() {
 // regresiva de 3s, tick cada 200ms, pausa acumulada en `pausaMs`), pero
 // recorriendo la lista de fases expandida en vez de dos duraciones fijas.
 function iniciarWr(rutina) {
+  if (hayEntrenamientoActivo()) return S.toast('Ya tienes un entrenamiento activo', true);
   if (!rutina) return S.toast('Elige una rutina primero', true);
   let planeadoSeg;
   try { planeadoSeg = calcularDuracionWr(rutina); } catch (err) { return S.toast(err.message, true); }
@@ -2477,7 +2719,7 @@ function iniciarWr(rutina) {
   };
   S.sonidosEmitidos.clear();
   iniciarGpsWr();
-  clearInterval(S.intervalo); S.intervalo = setInterval(tickWr, 200); solicitarWake(); tickWr();
+  persistirSesionActiva(); activarTemporizadorActivo(); solicitarWake(); tickWr();
 }
 
 // Segundos REALES transcurridos de la sesión (descontando pausas), o 0 si
@@ -2496,7 +2738,7 @@ function tickWr() {
     const restante = Math.max(0, Math.ceil((w.cuentaFinMs - Date.now()) / 1000));
     emitirUnaVez(`wr-cuenta-${restante}`, avisoWrCuentaFinal(restante));
     if (restante <= 0) {
-      w.estado = 'activo'; w.actividadInicioMs = Date.now(); w.pausaMs = 0; w.faseIndice = -1;
+      w.estado = 'activo'; w.actividadInicioMs = Date.now(); w.pausaMs = 0; w.faseIndice = -1; persistirSesionActiva();
     }
     return renderWrActivo();
   }
@@ -2540,6 +2782,7 @@ function alternarPausaWr() {
     if (w.estado === 'cuenta') w.cuentaFinMs += pausa; else w.pausaMs += pausa;
     w.pausaInicio = null; solicitarWake();
   } else { w.pausaInicio = Date.now(); liberarWake(); }
+  persistirSesionActiva();
   renderWrActivo();
 }
 
@@ -2550,8 +2793,7 @@ function finalizarWr(detenido) {
   const porTipo = tiempoPorTipoWr(w.fases, realSeg);
   // Cuántas vueltas COMPLETAS se alcanzaron: la vuelta de la última fase
   // terminada, no la que iba a medias.
-  const faseActual = faseEnSegundo(w.fases, realSeg);
-  const vueltasCompletadas = faseActual ? Math.max(0, (faseActual.vuelta || 1) - 1) : w.vueltas;
+  const vueltasCompletadas = vueltasCompletadasWr(w.fases, realSeg, w.vueltas);
   const registro = {
     id: w.id, rutinaId: w.rutinaId, nombre: w.nombre || 'Caminar/Correr',
     fecha: iso(), fin: iso(),
@@ -2559,7 +2801,7 @@ function finalizarWr(detenido) {
     caminarSeg: porTipo.caminar, correrSeg: porTipo.correr,
     vueltasCompletadas,
     porcentaje: w.planeadoSeg ? Math.min(100, Math.round(realSeg / w.planeadoSeg * 100)) : 0,
-    estado: detenido ? 'detenida' : 'completada',
+    estado: calcularEstadoFinalSesion({ duracionRealSeg: realSeg }, { terminada: !detenido }),
     creadoEn: w.creadoEn, modificadoEn: iso(),
   };
   // Solo se guardan campos de GPS si de verdad hubo señal -- si no, el
@@ -2573,9 +2815,9 @@ function finalizarWr(detenido) {
     registro.ritmoCorrerSegPorKm = ritmoSegPorKm(porTipo.correr, gps.porTipo.correr);
   }
   detenerGpsWr();
-  guardar((d) => { d.wrs = d.wrs || []; d.wrs.push(registro); }, 'guardar_wr', registro.id);
-  S.wr = null; clearInterval(S.intervalo); liberarWake(); beep('final');
-  S.toast(detenido ? 'Sesión guardada como incompleta' : 'Sesión completada');
+  if (registro.estado !== 'cancelada') guardar((d) => { d.wrs = d.wrs || []; d.wrs.push(registro); }, 'guardar_wr', registro.id);
+  S.wr = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); beep('final');
+  S.toast(registro.estado === 'cancelada' ? 'Sesión cancelada' : detenido ? 'Sesión guardada como incompleta' : 'Sesión completada');
   renderWr();
 }
 
@@ -2635,6 +2877,7 @@ function abrirFormularioRutinaHiit() {
 }
 
 function iniciarHiit(rutina) {
+  if (hayEntrenamientoActivo()) return S.toast('Ya tienes un entrenamiento activo', true);
   const config = rutina
     ? { vueltas: rutina.vueltas, actividadSeg: rutina.actividadSeg, descansoSeg: rutina.descansoSeg }
     : { vueltas: Number(document.getElementById('hiit-vueltas').value), actividadSeg: Number(document.getElementById('hiit-actividad').value), descansoSeg: Number(document.getElementById('hiit-descanso').value) };
@@ -2645,12 +2888,12 @@ function iniciarHiit(rutina) {
     nombre: rutina?.nombre || '', ejercicios: rutina?.ejercicios || null,
   };
   S.sonidosEmitidos.clear();
-  clearInterval(S.intervalo); S.intervalo = setInterval(tickHiit, 200); solicitarWake(); tickHiit();
+  persistirSesionActiva(); activarTemporizadorActivo(); solicitarWake(); tickHiit();
 }
 
 function fasesHiit(h) { const xs = []; for (let i = 1; i <= h.vueltas; i++) { xs.push({ tipo: 'actividad', seg: h.actividadSeg, vuelta: i }); if (i < h.vueltas) xs.push({ tipo: 'descanso', seg: h.descansoSeg, vuelta: i }); } return xs; }
 function estadoHiit() { const h = S.hiit, ahora = h.pausaInicio || Date.now(); if (h.estado === 'cuenta') return { tipo: 'cuenta', restante: Math.max(0, Math.ceil((h.cuentaFinMs - ahora) / 1000)), vuelta: 0, transcurrido: 0 }; let t = Math.max(0, Math.floor((ahora - h.actividadInicioMs - h.pausaMs) / 1000)), indice = 0; for (const f of fasesHiit(h)) { if (t < f.seg) return { ...f, restante: f.seg - t, indice, transcurrido: Math.floor((ahora - h.actividadInicioMs - h.pausaMs) / 1000) }; t -= f.seg; indice++; } return { tipo: 'final', restante: 0, transcurrido: h.planeadoSeg }; }
-function tickHiit() { if (!S.hiit || S.hiit.pausaInicio) return renderHiitActivo(); const e = estadoHiit(); if (S.hiit.estado === 'cuenta' && e.restante <= 0) { S.hiit.estado = 'activo'; S.hiit.actividadInicioMs = Date.now(); S.hiit.pausaMs = 0; S.hiit.faseIndice = 0; beep('largo'); } else { const clave = `${e.indice ?? -1}-${e.tipo}-${e.restante}`; if (e.tipo === 'descanso' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; emitirSonidos(['rapido', 'rapido', 'rapido']); } else if (e.tipo === 'actividad' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; beep('largo'); } emitirUnaVez(clave, sonidosEnSegundo({ tipo: e.tipo, restanteSeg: e.restante })); if (e.tipo === 'final') return finalizarHiit(false); } renderHiitActivo(); }
+function tickHiit() { if (!S.hiit || S.hiit.pausaInicio) return renderHiitActivo(); const e = estadoHiit(); if (S.hiit.estado === 'cuenta' && e.restante <= 0) { S.hiit.estado = 'activo'; S.hiit.actividadInicioMs = Date.now(); S.hiit.pausaMs = 0; S.hiit.faseIndice = 0; persistirSesionActiva(); beep('largo'); } else { const clave = `${e.indice ?? -1}-${e.tipo}-${e.restante}`; if (e.tipo === 'descanso' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; persistirSesionActiva(); emitirSonidos(['rapido', 'rapido', 'rapido']); } else if (e.tipo === 'actividad' && e.indice !== S.hiit.faseIndice) { S.hiit.faseIndice = e.indice; persistirSesionActiva(); beep('largo'); } emitirUnaVez(clave, sonidosEnSegundo({ tipo: e.tipo, restanteSeg: e.restante })); if (e.tipo === 'final') return finalizarHiit(false); } renderHiitActivo(); }
 
 function renderHiitActivo() {
   const p = document.getElementById('ejercicio-panel'), e = estadoHiit();
@@ -2662,8 +2905,8 @@ function renderHiitActivo() {
   p.innerHTML = `<section class="hiit-activo ${e.tipo}"><small>${S.hiit.pausaInicio ? 'PAUSADO' : e.tipo === 'cuenta' ? 'PREPÁRATE' : e.tipo.toUpperCase()}</small><strong>${e.restante}</strong><span>${e.vuelta ? `Vuelta ${e.vuelta}/${S.hiit.vueltas}` : 'Comienza en'}</span>${ejercicioHtml}<div class="acciones"><button id="hiit-pausa">${S.hiit.pausaInicio ? 'Reanudar' : 'Pausar'}</button><button id="hiit-detener">Detener</button></div></section>`;
   p.querySelector('#hiit-pausa').onclick = alternarPausaHiit; p.querySelector('#hiit-detener').onclick = () => finalizarHiit(true);
 }
-function alternarPausaHiit() { const h = S.hiit; if (h.pausaInicio) { const pausa = Date.now() - h.pausaInicio; if (h.estado === 'cuenta') h.cuentaFinMs += pausa; else h.pausaMs += pausa; h.pausaInicio = null; solicitarWake(); } else { h.pausaInicio = Date.now(); liberarWake(); } renderHiitActivo(); }
-function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const r = { id: h.id, nombre: h.nombre || 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: detenido ? Math.round(real / h.planeadoSeg * 100) : 100, estado: detenido ? 'detenida' : 'completada', creadoEn: iso(), modificadoEn: iso() }; guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
+function alternarPausaHiit() { const h = S.hiit; if (h.pausaInicio) { const pausa = Date.now() - h.pausaInicio; if (h.estado === 'cuenta') h.cuentaFinMs += pausa; else h.pausaMs += pausa; h.pausaInicio = null; solicitarWake(); } else { h.pausaInicio = Date.now(); liberarWake(); } persistirSesionActiva(); renderHiitActivo(); }
+function finalizarHiit(detenido) { if (!S.hiit) return; const h = S.hiit, e = estadoHiit(), real = detenido ? Math.min(h.planeadoSeg, e.transcurrido || 0) : h.planeadoSeg; const estado = calcularEstadoFinalSesion({ duracionRealSeg: real }, { terminada: !detenido }); const r = { id: h.id, nombre: h.nombre || 'HIIT', fecha: iso(), vueltas: h.vueltas, actividadSeg: h.actividadSeg, descansoSeg: h.descansoSeg, duracionPlaneadaSeg: h.planeadoSeg, duracionRealSeg: real, porcentaje: h.planeadoSeg ? Math.round(real / h.planeadoSeg * 100) : 0, estado, creadoEn: iso(), modificadoEn: iso() }; if (estado !== 'cancelada') guardar((d) => d.hiits.push(r), 'guardar_hiit', r.id); S.hiit = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); beep('final'); renderHiit(); }
 
 const SONIDOS = { rapido: 'audio/rapido.mp3', cuenta: 'audio/cuenta.mp3', largo: 'audio/largo.mp3', final: 'audio/final.mp3' };
 function beep(tipo) { try { const a = new Audio(SONIDOS[tipo]); a.volume = .6; a.play().catch(() => {}); } catch {} }
@@ -2678,7 +2921,7 @@ function renderProgreso() {
   p.querySelectorAll('[data-periodo]').forEach((b) => b.onclick = () => { S.periodo = b.dataset.periodo; renderProgreso(); });
   p.querySelector('#ver-analisis-completo').onclick = abrirAnalisisCompleto;
   p.querySelectorAll('[data-editar-registro]').forEach((b) => b.onclick = () => abrirEditarRegistro(b.dataset.editarRegistro));
-  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { d.sesiones = d.sesiones.filter((x) => x.id !== b.dataset.eliminar); d.hiits = d.hiits.filter((x) => x.id !== b.dataset.eliminar); d.wrs = (d.wrs || []).filter((x) => x.id !== b.dataset.eliminar); }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
+  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { for (const lista of [d.sesiones, d.hiits, d.wrs || []]) { const x = lista?.find((registro) => registro.id === b.dataset.eliminar); if (x) { x.eliminadoEn = iso(); x.modificadoEn = x.eliminadoEn; } } }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
 }
 
 // Análisis deportivo completo: volumen semanal por músculo, balance,
@@ -2742,8 +2985,14 @@ function abrirAnalisisCompleto() {
 }
 
 function abrirEditarRegistro(id) {
-  const lista = S.datos.sesiones.some((x) => x.id === id) ? 'sesiones' : 'hiits';
-  const registro = structuredClone(S.datos[lista].find((x) => x.id === id));
+  const lista = ['sesiones', 'hiits', 'wrs'].find((campo) => (S.datos[campo] || []).some((x) => x.id === id));
+  const registroOriginal = lista && S.datos[lista].find((x) => x.id === id);
+  if (!registroOriginal) return S.toast('No se encontró el registro', true);
+  const registro = structuredClone(registroOriginal);
+  if (lista === 'wrs') {
+    abrirModal('Editar Caminar/Correr', `<form id="form-registro" class="form-modal"><label>Nombre<input id="registro-nombre" value="${escapeAtributo(registro.nombre || 'Caminar/Correr')}"></label><label>Duración real (s)<input id="registro-real" type="number" min="0" value="${registro.realSeg || 0}"></label><div class="grid-form"><label>Caminar (s)<input id="registro-caminar" type="number" min="0" value="${registro.caminarSeg || 0}"></label><label>Correr (s)<input id="registro-correr" type="number" min="0" value="${registro.correrSeg || 0}"></label></div><button class="btn-primario">Guardar cambios</button></form>`, (c) => { c.querySelector('#form-registro').onsubmit = (e) => { e.preventDefault(); Object.assign(registro, { nombre: c.querySelector('#registro-nombre').value.trim(), realSeg: Number(c.querySelector('#registro-real').value), caminarSeg: Number(c.querySelector('#registro-caminar').value), correrSeg: Number(c.querySelector('#registro-correr').value), modificadoEn: iso() }); registro.porcentaje = registro.planeadoSeg ? Math.min(100, Math.round(registro.realSeg / registro.planeadoSeg * 100)) : 0; guardar((d) => { d.wrs[d.wrs.findIndex((x) => x.id === id)] = registro; }, 'editar_registro', id); cerrarModal(); renderProgreso(); }; }, 'HISTORIAL');
+    return;
+  }
   if (lista === 'hiits') {
     abrirModal('Editar HIIT', `<form id="form-registro" class="form-modal"><label>Nombre<input id="registro-nombre" value="${escapeAtributo(registro.nombre || 'HIIT')}"></label><label>Vueltas<input id="registro-vueltas" type="number" min="1" value="${registro.vueltas}"></label><label>Actividad (s)<input id="registro-actividad" type="number" min="1" value="${registro.actividadSeg}"></label><label>Descanso (s)<input id="registro-descanso" type="number" min="0" value="${registro.descansoSeg}"></label><label>Duración real (s)<input id="registro-real" type="number" min="0" value="${registro.duracionRealSeg}"></label><button class="btn-primario">Guardar cambios</button></form>`, (c) => { c.querySelector('#form-registro').onsubmit = (e) => { e.preventDefault(); Object.assign(registro, { nombre: c.querySelector('#registro-nombre').value.trim(), vueltas: Number(c.querySelector('#registro-vueltas').value), actividadSeg: Number(c.querySelector('#registro-actividad').value), descansoSeg: Number(c.querySelector('#registro-descanso').value), duracionRealSeg: Number(c.querySelector('#registro-real').value), modificadoEn: iso() }); registro.duracionPlaneadaSeg = calcularDuracionHiit(registro); registro.porcentaje = Math.min(100, Math.round(registro.duracionRealSeg / registro.duracionPlaneadaSeg * 100)); guardar((d) => { d.hiits[d.hiits.findIndex((x) => x.id === id)] = registro; }, 'editar_registro', id); cerrarModal(); renderProgreso(); }; }, 'HISTORIAL');
   } else {
@@ -2753,17 +3002,30 @@ function abrirEditarRegistro(id) {
 
   return { rellenarCatalogoFaltante, iniciarModuloEjercicio, salirModuloEjercicio, hayEntrenamientoActivo, renderModuloEjercicio };
 })();
-const rellenarCatalogoFaltante = ejercicio_ui.rellenarCatalogoFaltante;
-const iniciarModuloEjercicio = ejercicio_ui.iniciarModuloEjercicio;
-const salirModuloEjercicio = ejercicio_ui.salirModuloEjercicio;
-const hayEntrenamientoActivo = ejercicio_ui.hayEntrenamientoActivo;
-const renderModuloEjercicio = ejercicio_ui.renderModuloEjercicio;
+const rellenarCatalogoFaltante = __modulo_ejercicio_ui.rellenarCatalogoFaltante;
+const iniciarModuloEjercicio = __modulo_ejercicio_ui.iniciarModuloEjercicio;
+const salirModuloEjercicio = __modulo_ejercicio_ui.salirModuloEjercicio;
+const hayEntrenamientoActivo = __modulo_ejercicio_ui.hayEntrenamientoActivo;
+const renderModuloEjercicio = __modulo_ejercicio_ui.renderModuloEjercicio;
 
 // ── peso/js/ui.js ──────────────────────────────────────────
 // Estado, render y eventos. El único archivo que toca el DOM.
 // El login (URL, usuario, PIN) ya pasó en el launcher (../index.html) antes
 // de llegar aquí -- esta app solo confirma que hay sesión (exigirSesion) y
 // usa getUsuario() para saber quién eres.
+
+const cola = __modulo_cola;
+const api = __modulo_api;
+const graficas = __modulo_graficas;
+const actualizacion = __modulo_actualizacion_peso;
+const ui_helpers = __modulo_ui_helpers;
+
+
+
+const fondo = __modulo_fondo;
+
+
+
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -3424,7 +3686,10 @@ async function cambiarPinAjustes() {
   }
   try {
     const r = await api.cambiarPin(getUsuario(), actual, nuevo);
-    if (r.ok) toast('Contraseña actualizada ✓');
+    if (r.ok) {
+      try { await guardarAccesoLocal(getUsuario(), nuevo); } catch { /* La contraseña remota ya cambió correctamente. */ }
+      toast('Contraseña actualizada ✓');
+    }
     else toast(r.error || 'Contraseña actual incorrecta', true);
   } catch (e) {
     toast('No se pudo cambiar (¿sin conexión?): ' + e.message, true);

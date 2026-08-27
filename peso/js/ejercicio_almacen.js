@@ -2,6 +2,7 @@ import { crearDocumentoEjercicio } from './ejercicio_modelo.js';
 
 const claveDatos = (u) => `cp_ejercicio_datos:${u}`;
 const claveCola = (u) => `cp_ejercicio_cola:${u}`;
+const claveSesionActiva = (u) => `cp_ejercicio_activa:${u}`;
 const obtenerStorage = (s) => s || localStorage;
 
 function leerJSON(storage, clave, defecto) {
@@ -19,6 +20,19 @@ export function guardarLocal(usuario, datos, storage) {
 
 export function leerPendientes(usuario, storage) {
   return leerJSON(obtenerStorage(storage), claveCola(usuario), []);
+}
+
+export function leerSesionActiva(usuario, storage) {
+  return leerJSON(obtenerStorage(storage), claveSesionActiva(usuario), null);
+}
+
+export function guardarSesionActiva(usuario, sesion, storage) {
+  obtenerStorage(storage).setItem(claveSesionActiva(usuario), JSON.stringify(sesion));
+  return sesion;
+}
+
+export function borrarSesionActiva(usuario, storage) {
+  obtenerStorage(storage).removeItem(claveSesionActiva(usuario));
 }
 
 function guardarPendientes(usuario, cola, storage) {

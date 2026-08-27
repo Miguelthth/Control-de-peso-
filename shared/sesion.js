@@ -2,12 +2,16 @@
 // localStorage). Login pasa UNA vez en el launcher; las sub-apps solo leen.
 
 import { borrarToken, guardarToken, leerToken } from './autorizacion.js';
+import { crearVerificadorLocal, verificarAccesoLocal } from './acceso_local.js';
 
 const CLAVE_URL = 'ma_url';
 const CLAVE_USUARIO = 'ma_usuario';
 const CLAVE_ROL = 'ma_rol';
 const CLAVE_PERFILES = 'ma_perfiles_conocidos';
 const CLAVE_SESION_PASS = 'ma_clave_sesion'; // sessionStorage, no localStorage -- ver comentario abajo
+const CLAVE_SESION_LOCAL = 'ma_sesion_local';
+const PREFIJO_ACCESO_LOCAL = 'ma_acceso_local_v1:';
+const TOKEN_SESION_LOCAL = 'local-sin-conexion';
 
 // Respaldo fijo: la liga del servidor no cambia (es la de Link_Servidor.txt)
 // -- si el iPhone borra localStorage entre usos (pasa en algunos ajustes de
@@ -59,13 +63,48 @@ export function leerPerfilConocido(usuario) {
 export function iniciarSesion(usuario, rol, token) {
   localStorage.setItem(CLAVE_USUARIO, usuario);
   localStorage.setItem(CLAVE_ROL, rol);
+  sessionStorage.removeItem(CLAVE_SESION_LOCAL);
   if (token) guardarToken(token);
   guardarPerfilConocido(usuario, rol, true);
+}
+
+function claveAccesoLocal(usuario) {
+  return `${PREFIJO_ACCESO_LOCAL}${String(usuario || '').trim().toLocaleLowerCase()}`;
+}
+
+export async function guardarAccesoLocal(usuario, password) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) throw new Error('Falta el usuario.');
+  const verificador = await crearVerificadorLocal(password);
+  localStorage.setItem(claveAccesoLocal(nombre), JSON.stringify(verificador));
+}
+
+export async function validarAccesoLocal(usuario, password) {
+  try {
+    const crudo = localStorage.getItem(claveAccesoLocal(usuario));
+    return verificarAccesoLocal(password, JSON.parse(crudo));
+  } catch {
+    return false;
+  }
+}
+
+export function iniciarSesionLocal(usuario, rol) {
+  const nombre = String(usuario || '').trim();
+  if (!nombre) throw new Error('Falta el usuario.');
+  localStorage.setItem(CLAVE_USUARIO, nombre);
+  localStorage.setItem(CLAVE_ROL, String(rol || 'normal'));
+  sessionStorage.setItem(CLAVE_SESION_LOCAL, '1');
+  guardarToken(TOKEN_SESION_LOCAL);
+}
+
+export function esSesionLocal() {
+  return sessionStorage.getItem(CLAVE_SESION_LOCAL) === '1' && leerToken() === TOKEN_SESION_LOCAL;
 }
 
 export function cerrarSesion() {
   localStorage.removeItem(CLAVE_USUARIO);
   localStorage.removeItem(CLAVE_ROL);
+  sessionStorage.removeItem(CLAVE_SESION_LOCAL);
   borrarClaveSesion();
   borrarToken();
 }

@@ -129,6 +129,87 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .nav-inferior { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
 .nav-inferior button, .nav-inferior-link { min-height: 54px; }
 
+/* Liquid Glass -- mismo mecanismo que 1.- SUMETEC-PY-SQL/static/css/liquid-
+   glass-theme.css (SUMETEC, proyecto hermano): cristal abajo, luz reactiva al
+   cursor en medio, contenido/controles siempre arriba y con contraste propio.
+   Usa la paleta y los tokens de ESTA app (indigo/violeta), no los de SUMETEC.
+   Nivel "suave": efecto perceptible solo en encabezado/nav, muy sobrio en
+   tarjetas y botones para no competir con los datos. */
+:root {
+  --lg-superficie: color-mix(in srgb, var(--superficie) 80%, transparent);
+  --lg-borde: color-mix(in srgb, var(--primario) 30%, var(--borde));
+  --lg-luz: rgb(255 255 255 / .5);
+  --lg-blur: 14px;
+  --lg-nav-superficie: color-mix(in srgb, var(--fondo) 72%, transparent);
+  --lg-nav-borde: color-mix(in srgb, white 46%, var(--lg-borde));
+  --lg-nav-luz: rgb(255 255 255 / .6);
+  --lg-nav-blur: 22px;
+}
+:root[data-theme='dark'] { --lg-luz: rgb(255 255 255 / .22); --lg-nav-luz: rgb(255 255 255 / .28); --lg-nav-borde: color-mix(in srgb, white 14%, var(--lg-borde)); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) { --lg-luz: rgb(255 255 255 / .22); --lg-nav-luz: rgb(255 255 255 / .28); --lg-nav-borde: color-mix(in srgb, white 14%, var(--lg-borde)); }
+}
+
+.tarjeta, .popup-caja, .btn-primario, .btn-secundario, .encabezado, .nav-inferior {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.tarjeta, .popup-caja {
+  background: var(--lg-superficie);
+  border-color: var(--lg-borde);
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(130%);
+  backdrop-filter: blur(var(--lg-blur)) saturate(130%);
+  box-shadow: var(--sombra), inset 0 1px 0 var(--lg-luz);
+}
+.btn-secundario {
+  background: var(--lg-superficie);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  backdrop-filter: blur(10px) saturate(130%);
+}
+.btn-primario, .btn-secundario { box-shadow: 0 4px 14px rgba(20, 25, 55, .16), inset 0 1px 0 var(--lg-luz); }
+.encabezado, .nav-inferior {
+  border-color: var(--lg-nav-borde);
+  -webkit-backdrop-filter: blur(var(--lg-nav-blur)) saturate(140%);
+  backdrop-filter: blur(var(--lg-nav-blur)) saturate(140%);
+}
+
+/* Anillo de luz reactivo al cursor -- capa decorativa, sin clic, jamás sobre
+   el texto/controles (z-index 0, contenido sube a 1 vía > *). Delegado desde
+   document en shared/liquid.js: solo el elemento bajo el puntero lo activa. */
+.tarjeta::after, .popup-caja::after, .btn-primario::after, .btn-secundario::after,
+.encabezado::after, .nav-inferior::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .16s ease;
+  background: radial-gradient(220px circle at var(--lg-x, 50%) var(--lg-y, 50%), var(--lg-luz), transparent 68%);
+}
+.encabezado::after, .nav-inferior::after {
+  background: radial-gradient(280px circle at var(--lg-x, 50%) var(--lg-y, 50%), var(--lg-nav-luz), transparent 70%);
+}
+.tarjeta.lg-activa::after, .popup-caja.lg-activa::after, .btn-primario.lg-activa::after,
+.btn-secundario.lg-activa::after, .encabezado.lg-activa::after, .nav-inferior.lg-activa::after { opacity: 1; }
+
+.tarjeta > *, .popup-caja > *, .btn-primario > *, .btn-secundario > *, .encabezado > *, .nav-inferior > * {
+  position: relative;
+  z-index: 1;
+}
+
+.tarjeta, .btn-primario, .btn-secundario { transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, opacity .15s ease, background .15s ease; }
+.tarjeta.lg-activa { transform: translateY(-2px); box-shadow: var(--sombra-elevada), inset 0 1px 0 var(--lg-luz); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  .tarjeta.lg-activa { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .tarjeta, .popup-caja, .btn-secundario, .encabezado, .nav-inferior { background: var(--superficie); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .tarjeta::after, .popup-caja::after, .btn-primario::after, .btn-secundario::after, .encabezado::after, .nav-inferior::after { display: none; }
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .tarjeta, .popup-caja, .btn-secundario, .encabezado, .nav-inferior { background: var(--superficie); }
 }

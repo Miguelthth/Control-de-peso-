@@ -1141,6 +1141,47 @@ const LG_SELECTOR = '.tarjeta, .popup-caja, .btn-primario, .btn-secundario, .enc
   }, { passive: true, capture: true });
 })();
 
+// ── shared/cargando.js ──────────────────────────────────────────
+const __modulo_cargando = (function () {
+// Overlay centrado con spinner -- feedback visible mientras Face ID hace su
+// trabajo (sensor + validarPin contra el servidor). Antes no había nada en
+// pantalla entre tocar el botón y que la sesión abriera o fallara, así que
+// Miguel no sabía si el toque se había registrado. Se crea una sola vez y se
+// reusa (no hay que tocar los 3 HTML a mano para agregar el marcado).
+//
+// OJO: mostrarCargando() es solo una mutación de DOM síncrona -- se puede
+// llamar como PRIMERA línea de un handler de toque, antes de
+// passkey.verificar(), sin romper la regla de Safari (nada de await/confirm
+// antes de la llamada real a WebAuthn).
+
+let overlay = null;
+
+function asegurarOverlay() {
+  if (overlay) return overlay;
+  overlay = document.createElement('div');
+  overlay.className = 'cargando-overlay oculto';
+  overlay.setAttribute('role', 'status');
+  overlay.setAttribute('aria-live', 'polite');
+  overlay.innerHTML = '<div class="cargando-caja"><div class="spinner" aria-hidden="true"></div><p class="cargando-texto"></p></div>';
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function mostrarCargando(texto) {
+  const el = asegurarOverlay();
+  el.querySelector('.cargando-texto').textContent = texto || 'Cargando…';
+  el.classList.remove('oculto');
+}
+
+function ocultarCargando() {
+  if (overlay) overlay.classList.add('oculto');
+}
+
+  return { mostrarCargando, ocultarCargando };
+})();
+const mostrarCargando = __modulo_cargando.mostrarCargando;
+const ocultarCargando = __modulo_cargando.ocultarCargando;
+
 // ── gastos/js/modelo.js ──────────────────────────────────────────
 const __modulo_modelo = (function () {
 // Forma de los datos, valores por defecto y validación. Sin DOM, sin storage.
@@ -2040,6 +2081,7 @@ const candado = __modulo_candado;
 const fondo = __modulo_fondo;
 
 
+
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
   location.href = '../index.html';
@@ -2200,8 +2242,9 @@ function mostrarPantallaPassword(modo) {
   document.getElementById('password-confirmar').value = '';
   document.getElementById('password-input').focus();
   if (modo === 'entrar') {
-    intentarEntradaAutomatica().then((ok) => { if (!ok) mostrarBotonFaceId(); });
+    intentarEntradaAutomatica().then((ok) => { if (!ok) { ocultarCargando(); mostrarBotonFaceId(); } });
   } else {
+    ocultarCargando(); // modo 'crear': no hay intento automático, la contraseña se escribe a mano
     document.getElementById('btn-faceid-password').classList.add('oculto');
   }
 }
@@ -2328,6 +2371,7 @@ function mostrarVerificandoPassword(verificando) {
 }
 
 function finalizarConexion(pendienteDeSincronizar, sinConexion = false) {
+  ocultarCargando();
   document.getElementById('pantalla-password').classList.add('oculto');
   document.getElementById('app').classList.remove('oculto');
   if (pendienteDeSincronizar) toast('Tenías cambios sin sincronizar — se están subiendo.', true);
@@ -2361,8 +2405,11 @@ async function confirmarPassword() {
   } else {
     // Este paso SIEMPRE tarda un poco (baja tus datos de Google + descifra
     // con 250,000 vueltas de PBKDF2, a propósito, por seguridad) -- sin
-    // avisar nada aquí, se sentía como que la app se quedó pasmada.
+    // avisar nada aquí, se sentía como que la app se quedó pasmada. El
+    // overlay con spinner cubre también la entrada manual (tocar "Entrar"),
+    // no solo el intento automático de abrirGastos().
     mostrarVerificandoPassword(true);
+    mostrarCargando('Verificando acceso…');
     try {
       const { datos, pendienteDeSincronizar, sinConexion, clave, saltB64 } = await almacen.cargar(getUsuario(), pass, E.lecturaApertura);
       E.clave = clave;
@@ -2393,6 +2440,7 @@ async function confirmarPassword() {
       ofrecerActivarFaceId(claveSesionActual || pass);
       return true;
     } catch (e) {
+      ocultarCargando();
       mostrarVerificandoPassword(false);
       mostrarErrorPassword(e.message || 'Contraseña incorrecta');
       return false;
@@ -3212,12 +3260,17 @@ async function abrirGastos() {
   boton.textContent = 'Abriendo…';
   E.reintentandoApertura = false;
   E.lecturaApertura = almacen.crearLecturaApertura(getUsuario());
+  // Cubre el hueco real de entrar desde Peso (o el launcher): la pantalla de
+  // contraseña sigue oculta mientras esto revisa si ya tienes datos, así que
+  // sin esto no se veía nada en pantalla durante ese rato.
+  mostrarCargando('Abriendo tus gastos…');
   try {
     const yaExiste = await almacen.existeGastos(getUsuario(), E.lecturaApertura);
     boton.disabled = false;
     boton.textContent = 'Entrar';
     mostrarPantallaPassword(yaExiste ? 'entrar' : 'crear');
   } catch (e) {
+    ocultarCargando();
     pantallaTitulo.textContent = 'No pudimos abrir tus gastos';
     mostrarErrorPassword((e.message || 'Error de conexión') + ' Intenta de nuevo.');
     boton.disabled = false;

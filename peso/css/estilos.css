@@ -250,7 +250,10 @@ button, input { font-family: inherit; }
   width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--borde);
   background: var(--superficie); color: var(--texto); font-size: 16px; /* <16px hace zoom automático en iOS */
 }
-.campo input:focus { outline: none; border-color: var(--primario); box-shadow: var(--anillo); }
+/* El brillo al enfocar (borde + box-shadow) vive en shared/tema.css -- ahí
+   ya cubre TODOS los input/select/textarea del sistema. Esta regla se
+   quitó porque, al cargar después y con más especificidad (.campo input),
+   tapaba ese brillo en cada campo numérico de Peso (peso, series, etc). */
 
 .nav-inferior {
   position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: center;

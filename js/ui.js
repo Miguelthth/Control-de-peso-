@@ -6,6 +6,7 @@ import * as passkey from '../shared/passkey.js';
 import * as candado from '../shared/candado.js';
 import * as fondo from '../shared/fondo.js';
 import { exigirBackendActual, guardarToken, borrarToken, pinNuevoValido } from '../shared/autorizacion.js';
+import { mostrarCargando, ocultarCargando } from '../shared/cargando.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -48,14 +49,21 @@ async function renderFaceIdUsuarios() {
 // PRIMERO dentro de un handler de click -- nunca después de un await, un
 // confirm() nativo, ni al cargar la página (ahí las rechaza en seco).
 async function autenticarConFaceId(usuario, mostrarError) {
+  // Síncrono, va ANTES de passkey.verificar() -- no es un await/confirm(),
+  // así que no rompe la regla de Safari de arriba. Cubre justo el hueco que
+  // reportó Miguel: tocar el botón y no ver nada hasta que el sensor Y
+  // después el servidor (validarPin) terminan.
+  mostrarCargando('Entrando…');
   try {
     await passkey.verificar(usuario);
   } catch (e) {
+    ocultarCargando();
     mostrarError(e.message);
     return false;
   }
   const datos = candado.leerCandado('launcher', usuario);
   if (!datos) {
+    ocultarCargando();
     mostrarError('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
     return false;
   }
@@ -64,16 +72,19 @@ async function autenticarConFaceId(usuario, mostrarError) {
     acceso = await api.validarPin(usuario, datos.pin || '');
     exigirBackendActual(acceso, { requiereToken: true });
   } catch (e) {
+    ocultarCargando();
     mostrarError('No se pudo validar la sesión: ' + e.message);
     return false;
   }
   if (!accesoFaceIdValido(acceso)) {
+    ocultarCargando();
     mostrarError('La sesión expiró. Entra con tu PIN para continuar.');
     return false;
   }
   candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
   guardarClaveSesion(datos.pin || ''); // misma idea: Gastos la prueba sola, sin volver a preguntar
   iniciarSesion(usuario, datos.rol, acceso.token);
+  ocultarCargando();
   mostrarInicio();
   return true;
 }

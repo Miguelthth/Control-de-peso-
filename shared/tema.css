@@ -137,6 +137,30 @@ input:focus, select:focus, textarea:focus {
 .nav-inferior { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
 .nav-inferior button, .nav-inferior-link { min-height: 54px; }
 
+/* Overlay de carga centrado -- ver shared/cargando.js. Se usa mientras
+   Face ID hace su trabajo (sensor + validarPin), para que quede claro que
+   el toque sí se registró y algo está pasando. */
+.cargando-overlay {
+  position: fixed; inset: 0; z-index: 3000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 10, 18, .45);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.cargando-caja {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 22px 30px; border-radius: var(--radio-lg);
+  border: 1px solid var(--borde);
+  background: color-mix(in srgb, var(--superficie) 92%, transparent);
+  box-shadow: var(--sombra-elevada);
+}
+.cargando-texto { margin: 0; font-size: .85rem; color: var(--texto-suave); }
+.spinner {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid var(--borde); border-top-color: var(--primario);
+  animation: sm-girar .8s linear infinite;
+}
+@keyframes sm-girar { to { transform: rotate(360deg); } }
+
 /* Liquid Glass -- mismo mecanismo que 1.- SUMETEC-PY-SQL/static/css/liquid-
    glass-theme.css (SUMETEC, proyecto hermano): cristal abajo, luz reactiva al
    cursor en medio, contenido/controles siempre arriba y con contraste propio.
@@ -158,12 +182,13 @@ input:focus, select:focus, textarea:focus {
   :root:not([data-theme='light']) { --lg-luz: rgb(255 255 255 / .22); --lg-nav-luz: rgb(255 255 255 / .28); --lg-nav-borde: color-mix(in srgb, white 14%, var(--lg-borde)); }
 }
 
-.tarjeta, .popup-caja, .btn-primario, .btn-secundario, .encabezado, .nav-inferior {
+.tarjeta, .popup-caja, .btn-primario, .btn-secundario, .encabezado, .nav-inferior,
+.tarjeta-persona, .tarjeta-ejercicio-actual, .kpi, .modal-caja {
   position: relative;
   isolation: isolate;
   overflow: hidden;
 }
-.tarjeta, .popup-caja {
+.tarjeta, .popup-caja, .tarjeta-persona, .tarjeta-ejercicio-actual, .kpi, .modal-caja {
   background: var(--lg-superficie);
   border-color: var(--lg-borde);
   -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(130%);
@@ -186,7 +211,8 @@ input:focus, select:focus, textarea:focus {
    el texto/controles (z-index 0, contenido sube a 1 vía > *). Delegado desde
    document en shared/liquid.js: solo el elemento bajo el puntero lo activa. */
 .tarjeta::after, .popup-caja::after, .btn-primario::after, .btn-secundario::after,
-.encabezado::after, .nav-inferior::after {
+.encabezado::after, .nav-inferior::after,
+.tarjeta-persona::after, .tarjeta-ejercicio-actual::after, .kpi::after, .modal-caja::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -200,7 +226,9 @@ input:focus, select:focus, textarea:focus {
   background: radial-gradient(280px circle at var(--lg-x, 50%) var(--lg-y, 50%), var(--lg-nav-luz), transparent 70%);
 }
 .tarjeta.lg-activa::after, .popup-caja.lg-activa::after, .btn-primario.lg-activa::after,
-.btn-secundario.lg-activa::after, .encabezado.lg-activa::after, .nav-inferior.lg-activa::after { opacity: 1; }
+.btn-secundario.lg-activa::after, .encabezado.lg-activa::after, .nav-inferior.lg-activa::after,
+.tarjeta-persona.lg-activa::after, .tarjeta-ejercicio-actual.lg-activa::after,
+.kpi.lg-activa::after, .modal-caja.lg-activa::after { opacity: 1; }
 
 /* Brillo al TOCAR, no solo al pasar el mouse -- :active dispara con el dedo
    igual que con el mouse (a diferencia de pointermove), así que esto es lo
@@ -211,30 +239,39 @@ input:focus, select:focus, textarea:focus {
    (:focus-within) -- así "tocar el tablero de números" ilumina la tarjeta
    que lo envuelve, no solo el campo. */
 .tarjeta:active::after, .popup-caja:active::after, .btn-primario:active::after, .btn-secundario:active::after,
-.tarjeta:focus-within::after, .popup-caja:focus-within::after {
+.tarjeta:focus-within::after, .popup-caja:focus-within::after,
+.tarjeta-persona:active::after, .tarjeta-ejercicio-actual:active::after, .kpi:active::after, .modal-caja:active::after,
+.tarjeta-persona:focus-within::after {
   opacity: 1;
 }
-.tarjeta:active, .popup-caja:active, .tarjeta:focus-within, .popup-caja:focus-within {
+.tarjeta:active, .popup-caja:active, .tarjeta:focus-within, .popup-caja:focus-within,
+.tarjeta-persona:active, .tarjeta-ejercicio-actual:active, .kpi:active, .modal-caja:active, .tarjeta-persona:focus-within {
   border-color: color-mix(in srgb, var(--primario) 55%, var(--lg-borde));
   box-shadow: var(--sombra), inset 0 1px 0 var(--lg-luz), 0 0 0 1px color-mix(in srgb, var(--primario) 35%, transparent);
 }
 
-.tarjeta > *, .popup-caja > *, .btn-primario > *, .btn-secundario > *, .encabezado > *, .nav-inferior > * {
+.tarjeta > *, .popup-caja > *, .btn-primario > *, .btn-secundario > *, .encabezado > *, .nav-inferior > *,
+.tarjeta-persona > *, .tarjeta-ejercicio-actual > *, .kpi > *, .modal-caja > * {
   position: relative;
   z-index: 1;
 }
 
-.tarjeta, .btn-primario, .btn-secundario { transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, opacity .15s ease, background .15s ease; }
-.tarjeta.lg-activa { transform: translateY(-2px); box-shadow: var(--sombra-elevada), inset 0 1px 0 var(--lg-luz); }
+.tarjeta, .btn-primario, .btn-secundario, .tarjeta-persona, .tarjeta-ejercicio-actual, .kpi, .modal-caja {
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, opacity .15s ease, background .15s ease;
+}
+.tarjeta.lg-activa, .tarjeta-persona.lg-activa, .kpi.lg-activa { transform: translateY(-2px); box-shadow: var(--sombra-elevada), inset 0 1px 0 var(--lg-luz); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
-  .tarjeta.lg-activa { transform: none; }
+  .tarjeta.lg-activa, .tarjeta-persona.lg-activa, .kpi.lg-activa { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .tarjeta, .popup-caja, .btn-secundario, .encabezado, .nav-inferior { background: var(--superficie); -webkit-backdrop-filter: none; backdrop-filter: none; }
-  .tarjeta::after, .popup-caja::after, .btn-primario::after, .btn-secundario::after, .encabezado::after, .nav-inferior::after { display: none; }
+  .tarjeta, .popup-caja, .btn-secundario, .encabezado, .nav-inferior,
+  .tarjeta-persona, .tarjeta-ejercicio-actual, .kpi, .modal-caja { background: var(--superficie); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .tarjeta::after, .popup-caja::after, .btn-primario::after, .btn-secundario::after, .encabezado::after, .nav-inferior::after,
+  .tarjeta-persona::after, .tarjeta-ejercicio-actual::after, .kpi::after, .modal-caja::after { display: none; }
 }
 @supports not (backdrop-filter: blur(1px)) {
-  .tarjeta, .popup-caja, .btn-secundario, .encabezado, .nav-inferior { background: var(--superficie); }
+  .tarjeta, .popup-caja, .btn-secundario, .encabezado, .nav-inferior,
+  .tarjeta-persona, .tarjeta-ejercicio-actual, .kpi, .modal-caja { background: var(--superficie); }
 }

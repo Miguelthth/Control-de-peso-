@@ -928,6 +928,47 @@ const LG_SELECTOR = '.tarjeta, .popup-caja, .btn-primario, .btn-secundario, .enc
   }, { passive: true, capture: true });
 })();
 
+// ── shared/cargando.js ──────────────────────────────────────────
+const __modulo_cargando = (function () {
+// Overlay centrado con spinner -- feedback visible mientras Face ID hace su
+// trabajo (sensor + validarPin contra el servidor). Antes no había nada en
+// pantalla entre tocar el botón y que la sesión abriera o fallara, así que
+// Miguel no sabía si el toque se había registrado. Se crea una sola vez y se
+// reusa (no hay que tocar los 3 HTML a mano para agregar el marcado).
+//
+// OJO: mostrarCargando() es solo una mutación de DOM síncrona -- se puede
+// llamar como PRIMERA línea de un handler de toque, antes de
+// passkey.verificar(), sin romper la regla de Safari (nada de await/confirm
+// antes de la llamada real a WebAuthn).
+
+let overlay = null;
+
+function asegurarOverlay() {
+  if (overlay) return overlay;
+  overlay = document.createElement('div');
+  overlay.className = 'cargando-overlay oculto';
+  overlay.setAttribute('role', 'status');
+  overlay.setAttribute('aria-live', 'polite');
+  overlay.innerHTML = '<div class="cargando-caja"><div class="spinner" aria-hidden="true"></div><p class="cargando-texto"></p></div>';
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function mostrarCargando(texto) {
+  const el = asegurarOverlay();
+  el.querySelector('.cargando-texto').textContent = texto || 'Cargando…';
+  el.classList.remove('oculto');
+}
+
+function ocultarCargando() {
+  if (overlay) overlay.classList.add('oculto');
+}
+
+  return { mostrarCargando, ocultarCargando };
+})();
+const mostrarCargando = __modulo_cargando.mostrarCargando;
+const ocultarCargando = __modulo_cargando.ocultarCargando;
+
 // ── js/ui.js ──────────────────────────────────────────
 // Launcher: login (URL → usuario → PIN) y los dos botones grandes.
 
@@ -936,6 +977,7 @@ const api = __modulo_api;
 const passkey = __modulo_passkey;
 const candado = __modulo_candado;
 const fondo = __modulo_fondo;
+
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -978,14 +1020,21 @@ async function renderFaceIdUsuarios() {
 // PRIMERO dentro de un handler de click -- nunca después de un await, un
 // confirm() nativo, ni al cargar la página (ahí las rechaza en seco).
 async function autenticarConFaceId(usuario, mostrarError) {
+  // Síncrono, va ANTES de passkey.verificar() -- no es un await/confirm(),
+  // así que no rompe la regla de Safari de arriba. Cubre justo el hueco que
+  // reportó Miguel: tocar el botón y no ver nada hasta que el sensor Y
+  // después el servidor (validarPin) terminan.
+  mostrarCargando('Entrando…');
   try {
     await passkey.verificar(usuario);
   } catch (e) {
+    ocultarCargando();
     mostrarError(e.message);
     return false;
   }
   const datos = candado.leerCandado('launcher', usuario);
   if (!datos) {
+    ocultarCargando();
     mostrarError('Face ID activado pero falta la info guardada en este dispositivo — entra normal esta vez.');
     return false;
   }
@@ -994,16 +1043,19 @@ async function autenticarConFaceId(usuario, mostrarError) {
     acceso = await api.validarPin(usuario, datos.pin || '');
     exigirBackendActual(acceso, { requiereToken: true });
   } catch (e) {
+    ocultarCargando();
     mostrarError('No se pudo validar la sesión: ' + e.message);
     return false;
   }
   if (!accesoFaceIdValido(acceso)) {
+    ocultarCargando();
     mostrarError('La sesión expiró. Entra con tu PIN para continuar.');
     return false;
   }
   candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
   guardarClaveSesion(datos.pin || ''); // misma idea: Gastos la prueba sola, sin volver a preguntar
   iniciarSesion(usuario, datos.rol, acceso.token);
+  ocultarCargando();
   mostrarInicio();
   return true;
 }

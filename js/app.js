@@ -320,13 +320,20 @@ function debeConfirmarNavegacion({ valor, enviado }) {
   return !enviado && String(valor ?? '').trim().length > 0;
 }
 
+// El texto mientras trabaja sale de data-cargando en el botón -- no todo
+// botón "guarda" (ej. el de entrar solo verifica).
 async function ejecutarUnaVez(boton, accion) {
   if (boton.disabled) return undefined;
   const textoOriginal = boton.textContent;
   boton.disabled = true;
-  boton.textContent = 'Guardando…';
+  boton.setAttribute('aria-busy', 'true');
+  boton.textContent = boton.dataset.cargando || 'Guardando…';
   try { return await accion(); }
-  finally { boton.disabled = false; boton.textContent = textoOriginal; }
+  finally {
+    boton.disabled = false;
+    boton.removeAttribute('aria-busy');
+    boton.textContent = textoOriginal;
+  }
 }
 
 function sesionAutenticada(usuario, token) {
@@ -969,6 +976,282 @@ function ocultarCargando() {
 const mostrarCargando = __modulo_cargando.mostrarCargando;
 const ocultarCargando = __modulo_cargando.ocultarCargando;
 
+// ── shared/dialogo.js ──────────────────────────────────────────
+const __modulo_dialogo = (function () {
+// Diálogos propios en lugar de alert() / confirm() / prompt() nativos: el
+// prompt() nativo muestra en claro lo que escribes (contraseñas incluidas) y
+// en iPhone el texto de un alert() no se puede copiar. Arma su propio DOM;
+// los estilos viven en shared/tema.css (clases dlg-*).
+//
+// OJO Face ID: todo aquí regresa promesas -- nunca va entre un toque y
+// passkey.registrar()/verificar() (ver shared/passkey.js).
+
+let secuencia = 0;
+const abiertos = [];
+
+function crear(tag, clase, texto) {
+  const el = document.createElement(tag);
+  if (clase) el.className = clase;
+  if (texto !== undefined && texto !== null) el.textContent = texto;
+  return el;
+}
+
+function valoresDe(inputs) {
+  const valores = {};
+  for (const input of inputs) valores[input.name] = input.type === 'checkbox' ? input.checked : input.value;
+  return valores;
+}
+
+function crearCampo(caja, campo, id) {
+  const esCheck = campo.tipo === 'checkbox';
+  const input = crear('input', esCheck ? 'dlg-check' : 'dlg-input');
+  input.type = campo.tipo || 'text';
+  input.name = campo.nombre;
+  input.id = id;
+  if (esCheck) {
+    input.checked = Boolean(campo.valor);
+    const etiqueta = crear('label', 'dlg-etiqueta-check');
+    etiqueta.htmlFor = id;
+    etiqueta.append(input, crear('span', null, campo.etiqueta));
+    caja.appendChild(etiqueta);
+    return input;
+  }
+  input.value = campo.valor || '';
+  input.autocomplete = campo.autocomplete || 'off';
+  if (campo.placeholder) input.placeholder = campo.placeholder;
+  if (campo.inputmode) input.inputMode = campo.inputmode;
+  if (input.type !== 'password') {
+    input.setAttribute('autocapitalize', campo.autocapitalize || 'off');
+    input.setAttribute('autocorrect', 'off');
+    input.spellcheck = false;
+  }
+  const etiqueta = crear('label', 'dlg-etiqueta', campo.etiqueta);
+  etiqueta.htmlFor = id;
+  caja.appendChild(etiqueta);
+  if (input.type !== 'password') {
+    caja.appendChild(input);
+    return input;
+  }
+  const envoltura = crear('div', 'dlg-envoltura-pass');
+  const ver = crear('button', 'dlg-ver', 'Mostrar');
+  ver.type = 'button';
+  ver.setAttribute('aria-controls', id);
+  ver.setAttribute('aria-pressed', 'false');
+  ver.addEventListener('click', () => {
+    const mostrar = input.type === 'password';
+    input.type = mostrar ? 'text' : 'password';
+    ver.textContent = mostrar ? 'Ocultar' : 'Mostrar';
+    ver.setAttribute('aria-pressed', String(mostrar));
+    input.focus();
+  });
+  envoltura.append(input, ver);
+  caja.appendChild(envoltura);
+  return input;
+}
+
+function crearCodigo(caja, codigo) {
+  const bloque = crear('div', 'dlg-codigo');
+  const valor = crear('code', 'dlg-codigo-valor', codigo);
+  const copiar = crear('button', 'btn-secundario', 'Copiar');
+  copiar.type = 'button';
+  copiar.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(codigo);
+      copiar.textContent = 'Copiado ✓';
+    } catch {
+      const rango = document.createRange();
+      rango.selectNodeContents(valor);
+      getSelection().removeAllRanges();
+      getSelection().addRange(rango);
+      copiar.textContent = 'Seleccionado';
+    }
+  });
+  bloque.append(valor, copiar);
+  caja.appendChild(bloque);
+}
+
+// Base de todos los demás. Regresa los valores de los campos ({} si no hay
+// campos) al aceptar, o null al cancelar. `validar(valores)` puede ser async
+// (ej. revisar la contraseña con el servidor): si regresa un texto -- o
+// { mensaje, campo } -- el diálogo sigue abierto y lo muestra ahí mismo.
+function pedirFormulario({
+  titulo, mensaje = '', campos = [], codigo = null, aceptar = 'Aceptar', cancelar = 'Cancelar',
+  peligro = false, validar = null, habilitarSi = null, textoProcesando = 'Verificando…',
+} = {}) {
+  return new Promise((resolve) => {
+    const id = `dlg-${++secuencia}`;
+    const focoAnterior = document.activeElement;
+    const fondo = crear('div', 'dlg-fondo');
+    const caja = crear('form', 'dlg-caja');
+    caja.noValidate = true;
+    caja.setAttribute('role', campos.length ? 'dialog' : 'alertdialog');
+    caja.setAttribute('aria-modal', 'true');
+    caja.setAttribute('aria-labelledby', `${id}-titulo`);
+    const h = crear('h2', 'dlg-titulo', titulo);
+    h.id = `${id}-titulo`;
+    caja.appendChild(h);
+    if (mensaje) {
+      const p = crear('p', 'dlg-mensaje', mensaje);
+      p.id = `${id}-mensaje`;
+      caja.setAttribute('aria-describedby', p.id);
+      caja.appendChild(p);
+    }
+    if (codigo) crearCodigo(caja, codigo);
+    const inputs = campos.map((campo, i) => crearCampo(caja, campo, `${id}-campo-${i}`));
+    const error = crear('p', 'dlg-error oculto');
+    error.setAttribute('role', 'alert');
+    caja.appendChild(error);
+
+    const botones = crear('div', 'dlg-botones');
+    const btnCancelar = cancelar ? crear('button', 'btn-secundario', cancelar) : null;
+    if (btnCancelar) {
+      btnCancelar.type = 'button';
+      botones.appendChild(btnCancelar);
+    }
+    const btnAceptar = crear('button', peligro ? 'btn-primario dlg-peligro' : 'btn-primario', aceptar);
+    btnAceptar.type = 'submit';
+    botones.appendChild(btnAceptar);
+    caja.appendChild(botones);
+    fondo.appendChild(caja);
+
+    let procesando = false;
+    const actualizarHabilitado = () => {
+      if (habilitarSi && !procesando) btnAceptar.disabled = !habilitarSi(valoresDe(inputs));
+    };
+    const cerrar = (resultado) => {
+      abiertos.splice(abiertos.indexOf(fondo), 1);
+      document.removeEventListener('keydown', onKey, true);
+      fondo.remove();
+      if (focoAnterior && document.contains(focoAnterior)) focoAnterior.focus?.();
+      resolve(resultado);
+    };
+    const cancelarDialogo = () => {
+      if (!procesando) cerrar(cancelar ? null : {});
+    };
+    const onKey = (e) => {
+      if (abiertos[abiertos.length - 1] !== fondo) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelarDialogo();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const lista = [...caja.querySelectorAll('button, input')].filter((el) => !el.disabled);
+      const primero = lista[0];
+      const ultimo = lista[lista.length - 1];
+      if (e.shiftKey && (document.activeElement === primero || !caja.contains(document.activeElement))) { e.preventDefault(); ultimo.focus(); }
+      else if (!e.shiftKey && (document.activeElement === ultimo || !caja.contains(document.activeElement))) { e.preventDefault(); primero.focus(); }
+    };
+
+    caja.addEventListener('input', () => {
+      error.classList.add('oculto');
+      inputs.forEach((input) => input.removeAttribute('aria-invalid'));
+      actualizarHabilitado();
+    });
+    btnCancelar?.addEventListener('click', cancelarDialogo);
+    fondo.addEventListener('click', (e) => {
+      if (e.target === fondo && !campos.length) cancelarDialogo();
+    });
+    caja.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (procesando || btnAceptar.disabled) return;
+      const valores = valoresDe(inputs);
+      if (validar) {
+        procesando = true;
+        const texto = btnAceptar.textContent;
+        btnAceptar.disabled = true;
+        btnAceptar.textContent = textoProcesando;
+        btnAceptar.setAttribute('aria-busy', 'true');
+        if (btnCancelar) btnCancelar.disabled = true;
+        let problema;
+        try { problema = await validar(valores); }
+        catch (err) { problema = err?.message || 'Algo salió mal. Intenta de nuevo.'; }
+        procesando = false;
+        btnAceptar.textContent = texto;
+        btnAceptar.removeAttribute('aria-busy');
+        btnAceptar.disabled = false;
+        if (btnCancelar) btnCancelar.disabled = false;
+        actualizarHabilitado();
+        if (problema) {
+          error.textContent = typeof problema === 'string' ? problema : problema.mensaje;
+          error.classList.remove('oculto');
+          const campo = inputs.find((input) => input.name === problema.campo) || inputs.find((input) => input.type !== 'checkbox');
+          if (campo) {
+            campo.setAttribute('aria-invalid', 'true');
+            campo.focus();
+            campo.select?.();
+          }
+          return;
+        }
+      }
+      cerrar(valores);
+    });
+
+    abiertos.push(fondo);
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(fondo);
+    actualizarHabilitado();
+    const focoInicial = inputs.find((input) => input.type !== 'checkbox') || (peligro && btnCancelar) || btnAceptar;
+    focoInicial.focus();
+  });
+}
+
+async function pedirTexto({ campo = {}, validar = null, ...opciones } = {}) {
+  const r = await pedirFormulario({
+    ...opciones,
+    campos: [{ nombre: 'valor', ...campo }],
+    validar: validar && ((valores) => validar(valores.valor)),
+  });
+  return r ? r.valor : null;
+}
+
+async function pedirConfirmacion(opciones) {
+  return (await pedirFormulario({ ...opciones, campos: [] })) !== null;
+}
+
+async function mostrarAviso(opciones) {
+  await pedirFormulario({ aceptar: 'Entendido', ...opciones, campos: [], cancelar: null });
+}
+
+// Para lo que no tiene vuelta atrás: el botón se habilita solo cuando
+// escribes la palabra, en vez de fallar en silencio si la escribes mal.
+async function pedirConfirmacionEscrita({ palabra = 'BORRAR', ...opciones }) {
+  const r = await pedirFormulario({
+    peligro: true,
+    ...opciones,
+    campos: [{ nombre: 'palabra', etiqueta: `Escribe ${palabra} para confirmar`, placeholder: palabra, autocapitalize: 'characters' }],
+    habilitarSi: (valores) => valores.palabra.trim().toUpperCase() === palabra,
+  });
+  return r !== null;
+}
+
+let aviso = null;
+let avisoTimer = null;
+
+function avisoBreve(texto, { error = false } = {}) {
+  if (!aviso) {
+    aviso = crear('div', 'dlg-aviso');
+    aviso.setAttribute('role', 'status');
+    aviso.setAttribute('aria-live', 'polite');
+    document.body.appendChild(aviso);
+  }
+  clearTimeout(avisoTimer);
+  aviso.classList.toggle('dlg-aviso-error', error);
+  aviso.textContent = texto;
+  aviso.classList.add('visible');
+  avisoTimer = setTimeout(() => aviso.classList.remove('visible'), error ? 4500 : 2600);
+}
+
+  return { pedirFormulario, pedirTexto, pedirConfirmacion, mostrarAviso, pedirConfirmacionEscrita, avisoBreve };
+})();
+const pedirFormulario = __modulo_dialogo.pedirFormulario;
+const pedirTexto = __modulo_dialogo.pedirTexto;
+const pedirConfirmacion = __modulo_dialogo.pedirConfirmacion;
+const mostrarAviso = __modulo_dialogo.mostrarAviso;
+const pedirConfirmacionEscrita = __modulo_dialogo.pedirConfirmacionEscrita;
+const avisoBreve = __modulo_dialogo.avisoBreve;
+
 // ── js/ui.js ──────────────────────────────────────────
 // Launcher: login (URL → usuario → PIN) y los dos botones grandes.
 
@@ -977,6 +1260,7 @@ const api = __modulo_api;
 const passkey = __modulo_passkey;
 const candado = __modulo_candado;
 const fondo = __modulo_fondo;
+
 
 
 api.configurarManejadorAuth(() => {
@@ -1049,7 +1333,7 @@ async function autenticarConFaceId(usuario, mostrarError) {
   }
   if (!accesoFaceIdValido(acceso)) {
     ocultarCargando();
-    mostrarError('La sesión expiró. Entra con tu PIN para continuar.');
+    mostrarError('La sesión expiró. Entra con tu contraseña para continuar.');
     return false;
   }
   candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
@@ -1132,10 +1416,10 @@ async function activarFaceIdConPin(usuario, rol, pin) {
     if (!passkey.tieneRegistro(usuario)) await passkey.registrar(usuario); // reusa el de Gastos si ya existe
     candado.guardarCandado('launcher', usuario, { pin, rol });
     candado.marcarFaceIdConfirmado();
-    alert('Face ID activado ✓ — la próxima vez que abras la app te lo va a pedir.');
+    avisoBreve('Face ID activado ✓ — te lo pedirá la próxima vez que abras la app.');
     actualizarBotonesFaceId();
   } catch (e) {
-    alert('No se pudo activar Face ID: ' + e.message);
+    mostrarAviso({ titulo: 'No se pudo activar Face ID', mensaje: e.message });
   }
 }
 
@@ -1151,7 +1435,7 @@ async function ofrecerFaceId(usuario, rol, pin) {
   }
   if (!(await passkey.disponible())) return;
   popupFaceId(
-    '¿Activar Face ID en este iPhone para no volver a teclear tu PIN?',
+    '¿Activar Face ID en este iPhone para no volver a teclear tu contraseña?',
     () => activarFaceIdConPin(usuario, rol, pin)
   );
 }
@@ -1160,24 +1444,25 @@ async function activarFaceId() {
   const usuario = getUsuario();
   const motivo = await passkey.porQueNoDisponible();
   if (motivo) {
-    alert('No se puede activar Face ID aquí:\n\n' + motivo);
+    mostrarAviso({ titulo: 'Face ID no está disponible aquí', mensaje: motivo });
     return;
   }
-  const pin = prompt('Para activar Face ID, confirma tu PIN actual:') || '';
-  try {
-    const r = await api.validarPin(usuario, pin);
-    exigirBackendActual(r, { requiereToken: true });
-    if (!r.ok) {
-      alert('PIN incorrecto');
-      return;
-    }
-  } catch (e) {
-    alert('No se pudo confirmar: ' + e.message);
-    return;
-  }
-  // El PIN ya quedó validado arriba; el registro se hace hasta que toques
-  // el botón del popup, porque Safari lo exige (el prompt y la llamada de
-  // red de arriba ya "gastaron" el toque original del botón de Ajustes).
+  const pin = await pedirTexto({
+    titulo: 'Activar Face ID',
+    mensaje: 'Confirma tu contraseña actual para activarlo en este dispositivo.',
+    campo: { tipo: 'password', etiqueta: 'Contraseña', autocomplete: 'current-password' },
+    aceptar: 'Continuar',
+    validar: async (valor) => {
+      if (!valor) return 'Escribe tu contraseña.';
+      const r = await api.validarPin(usuario, valor);
+      exigirBackendActual(r, { requiereToken: true });
+      return r.ok ? null : 'Contraseña incorrecta.';
+    },
+  });
+  if (pin === null) return;
+  // La contraseña ya quedó validada arriba; el registro se hace hasta que
+  // toques el botón del popup, porque Safari lo exige (el diálogo y la
+  // llamada de red ya "gastaron" el toque original del botón de Ajustes).
   popupFaceId('Confirma para activar Face ID en este iPhone.', () => activarFaceIdConPin(usuario, getRol(), pin));
 }
 
@@ -1225,17 +1510,34 @@ function mostrarInicio() {
 }
 
 async function agregarUsuario() {
-  const nombreNuevo = prompt('Nombre del usuario nuevo:');
-  if (!nombreNuevo || !nombreNuevo.trim()) return;
-  const esOtroAdmin = confirm('¿Este usuario también es administrador?\n\nAceptar = sí, administrador.\nCancelar = no, usuario normal.');
-  try {
-    const r = await api.crearUsuario(nombreNuevo.trim(), esOtroAdmin ? 'admin' : 'normal');
-    exigirBackendActual(r);
-    if (r.ok && r.codigoActivacion) alert(`Usuario creado. Código de activación de un solo uso para ${nombreNuevo.trim()}:\n\n${r.codigoActivacion}\n\nEntrégaselo por un canal privado; no volverá a mostrarse.`);
-    else alert(r.error || 'No se pudo crear');
-  } catch (e) {
-    alert('No se pudo crear: ' + e.message);
-  }
+  let creado = null;
+  const datos = await pedirFormulario({
+    titulo: 'Agregar usuario',
+    mensaje: 'Se genera un código de un solo uso para que la persona cree su propia contraseña.',
+    campos: [
+      { nombre: 'nombre', etiqueta: 'Nombre de usuario', autocomplete: 'off' },
+      { nombre: 'admin', tipo: 'checkbox', etiqueta: 'También es administrador' },
+    ],
+    aceptar: 'Crear usuario',
+    textoProcesando: 'Creando…',
+    validar: async ({ nombre, admin }) => {
+      const limpio = nombre.trim();
+      if (!limpio) return 'Escribe el nombre del usuario.';
+      if (!usuarioValido(limpio)) return 'Usa solo letras, números, espacios, punto, guion o guion bajo.';
+      const r = await api.crearUsuario(limpio, admin ? 'admin' : 'normal');
+      exigirBackendActual(r);
+      if (!r.ok || !r.codigoActivacion) return r.error || 'No se pudo crear el usuario.';
+      creado = { nombre: limpio, codigo: String(r.codigoActivacion) };
+      return null;
+    },
+  });
+  if (!datos || !creado) return;
+  await mostrarAviso({
+    titulo: `${creado.nombre} ya tiene cuenta`,
+    mensaje: 'Entrégale este código de activación por un canal privado. Es de un solo uso y no se volverá a mostrar.',
+    codigo: creado.codigo,
+    aceptar: 'Ya lo guardé',
+  });
 }
 
 function mostrarErrorUsuario(msg) {
@@ -1246,6 +1548,15 @@ function mostrarErrorUsuario(msg) {
 
 function mostrarErrorPin(msg) {
   const el = document.getElementById('pin-error');
+  el.textContent = msg;
+  el.classList.remove('oculto');
+  const input = document.getElementById('pin-input');
+  input.focus();
+  input.select();
+}
+
+function mostrarErrorActivacion(msg) {
+  const el = document.getElementById('activacion-error');
   el.textContent = msg;
   el.classList.remove('oculto');
 }
@@ -1303,12 +1614,14 @@ function volverAUsuario() {
 
 async function continuarPin() {
   const pin = document.getElementById('pin-input').value;
-  const boton = document.getElementById('btn-pin-continuar');
-  boton.textContent = 'Verificando…';
+  if (!pin) {
+    mostrarErrorPin('Escribe tu contraseña.');
+    return;
+  }
   try {
     if (!navigator.onLine) {
       if (!(await validarAccesoLocal(usuarioTemp, pin))) {
-        mostrarErrorPin('PIN incorrecto o este teléfono no está preparado para entrar sin internet.');
+        mostrarErrorPin('Contraseña incorrecta, o este teléfono todavía no puede entrar sin internet (entra una vez con conexión).');
         return;
       }
       iniciarSesionLocal(usuarioTemp, rolTemp);
@@ -1319,7 +1632,7 @@ async function continuarPin() {
     const r = await api.validarPin(usuarioTemp, pin);
     exigirBackendActual(r, { requiereToken: true });
     if (!r.ok) {
-      mostrarErrorPin('PIN incorrecto');
+      mostrarErrorPin('Contraseña incorrecta.');
       return;
     }
     iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
@@ -1329,18 +1642,14 @@ async function continuarPin() {
     ofrecerFaceId(usuarioTemp, rolTemp, pin);
   } catch (e) {
     mostrarErrorPin('No se pudo validar: ' + e.message);
-  } finally {
-    boton.textContent = 'Entrar';
   }
 }
 
 async function validarCodigoActivacion() {
-  const codigo = document.getElementById('codigo-activacion-input').value.trim();
-  const error = document.getElementById('activacion-error');
-  error.classList.add('oculto');
+  const codigo = document.getElementById('codigo-activacion-input').value.replace(/\s+/g, '');
+  document.getElementById('activacion-error').classList.add('oculto');
   if (!/^\d{8,}$/.test(codigo)) {
-    error.textContent = 'El código de activación debe tener al menos 8 dígitos.';
-    error.classList.remove('oculto');
+    mostrarErrorActivacion('El código de activación debe tener al menos 8 dígitos.');
     return;
   }
   try {
@@ -1355,20 +1664,27 @@ async function validarCodigoActivacion() {
     document.getElementById('pin-nuevo-input').focus();
   } catch (e) {
     borrarToken();
-    error.textContent = e.message;
-    error.classList.remove('oculto');
+    mostrarErrorActivacion(e.message);
   }
 }
 
 async function guardarPinNuevo() {
   const pin = document.getElementById('pin-nuevo-input').value;
+  document.getElementById('activacion-error').classList.add('oculto');
   if (!pinNuevoValido(pin)) {
-    alert('La contraseña debe tener al menos 6 caracteres');
+    mostrarErrorActivacion('La contraseña debe tener al menos 6 caracteres.');
+    document.getElementById('pin-nuevo-input').focus();
     return;
   }
-  const r = await api.crearPin(usuarioTemp, pin);
-  exigirBackendActual(r, { requiereToken: true });
-  if (!r.ok || !r.token) throw new Error(r.error || 'No se pudo crear el PIN');
+  let r;
+  try {
+    r = await api.crearPin(usuarioTemp, pin);
+    exigirBackendActual(r, { requiereToken: true });
+    if (!r.ok || !r.token) throw new Error(r.error || 'No se pudo crear la contraseña.');
+  } catch (e) {
+    mostrarErrorActivacion(e.message);
+    return;
+  }
   iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
   try { await guardarAccesoLocal(usuarioTemp, pin); } catch { /* El acceso en línea sigue siendo válido. */ }
   guardarClaveSesion(pin); // Gastos la prueba sola al abrir, sin volver a preguntar
@@ -1415,6 +1731,14 @@ function wireEventos() {
 
   document.getElementById('btn-pin-nuevo-mostrar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, validarCodigoActivacion));
   document.getElementById('btn-pin-nuevo-guardar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarPinNuevo));
+  for (const [campo, boton] of [['codigo-activacion-input', 'btn-pin-nuevo-mostrar'], ['pin-nuevo-input', 'btn-pin-nuevo-guardar']]) {
+    document.getElementById(campo).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById(boton).click();
+    });
+    document.getElementById(campo).addEventListener('input', () => {
+      document.getElementById('activacion-error').classList.add('oculto');
+    });
+  }
 
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
     document.getElementById('popup-ajustes').classList.add('oculto');
@@ -1424,12 +1748,22 @@ function wireEventos() {
     renderFaceIdUsuarios();
   });
 
+  const popupAjustes = document.getElementById('popup-ajustes');
+  const cerrarAjustes = () => {
+    popupAjustes.classList.add('oculto');
+    document.getElementById('btn-abrir-ajustes').focus();
+  };
   document.getElementById('btn-abrir-ajustes').addEventListener('click', () => {
     actualizarBotonesFaceId();
-    document.getElementById('popup-ajustes').classList.remove('oculto');
+    popupAjustes.classList.remove('oculto');
+    document.getElementById('btn-cerrar-ajustes').focus();
   });
-  document.getElementById('btn-cerrar-ajustes').addEventListener('click', () => {
-    document.getElementById('popup-ajustes').classList.add('oculto');
+  document.getElementById('btn-cerrar-ajustes').addEventListener('click', cerrarAjustes);
+  popupAjustes.addEventListener('click', (e) => {
+    if (e.target === popupAjustes) cerrarAjustes();
+  });
+  popupAjustes.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') cerrarAjustes();
   });
 
   document.getElementById('btn-agregar-usuario').addEventListener('click', agregarUsuario);
@@ -1483,11 +1817,10 @@ async function init() {
   renderFaceIdUsuarios();
 }
 
-// Ver comentario igual en gastos/js/ui.js -- aquí con alert() porque el
-// launcher no tiene toast propio (usa alert() para todo su feedback).
+// Ver comentario igual en gastos/js/ui.js.
 window.addEventListener('unhandledrejection', (e) => {
   console.error('Error sin atrapar:', e.reason);
-  alert('Ocurrió un error: ' + (e.reason?.message || e.reason));
+  mostrarAviso({ titulo: 'Algo salió mal', mensaje: String(e.reason?.message || e.reason) });
 });
 
 document.addEventListener('DOMContentLoaded', init);

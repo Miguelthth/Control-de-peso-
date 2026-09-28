@@ -161,6 +161,73 @@ input:focus, select:focus, textarea:focus {
 }
 @keyframes sm-girar { to { transform: rotate(360deg); } }
 
+/* Diálogos propios -- ver shared/dialogo.js. Arriba del overlay de carga. */
+.dlg-fondo {
+  position: fixed; inset: 0; z-index: 3100;
+  display: flex; align-items: center; justify-content: center;
+  padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+  background: rgba(8, 10, 18, .58);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  animation: dlg-aparecer .16s ease-out;
+}
+.dlg-caja {
+  width: min(100%, 380px); max-height: 100%; overflow-y: auto;
+  display: grid; gap: var(--space-3);
+  margin: 0; padding: var(--space-5);
+  border: 1px solid var(--borde); border-radius: var(--radio-lg);
+  background: var(--superficie); color: var(--texto);
+  box-shadow: var(--sombra-elevada);
+  text-align: left;
+  animation: dlg-subir .2s ease-out;
+}
+.dlg-titulo { margin: 0; font-size: var(--text-lg); line-height: var(--leading-tight); }
+.dlg-mensaje { margin: 0; color: var(--texto-suave); font-size: var(--text-sm); line-height: var(--leading-normal); white-space: pre-line; }
+.dlg-etiqueta { margin: var(--space-1) 0 calc(-1 * var(--space-2)); font-size: var(--text-sm); font-weight: 650; }
+.dlg-etiqueta-check { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; font-size: var(--text-md); cursor: pointer; }
+.dlg-check { width: 22px; height: 22px; min-height: 0; margin: 0; accent-color: var(--primario); }
+.dlg-input {
+  width: 100%; min-height: 48px; margin: 0; padding: 12px 14px;
+  border: 1px solid var(--borde); border-radius: var(--radio-sm);
+  background: var(--superficie-alt); color: var(--texto);
+  font-size: 16px; /* menos de 16px hace que iPhone haga zoom al enfocar */
+}
+.dlg-input[aria-invalid='true'] { border-color: var(--peligro) !important; }
+.dlg-envoltura-pass { position: relative; }
+.dlg-envoltura-pass .dlg-input { padding-right: 96px; }
+.dlg-ver {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+  min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--primario); font-size: var(--text-sm); font-weight: 700;
+}
+.dlg-error { margin: 0; color: var(--peligro); font-size: var(--text-sm); font-weight: 600; }
+.dlg-codigo {
+  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3);
+  border: 1px dashed var(--borde); border-radius: var(--radio-sm); background: var(--superficie-alt);
+}
+.dlg-codigo-valor {
+  flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.35rem; font-weight: 700; letter-spacing: .08em; word-break: break-all;
+  -webkit-user-select: all; user-select: all;
+}
+.dlg-codigo > button { width: auto; max-width: none; margin: 0; padding: 0 16px; }
+.dlg-botones { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.dlg-botones > button { flex: 1; width: auto; max-width: none; margin: 0; padding: 12px 14px; }
+.dlg-botones > .dlg-peligro { background: var(--peligro); box-shadow: 0 8px 20px color-mix(in srgb, var(--peligro) 30%, transparent); }
+.dlg-botones > button:disabled { cursor: not-allowed; }
+.dlg-botones > button[aria-busy='true'] { cursor: wait; }
+.dlg-aviso {
+  position: fixed; left: 50%; bottom: calc(88px + env(safe-area-inset-bottom)); z-index: 3200;
+  max-width: min(92vw, 420px); padding: 12px 18px; border-radius: var(--radio-md);
+  background: var(--texto); color: var(--fondo); box-shadow: var(--sombra-elevada);
+  font-size: var(--text-sm); font-weight: 600; text-align: center;
+  opacity: 0; transform: translate(-50%, 12px); pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.dlg-aviso.visible { opacity: 1; transform: translate(-50%, 0); }
+.dlg-aviso-error { background: var(--peligro); color: #fff; }
+@keyframes dlg-aparecer { from { opacity: 0; } }
+@keyframes dlg-subir { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+
 /* Liquid Glass -- mismo mecanismo que 1.- SUMETEC-PY-SQL/static/css/liquid-
    glass-theme.css (SUMETEC, proyecto hermano): cristal abajo, luz reactiva al
    cursor en medio, contenido/controles siempre arriba y con contraste propio.

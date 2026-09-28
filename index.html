@@ -34,7 +34,7 @@
     <button type="button" class="btn-secundario oculto" id="btn-mostrar-usuario-form">Iniciar con usuario y contraseña</button>
     <div id="usuario-form" class="oculto">
       <input type="text" id="usuario-input" aria-label="Usuario" placeholder="Usuario" autocomplete="username">
-      <button class="btn-primario" id="btn-usuario-continuar">Continuar</button>
+      <button class="btn-primario" id="btn-usuario-continuar" data-cargando="Buscando…">Continuar</button>
     </div>
     <p id="usuario-error" class="oculto texto-error" role="alert" aria-live="assertive"></p>
   </div>
@@ -45,7 +45,7 @@
     <button class="btn-volver-acceso" id="btn-pin-volver" type="button" aria-label="Regresar a usuario">←</button>
     <div class="marca-acceso compacta"><img src="icon-512.png" alt=""><div><strong>Confirma que eres tú</strong><span>Tu contraseña protege el acceso</span></div></div>
     <input type="password" id="pin-input" aria-label="Contraseña" class="input-pin" placeholder="Contraseña" autocomplete="current-password">
-    <button class="btn-primario" id="btn-pin-continuar">Entrar</button>
+    <button class="btn-primario" id="btn-pin-continuar" data-cargando="Verificando…">Entrar</button>
     <p id="pin-error" class="oculto texto-error" role="alert" aria-live="assertive"></p>
   </div>
 </div>
@@ -56,10 +56,10 @@
     <div class="marca-acceso compacta"><img src="icon-512.png" alt=""><div><strong>Activa tu acceso</strong><span>Este paso se hace una sola vez</span></div></div>
     <p class="texto-suave">Escribe el código que te entregó el administrador y crea tu contraseña.</p>
     <input type="password" inputmode="numeric" minlength="8" id="codigo-activacion-input" aria-label="Código de activación" class="input-pin" placeholder="Código de activación" autocomplete="one-time-code">
-    <input type="password" minlength="6" id="pin-nuevo-input" aria-label="Nueva contraseña" class="input-pin oculto" placeholder="Nueva contraseña">
-    <button class="btn-secundario" id="btn-pin-nuevo-mostrar">Validar código</button>
+    <input type="password" minlength="6" id="pin-nuevo-input" aria-label="Nueva contraseña, mínimo 6 caracteres" class="input-pin oculto" placeholder="Nueva contraseña (mín. 6)" autocomplete="new-password">
+    <button class="btn-secundario" id="btn-pin-nuevo-mostrar" data-cargando="Validando…">Validar código</button>
     <button class="btn-primario oculto" id="btn-pin-nuevo-guardar">Guardar contraseña</button>
-    <p id="activacion-error" class="error oculto" role="alert" aria-live="assertive"></p>
+    <p id="activacion-error" class="texto-error oculto" role="alert" aria-live="assertive"></p>
   </div>
 </div>
 
@@ -68,7 +68,7 @@
     <div class="marca-acceso compacta"><img src="icon-512.png" alt=""><div><strong id="candado-saludo">Hola de nuevo</strong><span>Tu espacio está protegido</span></div></div>
     <p class="texto-suave" id="candado-texto">Confirma que eres tú para entrar.</p>
     <button class="btn-primario" id="btn-candado-entrar">🔒 Entrar con Face ID</button>
-    <button class="btn-secundario" id="btn-candado-pin">Usar mi PIN en su lugar</button>
+    <button class="btn-secundario" id="btn-candado-pin">Usar mi contraseña en su lugar</button>
   </div>
 </div>
 

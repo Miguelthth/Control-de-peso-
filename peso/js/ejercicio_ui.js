@@ -1,6 +1,7 @@
 import * as api from '../../shared/api.js';
 import { getUsuario } from '../../shared/sesion.js';
 import { escapeHTML, escapeAtributo } from '../../shared/ui_seguridad.js';
+import { pedirConfirmacion } from '../../shared/dialogo.js';
 import { acumularPuntoGps, ajustarCantidad, calcularDuracionHiit, calcularDuracionWr, crearDocumentoEjercicio, fasesWr, faseEnSegundo, ritmoSegPorKm, tiempoPorTipoWr, vueltasCompletadasWr, avisoWrAlEntrarAFase, avisoWrCuentaFinal, normalizarEjercicio, normalizarRutina, normalizarRutinaHiit, normalizarRutinaWr, normalizarSerie, normalizarSesionActiva, calcularEstadoFinalSesion, siguientePasoRutina, sonidosEnSegundo, TIPOS_FASE_WR, BANCO_EJERCICIOS_HIIT } from './ejercicio_modelo.js';
 import { borrarSesionActiva, guardarLocal, guardarSesionActiva, leerLocal, leerPendientes, leerSesionActiva, mezclarDocumento, mutarLocal, sincronizarPendientes } from './ejercicio_almacen.js';
 import {
@@ -169,9 +170,9 @@ function abrirEjercicios() {
     const ejercicios = (S.datos.ejercicios || []).filter((e) => e.activo !== false);
     c.querySelector('#lista-ejercicios').innerHTML = ejercicios.map((e) => `<div class="fila-selector-ejercicio"><button type="button" data-ejercicio="${e.id}"><span><b>${escapeHTML(e.nombre)}</b><small>${escapeHTML(S.datos.categorias.find((cat) => cat.id === e.categoriaId)?.nombre || '')} · ${escapeHTML(e.modalidad)}</small></span><i>Editar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-ejercicio="${e.id}" aria-label="Borrar ${escapeAtributo(e.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Todavía no hay ejercicios.</p>';
     c.querySelectorAll('[data-ejercicio]').forEach((b) => b.onclick = () => abrirFormularioEjercicio(b.dataset.ejercicio));
-    c.querySelectorAll('[data-borrar-ejercicio]').forEach((b) => b.onclick = () => {
+    c.querySelectorAll('[data-borrar-ejercicio]').forEach((b) => b.onclick = async () => {
       const ejercicio = S.datos.ejercicios.find((x) => x.id === b.dataset.borrarEjercicio);
-      if (!confirm(`¿Borrar "${ejercicio.nombre}"? Las rutinas que ya lo usan lo conservan en tu historial, pero ya no lo podrás agregar a rutinas nuevas.`)) return;
+      if (!(await pedirConfirmacion({ titulo: `¿Borrar "${ejercicio.nombre}"?`, mensaje: 'Las rutinas que ya lo usan lo conservan en tu historial, pero ya no lo podrás agregar a rutinas nuevas.', aceptar: 'Borrar', peligro: true }))) return;
       guardar((d) => { const x = d.ejercicios.find((y) => y.id === ejercicio.id); if (x) x.activo = false; }, 'borrar_ejercicio', ejercicio.id);
       pintar(c);
     });
@@ -290,18 +291,25 @@ function renderEntrenamientoActivo() {
   p.querySelector('#saltar-ejercicio')?.addEventListener('click', saltarEjercicio);
 }
 
-function salirRutina() {
+async function salirRutina() {
+  if (!S.entrenamiento.series.length) {
+    if (!(await pedirConfirmacion({ titulo: '¿Cancelar esta rutina?', mensaje: 'Todavía no completas ninguna serie, así que no se guarda nada.', aceptar: 'Cancelar rutina', cancelar: 'Seguir entrenando', peligro: true }))) return;
+    if (!S.entrenamiento) return;
+    S.entrenamiento = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); return renderEntrenar();
+  }
+  const n = S.entrenamiento.series.length;
+  if (!(await pedirConfirmacion({ titulo: '¿Terminar aquí?', mensaje: `Se guardan tus ${n} serie(s) completadas como rutina incompleta.`, aceptar: 'Guardar y salir', cancelar: 'Seguir entrenando' }))) return;
   const t = S.entrenamiento;
-  if (!t.series.length) { if (!confirm('¿Cancelar esta rutina sin guardarla?')) return; S.entrenamiento = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); return renderEntrenar(); }
-  if (!confirm(`¿Salir? Se guardarán ${t.series.length} serie(s) ya completadas como rutina incompleta.`)) return;
+  if (!t) return;
   const sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: calcularEstadoFinalSesion(t), series: t.series, omisiones: t.omisiones || [], creadoEn: t.creadoEn, modificadoEn: iso() };
   guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id);
   S.entrenamiento = null; S.descanso = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); S.toast('Rutina guardada como incompleta'); renderEntrenar();
 }
 
-function saltarEjercicio() {
-  if (!confirm('¿Saltar este ejercicio? No se registrarán series para él.')) return;
+async function saltarEjercicio() {
+  if (!(await pedirConfirmacion({ titulo: '¿Saltar este ejercicio?', mensaje: 'No se registrarán series para él.', aceptar: 'Saltar' }))) return;
   const t = S.entrenamiento;
+  if (!t) return;
   t.omisiones.push({ ejercicioId: t.entradas[t.ejercicioIndice].ejercicioId, desdeSerie: t.serieNumero, en: iso() });
   Object.assign(t, { ejercicioIndice: t.ejercicioIndice + 1, serieNumero: 1, fase: 'serie' });
   persistirSesionActiva();
@@ -380,8 +388,8 @@ function renderWr() {
   p.innerHTML = `<section class="wr-config"><div class="wr-emblema">W/R</div><h1>Caminar y correr</h1><p>Arma tus propios intervalos. La app te avisa cuándo acelerar y cuándo bajar el ritmo, sin que tengas que ver la pantalla.</p><button type="button" id="wr-nueva" class="btn-primario ancho-completo">+ Nueva rutina</button><div class="lista-modal">${rutinas.map((r) => `<div class="fila-selector-ejercicio"><button type="button" data-usar-wr="${escapeAtributo(r.id)}"><span><b>${escapeHTML(r.nombre)}</b><small>${r.vueltas} vueltas · ${formatoDuracionWr(calcularDuracionWr(r))} · ${resumenFasesWr(r)}</small></span><i>Iniciar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-wr="${escapeAtributo(r.id)}" aria-label="Borrar ${escapeAtributo(r.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Crea tu primera rutina de caminar/correr.</p>'}</div></section>`;
   p.querySelector('#wr-nueva').onclick = () => abrirFormularioRutinaWr();
   p.querySelectorAll('[data-usar-wr]').forEach((b) => b.onclick = () => iniciarWr(S.datos.rutinasWr.find((r) => r.id === b.dataset.usarWr)));
-  p.querySelectorAll('[data-borrar-wr]').forEach((b) => b.onclick = () => {
-    if (!confirm('¿Borrar esta rutina de caminar/correr?')) return;
+  p.querySelectorAll('[data-borrar-wr]').forEach((b) => b.onclick = async () => {
+    if (!(await pedirConfirmacion({ titulo: '¿Borrar esta rutina de caminar/correr?', aceptar: 'Borrar', peligro: true }))) return;
     guardar((d) => { const x = (d.rutinasWr || []).find((y) => y.id === b.dataset.borrarWr); if (x) x.activo = false; }, 'borrar_rutina_wr', b.dataset.borrarWr);
     renderWr();
   });
@@ -626,8 +634,8 @@ function abrirRutinasHiit() {
   abrirModal('Rutinas HIIT', `<button type="button" id="nueva-rutina-hiit" class="btn-primario ancho-completo">+ Nueva rutina</button><div class="lista-modal">${rutinas.map((r) => `<div class="fila-selector-ejercicio"><button type="button" data-usar-hiit="${r.id}"><span><b>${escapeHTML(r.nombre)}</b><small>${r.vueltas} vueltas · ${r.actividadSeg}s/${r.descansoSeg}s · ${r.ejercicios.length} ejercicios</small></span><i>Usar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-hiit="${r.id}" aria-label="Borrar ${escapeAtributo(r.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Sin rutinas todavía.</p>'}</div>`, (c) => {
     c.querySelector('#nueva-rutina-hiit').onclick = () => abrirFormularioRutinaHiit();
     c.querySelectorAll('[data-usar-hiit]').forEach((b) => b.onclick = () => { cerrarModal(); iniciarHiit(S.datos.rutinasHiit.find((r) => r.id === b.dataset.usarHiit)); });
-    c.querySelectorAll('[data-borrar-hiit]').forEach((b) => b.onclick = () => {
-      if (!confirm('¿Borrar esta rutina de HIIT?')) return;
+    c.querySelectorAll('[data-borrar-hiit]').forEach((b) => b.onclick = async () => {
+      if (!(await pedirConfirmacion({ titulo: '¿Borrar esta rutina de HIIT?', aceptar: 'Borrar', peligro: true }))) return;
       guardar((d) => { const x = d.rutinasHiit.find((y) => y.id === b.dataset.borrarHiit); if (x) x.activo = false; }, 'borrar_rutina_hiit', b.dataset.borrarHiit);
       abrirRutinasHiit();
     });
@@ -708,7 +716,7 @@ function renderProgreso() {
   p.querySelectorAll('[data-periodo]').forEach((b) => b.onclick = () => { S.periodo = b.dataset.periodo; renderProgreso(); });
   p.querySelector('#ver-analisis-completo').onclick = abrirAnalisisCompleto;
   p.querySelectorAll('[data-editar-registro]').forEach((b) => b.onclick = () => abrirEditarRegistro(b.dataset.editarRegistro));
-  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { for (const lista of [d.sesiones, d.hiits, d.wrs || []]) { const x = lista?.find((registro) => registro.id === b.dataset.eliminar); if (x) { x.eliminadoEn = iso(); x.modificadoEn = x.eliminadoEn; } } }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
+  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = async () => { if (!(await pedirConfirmacion({ titulo: '¿Eliminar este registro?', aceptar: 'Eliminar', peligro: true }))) return; guardar((d) => { for (const lista of [d.sesiones, d.hiits, d.wrs || []]) { const x = lista?.find((registro) => registro.id === b.dataset.eliminar); if (x) { x.eliminadoEn = iso(); x.modificadoEn = x.eliminadoEn; } } }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
 }
 
 // Análisis deportivo completo: volumen semanal por músculo, balance,

@@ -124,13 +124,20 @@ export function debeConfirmarNavegacion({ valor, enviado }) {
   return !enviado && String(valor ?? '').trim().length > 0;
 }
 
+// El texto mientras trabaja sale de data-cargando en el botón -- no todo
+// botón "guarda" (ej. el de entrar solo verifica).
 export async function ejecutarUnaVez(boton, accion) {
   if (boton.disabled) return undefined;
   const textoOriginal = boton.textContent;
   boton.disabled = true;
-  boton.textContent = 'Guardando…';
+  boton.setAttribute('aria-busy', 'true');
+  boton.textContent = boton.dataset.cargando || 'Guardando…';
   try { return await accion(); }
-  finally { boton.disabled = false; boton.textContent = textoOriginal; }
+  finally {
+    boton.disabled = false;
+    boton.removeAttribute('aria-busy');
+    boton.textContent = textoOriginal;
+  }
 }
 
 export function sesionAutenticada(usuario, token) {

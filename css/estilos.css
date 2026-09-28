@@ -129,5 +129,8 @@ button, input { font-family: inherit; }
 .btn-launcher:first-child { border-left: 4px solid var(--acento); }
 .btn-launcher:last-child { border-left: 4px solid var(--primario); }
 .input-pin { min-height: 54px; border-radius: var(--radio-sm); }
+/* El espaciado grande es para los puntos de la contraseña; en el texto de
+   ayuda se leía "C o n t r a s e ñ a" y se cortaba. */
+.input-pin::placeholder { letter-spacing: normal; font-size: 1rem; }
 .popup-caja { border-radius: var(--radio-lg); padding: 24px; }
 @media (max-height: 700px) { .pantalla-centrada { justify-content: flex-start; overflow-y: auto; } }

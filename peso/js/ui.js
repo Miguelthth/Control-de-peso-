@@ -260,6 +260,9 @@ function wireCapturar() {
     renderCapturar();
     intentarRecargaDiferida();
   });
+  document.getElementById('captura-peso-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-guardar-captura').click();
+  });
   document.getElementById('captura-fecha').addEventListener('change', (e) => {
     E.captura.fecha = e.target.value;
     renderCapturar();

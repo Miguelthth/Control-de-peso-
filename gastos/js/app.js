@@ -2587,6 +2587,9 @@ function wireCaptura() {
   document.getElementById('captura-nota').addEventListener('input', (e) => {
     E.captura.nota = e.target.value;
   });
+  document.getElementById('captura-nota').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-guardar-movimiento').click();
+  });
   document.getElementById('btn-guardar-movimiento').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarMovimientoCaptura));
 }
 

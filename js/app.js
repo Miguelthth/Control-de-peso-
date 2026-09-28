@@ -1377,16 +1377,25 @@ async function guardarPinNuevo() {
 }
 
 function wireEventos() {
-  document.getElementById('btn-url-continuar').addEventListener('click', () => {
+  const continuarUrl = () => {
     const v = document.getElementById('url-input').value.trim();
     if (!v) return;
     setUrl(v);
     mostrarPantalla('pantalla-usuario');
+  };
+  document.getElementById('btn-url-continuar').addEventListener('click', continuarUrl);
+  document.getElementById('url-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') continuarUrl();
   });
 
   document.getElementById('btn-usuario-continuar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, continuarUsuario));
   document.getElementById('usuario-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-usuario-continuar').click();
+  });
+  // Borra el error en cuanto vuelves a escribir -- antes se quedaba pegado
+  // en pantalla aunque ya hubieras corregido el usuario.
+  document.getElementById('usuario-input').addEventListener('input', () => {
+    document.getElementById('usuario-error').classList.add('oculto');
   });
   document.getElementById('btn-mostrar-usuario-form').addEventListener('click', (e) => {
     e.currentTarget.classList.add('oculto');
@@ -1399,6 +1408,9 @@ function wireEventos() {
   document.getElementById('btn-activacion-volver').addEventListener('click', volverAUsuario);
   document.getElementById('pin-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-pin-continuar').click();
+  });
+  document.getElementById('pin-input').addEventListener('input', () => {
+    document.getElementById('pin-error').classList.add('oculto');
   });
 
   document.getElementById('btn-pin-nuevo-mostrar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, validarCodigoActivacion));

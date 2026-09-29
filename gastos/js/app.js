@@ -2312,9 +2312,11 @@ function exportarPaquete(paquete) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `gastos-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `gastos-respaldo-${hoyISO()}.json`; // fecha local: toISOString() daba la de mañana después de las 5 pm
   a.click();
-  URL.revokeObjectURL(url);
+  // Safari (iPhone) cancela la descarga si el enlace se revoca en el mismo
+  // instante del click -- se le da tiempo de abrir la hoja de "Guardar".
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 function leerArchivoSubido(archivo) {
@@ -2397,6 +2399,14 @@ const ICONOS_INSIGHT = {
 
 function fmt(n) {
   return new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }).format(n);
+}
+
+// Para la lista de movimientos: con centavos si los tiene ($45.50) y sin
+// ".00" si es cerrado ($120). fmt() redondea a pesos -- bien para totales y
+// gráficas, pero en la lista un gasto de $45.50 se veía como $46.
+function fmtMonto(n) {
+  const decimales = Math.round(Math.abs(n) * 100) % 100 === 0 ? 0 : 2;
+  return new Intl.NumberFormat('es-MX', { minimumFractionDigits: decimales, maximumFractionDigits: decimales }).format(n);
 }
 
 function categoriaObj(id) {
@@ -2898,7 +2908,7 @@ function filaMovimientoHTML(m) {
       <div class="nombre">${escapeHTML(cat?.nombre || m.categoria)}${m.nota ? ' · ' + escapeHTML(m.nota) : ''}</div>
       ${mostrarMetodo ? `<div class="sub">${escapeHTML(metodoLabel(m.metodo))}</div>` : ''}
     </div>
-    <div class="monto ${m.tipo === 'ingreso' ? 'ingreso' : 'gasto'}">${m.tipo === 'gasto' ? '-' : '+'}$${fmt(m.monto)}</div>
+    <div class="monto ${m.tipo === 'ingreso' ? 'ingreso' : 'gasto'}">${m.tipo === 'gasto' ? '-' : '+'}$${fmtMonto(m.monto)}</div>
   </div>`;
 }
 
@@ -2911,7 +2921,7 @@ function renderMovimientos() {
   const movs = movimientosFiltrados();
   const totalGasto = calculos.aPesos(calculos.sumaCentavos(movs.filter((m) => m.tipo === 'gasto')));
   const totalIngreso = calculos.aPesos(calculos.sumaCentavos(movs.filter((m) => m.tipo === 'ingreso')));
-  document.getElementById('mov-resumen').innerHTML = `<strong>${movs.length}</strong> movimientos · Gasto $${fmt(totalGasto)} · Ingreso $${fmt(totalIngreso)}`;
+  document.getElementById('mov-resumen').innerHTML = `<strong>${movs.length}</strong> movimientos · Gasto $${fmtMonto(totalGasto)} · Ingreso $${fmtMonto(totalIngreso)}`;
 
   const porDia = new Map();
   for (const m of movs) {
@@ -2929,7 +2939,7 @@ function renderMovimientos() {
       const totalDiaCent = lista.reduce((acc, m) => acc + (m.tipo === 'gasto' ? -1 : 1) * calculos.aCentavos(m.monto), 0);
       const signo = totalDiaCent < 0 ? '-' : '';
       return `<div class="grupo-dia">
-        <div class="grupo-dia-header"><span>${escapeHTML(formatoFechaLarga(fecha))}</span><span>${signo}$${fmt(Math.abs(totalDiaCent) / 100)}</span></div>
+        <div class="grupo-dia-header"><span>${escapeHTML(formatoFechaLarga(fecha))}</span><span>${signo}$${fmtMonto(Math.abs(totalDiaCent) / 100)}</span></div>
         ${lista.map(filaMovimientoHTML).join('')}
       </div>`;
     })

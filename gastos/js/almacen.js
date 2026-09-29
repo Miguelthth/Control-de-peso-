@@ -7,7 +7,7 @@
 
 import { leerGastos, guardarGastos } from '../../shared/api.js';
 import { crearClaveSesion, cifrarConClave, descifrarConClave } from '../../shared/cifrado.js';
-import { normalizarDatos, crearDatosVacios } from './modelo.js';
+import { normalizarDatos, crearDatosVacios, hoyISO } from './modelo.js';
 
 function clavePendiente(usuario) {
   return `gastos_pendiente_${usuario}`;
@@ -242,9 +242,11 @@ export function exportarPaquete(paquete) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `gastos-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `gastos-respaldo-${hoyISO()}.json`; // fecha local: toISOString() daba la de mañana después de las 5 pm
   a.click();
-  URL.revokeObjectURL(url);
+  // Safari (iPhone) cancela la descarga si el enlace se revoca en el mismo
+  // instante del click -- se le da tiempo de abrir la hoja de "Guardar".
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 export function leerArchivoSubido(archivo) {

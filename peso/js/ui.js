@@ -15,7 +15,7 @@ import {
 import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, guardarAccesoLocal, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
 import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
-import { pinNuevoValido } from '../../shared/autorizacion.js';
+import { pinNuevoValido, fechaISOValida } from '../../shared/autorizacion.js';
 import { pedirFormulario, pedirConfirmacionEscrita } from '../../shared/dialogo.js';
 import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio, rellenarCatalogoFaltante, hayEntrenamientoActivo } from './ejercicio_ui.js';
 import { mutarLocal, leerLocal, guardarLocal } from './ejercicio_almacen.js';
@@ -197,6 +197,7 @@ function renderCapturar() {
   document.getElementById('captura-usuario').textContent = getUsuario();
   document.getElementById('captura-unidad').textContent = unidad;
   document.getElementById('captura-fecha').value = E.captura.fecha;
+  document.getElementById('captura-fecha').max = hoyISO();
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   document.getElementById('btn-guardar-captura').textContent = E.captura.editandoFechaOriginal ? 'Guardar cambios' : 'Registrar peso';
   document.getElementById('captura-modo-edicion').classList.toggle('oculto', !E.captura.editandoFechaOriginal);
@@ -219,6 +220,11 @@ async function guardarCaptura() {
     const unidad = miUnidad();
     const pesoKg = validarPeso(aKg(E.captura.pesoStr, unidad));
     const fecha = E.captura.fecha;
+    // El selector de fecha de iPhone tiene "Borrar" (deja la fecha vacía) y no
+    // siempre respeta `max` -- sin esto se encolaba un peso sin fecha o del
+    // futuro, y la cola se quedaba atorada reintentándolo.
+    if (!fechaISOValida(fecha)) throw new Error('Elige la fecha del peso');
+    if (fecha > hoyISO()) throw new Error('No puedes registrar un peso de una fecha futura');
     const operaciones = ui_helpers.planificarEdicion(E.captura.editandoFechaOriginal, fecha, pesoKg);
     for (const operacion of operaciones) {
       if (operacion.tipo === 'borrar') cola.encolarBorrado(getUsuario(), operacion.fecha);
@@ -414,8 +420,11 @@ function avatarMeta(pctAvance) {
 // si ya pasó). Compartida entre "Mi progreso" (kpi) y "Nuestro reto" (texto).
 function diasFaltanReto() {
   if (!E.datos.retoFin) return null;
-  const hoy = hoyISO();
-  return Math.ceil((new Date(`${E.datos.retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
+  // Días de calendario en UTC, no medianoches locales: cuando cambia el
+  // horario (noviembre) la resta de dos medianoches locales da 24 h ± 1, y
+  // con Math.ceil el conteo marcaba un día de más.
+  const dia = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((dia(E.datos.retoFin) - dia(hoyISO())) / 86400000);
 }
 
 function textoFechasReto() {
@@ -718,7 +727,9 @@ function exportarMisDatosPeso() {
   a.href = url;
   a.download = `peso-respaldo-${usuario}-${hoyISO()}.json`;
   a.click();
-  URL.revokeObjectURL(url);
+  // Safari (iPhone) cancela la descarga si el enlace se revoca en el mismo
+  // instante del click -- se le da tiempo de abrir la hoja de "Guardar".
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 function wireAjustes() {

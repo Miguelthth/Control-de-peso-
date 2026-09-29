@@ -15,7 +15,8 @@ import {
 import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, guardarAccesoLocal, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
 import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
-import { pinNuevoValido } from '../../shared/autorizacion.js';
+import { pinNuevoValido, fechaISOValida } from '../../shared/autorizacion.js';
+import { pedirFormulario, pedirConfirmacionEscrita } from '../../shared/dialogo.js';
 import { iniciarModuloEjercicio, renderModuloEjercicio, salirModuloEjercicio, rellenarCatalogoFaltante, hayEntrenamientoActivo } from './ejercicio_ui.js';
 import { mutarLocal, leerLocal, guardarLocal } from './ejercicio_almacen.js';
 
@@ -196,6 +197,7 @@ function renderCapturar() {
   document.getElementById('captura-usuario').textContent = getUsuario();
   document.getElementById('captura-unidad').textContent = unidad;
   document.getElementById('captura-fecha').value = E.captura.fecha;
+  document.getElementById('captura-fecha').max = hoyISO();
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   document.getElementById('btn-guardar-captura').textContent = E.captura.editandoFechaOriginal ? 'Guardar cambios' : 'Registrar peso';
   document.getElementById('captura-modo-edicion').classList.toggle('oculto', !E.captura.editandoFechaOriginal);
@@ -218,6 +220,11 @@ async function guardarCaptura() {
     const unidad = miUnidad();
     const pesoKg = validarPeso(aKg(E.captura.pesoStr, unidad));
     const fecha = E.captura.fecha;
+    // El selector de fecha de iPhone tiene "Borrar" (deja la fecha vacía) y no
+    // siempre respeta `max` -- sin esto se encolaba un peso sin fecha o del
+    // futuro, y la cola se quedaba atorada reintentándolo.
+    if (!fechaISOValida(fecha)) throw new Error('Elige la fecha del peso');
+    if (fecha > hoyISO()) throw new Error('No puedes registrar un peso de una fecha futura');
     const operaciones = ui_helpers.planificarEdicion(E.captura.editandoFechaOriginal, fecha, pesoKg);
     for (const operacion of operaciones) {
       if (operacion.tipo === 'borrar') cola.encolarBorrado(getUsuario(), operacion.fecha);
@@ -259,6 +266,9 @@ function wireCapturar() {
     E.captura.pesoStr = limpio;
     renderCapturar();
     intentarRecargaDiferida();
+  });
+  document.getElementById('captura-peso-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-guardar-captura').click();
   });
   document.getElementById('captura-fecha').addEventListener('change', (e) => {
     E.captura.fecha = e.target.value;
@@ -410,8 +420,11 @@ function avatarMeta(pctAvance) {
 // si ya pasó). Compartida entre "Mi progreso" (kpi) y "Nuestro reto" (texto).
 function diasFaltanReto() {
   if (!E.datos.retoFin) return null;
-  const hoy = hoyISO();
-  return Math.ceil((new Date(`${E.datos.retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
+  // Días de calendario en UTC, no medianoches locales: cuando cambia el
+  // horario (noviembre) la resta de dos medianoches locales da 24 h ± 1, y
+  // con Math.ceil el conteo marcaba un día de más.
+  const dia = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((dia(E.datos.retoFin) - dia(hoyISO())) / 86400000);
 }
 
 function textoFechasReto() {
@@ -669,23 +682,29 @@ async function cambiarUnidadAjustes(unidad) {
 }
 
 async function cambiarPinAjustes() {
-  const actual = prompt('Tu contraseña actual:') || '';
-  const nuevo = prompt('Nueva contraseña (mínimo 6 caracteres):');
-  if (nuevo === null) return;
-  if (!pinNuevoValido(nuevo)) {
-    toast('La contraseña nueva debe tener al menos 6 caracteres', true);
-    return;
-  }
-  try {
-    const r = await api.cambiarPin(getUsuario(), actual, nuevo);
-    if (r.ok) {
-      try { await guardarAccesoLocal(getUsuario(), nuevo); } catch { /* La contraseña remota ya cambió correctamente. */ }
-      toast('Contraseña actualizada ✓');
-    }
-    else toast(r.error || 'Contraseña actual incorrecta', true);
-  } catch (e) {
-    toast('No se pudo cambiar (¿sin conexión?): ' + e.message, true);
-  }
+  const r = await pedirFormulario({
+    titulo: 'Cambiar contraseña',
+    mensaje: 'Es la que usas para entrar a Mis Apps.',
+    campos: [
+      { nombre: 'actual', tipo: 'password', etiqueta: 'Contraseña actual', autocomplete: 'current-password' },
+      { nombre: 'nueva', tipo: 'password', etiqueta: 'Nueva contraseña (mínimo 6)', autocomplete: 'new-password' },
+      { nombre: 'confirmar', tipo: 'password', etiqueta: 'Repite la nueva contraseña', autocomplete: 'new-password' },
+    ],
+    aceptar: 'Cambiar',
+    textoProcesando: 'Guardando…',
+    validar: async ({ actual, nueva, confirmar }) => {
+      if (!actual) return { mensaje: 'Escribe tu contraseña actual.', campo: 'actual' };
+      if (!pinNuevoValido(nueva)) return { mensaje: 'La nueva contraseña debe tener al menos 6 caracteres.', campo: 'nueva' };
+      if (nueva !== confirmar) return { mensaje: 'Las contraseñas nuevas no coinciden.', campo: 'confirmar' };
+      let respuesta;
+      try { respuesta = await api.cambiarPin(getUsuario(), actual, nueva); }
+      catch (e) { return 'No se pudo cambiar (¿sin conexión?): ' + e.message; }
+      return respuesta.ok ? null : { mensaje: respuesta.error || 'La contraseña actual es incorrecta.', campo: 'actual' };
+    },
+  });
+  if (!r) return;
+  try { await guardarAccesoLocal(getUsuario(), r.nueva); } catch { /* La contraseña remota ya cambió correctamente. */ }
+  toast('Contraseña actualizada ✓');
 }
 
 // Respaldo manual (Gastos ya tenía el suyo, a Peso le faltaba) -- descarga
@@ -708,7 +727,9 @@ function exportarMisDatosPeso() {
   a.href = url;
   a.download = `peso-respaldo-${usuario}-${hoyISO()}.json`;
   a.click();
-  URL.revokeObjectURL(url);
+  // Safari (iPhone) cancela la descarga si el enlace se revoca en el mismo
+  // instante del click -- se le da tiempo de abrir la hoja de "Guardar".
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 function wireAjustes() {
@@ -740,8 +761,12 @@ function wireAjustes() {
     location.href = '../index.html';
   });
   document.getElementById('btn-borrar-mis-datos').addEventListener('click', async () => {
-    const confirmacion = prompt('Esto borra TODOS tus pesos registrados (los de la otra persona no se tocan). Escribe BORRAR para confirmar:');
-    if (confirmacion !== 'BORRAR') return;
+    const ok = await pedirConfirmacionEscrita({
+      titulo: '¿Borrar todos tus pesos?',
+      mensaje: 'Se borran todos tus pesos registrados. Los de la otra persona no se tocan. No se puede deshacer.',
+      aceptar: 'Borrar pesos',
+    });
+    if (!ok) return;
     try {
       const r = await api.borrarPesos(getUsuario());
       if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el borrado');
@@ -751,15 +776,23 @@ function wireAjustes() {
       toast('No se pudo borrar (¿sin conexión?): ' + e.message, true);
     }
   });
-  document.getElementById('btn-borrar-ejercicios').addEventListener('click', () => {
-    const confirmacion = prompt('Esto borra TODOS tus ejercicios (los del catálogo por defecto y los que hayas creado). Tus rutinas y tu historial se quedan igual. Escribe BORRAR para confirmar:');
-    if (confirmacion !== 'BORRAR') return;
+  document.getElementById('btn-borrar-ejercicios').addEventListener('click', async () => {
+    const ok = await pedirConfirmacionEscrita({
+      titulo: '¿Borrar tus ejercicios?',
+      mensaje: 'Se borran todos tus ejercicios: los del catálogo por defecto y los que creaste. Tus rutinas y tu historial se quedan igual.',
+      aceptar: 'Borrar ejercicios',
+    });
+    if (!ok) return;
     mutarLocal(getUsuario(), (d) => { d.ejercicios = []; }, { tipo: 'borrar_ejercicios' });
     toast('Tus ejercicios fueron borrados');
   });
-  document.getElementById('btn-borrar-rutinas').addEventListener('click', () => {
-    const confirmacion = prompt('Esto borra tus rutinas armadas y tu historial de entrenamientos/HIIT. Tu catálogo de ejercicios se queda igual. Escribe BORRAR para confirmar:');
-    if (confirmacion !== 'BORRAR') return;
+  document.getElementById('btn-borrar-rutinas').addEventListener('click', async () => {
+    const ok = await pedirConfirmacionEscrita({
+      titulo: '¿Borrar rutinas y entrenamientos?',
+      mensaje: 'Se borran tus rutinas armadas y tu historial de entrenamientos y HIIT. Tu catálogo de ejercicios se queda igual.',
+      aceptar: 'Borrar rutinas',
+    });
+    if (!ok) return;
     mutarLocal(getUsuario(), (d) => { d.rutinas = []; d.sesiones = []; d.hiits = []; }, { tipo: 'borrar_rutinas' });
     toast('Tus rutinas y entrenamientos fueron borrados');
   });

@@ -320,13 +320,20 @@ function debeConfirmarNavegacion({ valor, enviado }) {
   return !enviado && String(valor ?? '').trim().length > 0;
 }
 
+// El texto mientras trabaja sale de data-cargando en el botón -- no todo
+// botón "guarda" (ej. el de entrar solo verifica).
 async function ejecutarUnaVez(boton, accion) {
   if (boton.disabled) return undefined;
   const textoOriginal = boton.textContent;
   boton.disabled = true;
-  boton.textContent = 'Guardando…';
+  boton.setAttribute('aria-busy', 'true');
+  boton.textContent = boton.dataset.cargando || 'Guardando…';
   try { return await accion(); }
-  finally { boton.disabled = false; boton.textContent = textoOriginal; }
+  finally {
+    boton.disabled = false;
+    boton.removeAttribute('aria-busy');
+    boton.textContent = textoOriginal;
+  }
 }
 
 function sesionAutenticada(usuario, token) {
@@ -812,6 +819,282 @@ const LG_SELECTOR = '.tarjeta, .popup-caja, .btn-primario, .btn-secundario, .enc
     if (activo) { activo.classList.remove('lg-activa'); activo = null; }
   }, { passive: true, capture: true });
 })();
+
+// ── shared/dialogo.js ──────────────────────────────────────────
+const __modulo_dialogo = (function () {
+// Diálogos propios en lugar de alert() / confirm() / prompt() nativos: el
+// prompt() nativo muestra en claro lo que escribes (contraseñas incluidas) y
+// en iPhone el texto de un alert() no se puede copiar. Arma su propio DOM;
+// los estilos viven en shared/tema.css (clases dlg-*).
+//
+// OJO Face ID: todo aquí regresa promesas -- nunca va entre un toque y
+// passkey.registrar()/verificar() (ver shared/passkey.js).
+
+let secuencia = 0;
+const abiertos = [];
+
+function crear(tag, clase, texto) {
+  const el = document.createElement(tag);
+  if (clase) el.className = clase;
+  if (texto !== undefined && texto !== null) el.textContent = texto;
+  return el;
+}
+
+function valoresDe(inputs) {
+  const valores = {};
+  for (const input of inputs) valores[input.name] = input.type === 'checkbox' ? input.checked : input.value;
+  return valores;
+}
+
+function crearCampo(caja, campo, id) {
+  const esCheck = campo.tipo === 'checkbox';
+  const input = crear('input', esCheck ? 'dlg-check' : 'dlg-input');
+  input.type = campo.tipo || 'text';
+  input.name = campo.nombre;
+  input.id = id;
+  if (esCheck) {
+    input.checked = Boolean(campo.valor);
+    const etiqueta = crear('label', 'dlg-etiqueta-check');
+    etiqueta.htmlFor = id;
+    etiqueta.append(input, crear('span', null, campo.etiqueta));
+    caja.appendChild(etiqueta);
+    return input;
+  }
+  input.value = campo.valor || '';
+  input.autocomplete = campo.autocomplete || 'off';
+  if (campo.placeholder) input.placeholder = campo.placeholder;
+  if (campo.inputmode) input.inputMode = campo.inputmode;
+  if (input.type !== 'password') {
+    input.setAttribute('autocapitalize', campo.autocapitalize || 'off');
+    input.setAttribute('autocorrect', 'off');
+    input.spellcheck = false;
+  }
+  const etiqueta = crear('label', 'dlg-etiqueta', campo.etiqueta);
+  etiqueta.htmlFor = id;
+  caja.appendChild(etiqueta);
+  if (input.type !== 'password') {
+    caja.appendChild(input);
+    return input;
+  }
+  const envoltura = crear('div', 'dlg-envoltura-pass');
+  const ver = crear('button', 'dlg-ver', 'Mostrar');
+  ver.type = 'button';
+  ver.setAttribute('aria-controls', id);
+  ver.setAttribute('aria-pressed', 'false');
+  ver.addEventListener('click', () => {
+    const mostrar = input.type === 'password';
+    input.type = mostrar ? 'text' : 'password';
+    ver.textContent = mostrar ? 'Ocultar' : 'Mostrar';
+    ver.setAttribute('aria-pressed', String(mostrar));
+    input.focus();
+  });
+  envoltura.append(input, ver);
+  caja.appendChild(envoltura);
+  return input;
+}
+
+function crearCodigo(caja, codigo) {
+  const bloque = crear('div', 'dlg-codigo');
+  const valor = crear('code', 'dlg-codigo-valor', codigo);
+  const copiar = crear('button', 'btn-secundario', 'Copiar');
+  copiar.type = 'button';
+  copiar.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(codigo);
+      copiar.textContent = 'Copiado ✓';
+    } catch {
+      const rango = document.createRange();
+      rango.selectNodeContents(valor);
+      getSelection().removeAllRanges();
+      getSelection().addRange(rango);
+      copiar.textContent = 'Seleccionado';
+    }
+  });
+  bloque.append(valor, copiar);
+  caja.appendChild(bloque);
+}
+
+// Base de todos los demás. Regresa los valores de los campos ({} si no hay
+// campos) al aceptar, o null al cancelar. `validar(valores)` puede ser async
+// (ej. revisar la contraseña con el servidor): si regresa un texto -- o
+// { mensaje, campo } -- el diálogo sigue abierto y lo muestra ahí mismo.
+function pedirFormulario({
+  titulo, mensaje = '', campos = [], codigo = null, aceptar = 'Aceptar', cancelar = 'Cancelar',
+  peligro = false, validar = null, habilitarSi = null, textoProcesando = 'Verificando…',
+} = {}) {
+  return new Promise((resolve) => {
+    const id = `dlg-${++secuencia}`;
+    const focoAnterior = document.activeElement;
+    const fondo = crear('div', 'dlg-fondo');
+    const caja = crear('form', 'dlg-caja');
+    caja.noValidate = true;
+    caja.setAttribute('role', campos.length ? 'dialog' : 'alertdialog');
+    caja.setAttribute('aria-modal', 'true');
+    caja.setAttribute('aria-labelledby', `${id}-titulo`);
+    const h = crear('h2', 'dlg-titulo', titulo);
+    h.id = `${id}-titulo`;
+    caja.appendChild(h);
+    if (mensaje) {
+      const p = crear('p', 'dlg-mensaje', mensaje);
+      p.id = `${id}-mensaje`;
+      caja.setAttribute('aria-describedby', p.id);
+      caja.appendChild(p);
+    }
+    if (codigo) crearCodigo(caja, codigo);
+    const inputs = campos.map((campo, i) => crearCampo(caja, campo, `${id}-campo-${i}`));
+    const error = crear('p', 'dlg-error oculto');
+    error.setAttribute('role', 'alert');
+    caja.appendChild(error);
+
+    const botones = crear('div', 'dlg-botones');
+    const btnCancelar = cancelar ? crear('button', 'btn-secundario', cancelar) : null;
+    if (btnCancelar) {
+      btnCancelar.type = 'button';
+      botones.appendChild(btnCancelar);
+    }
+    const btnAceptar = crear('button', peligro ? 'btn-primario dlg-peligro' : 'btn-primario', aceptar);
+    btnAceptar.type = 'submit';
+    botones.appendChild(btnAceptar);
+    caja.appendChild(botones);
+    fondo.appendChild(caja);
+
+    let procesando = false;
+    const actualizarHabilitado = () => {
+      if (habilitarSi && !procesando) btnAceptar.disabled = !habilitarSi(valoresDe(inputs));
+    };
+    const cerrar = (resultado) => {
+      abiertos.splice(abiertos.indexOf(fondo), 1);
+      document.removeEventListener('keydown', onKey, true);
+      fondo.remove();
+      if (focoAnterior && document.contains(focoAnterior)) focoAnterior.focus?.();
+      resolve(resultado);
+    };
+    const cancelarDialogo = () => {
+      if (!procesando) cerrar(cancelar ? null : {});
+    };
+    const onKey = (e) => {
+      if (abiertos[abiertos.length - 1] !== fondo) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelarDialogo();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const lista = [...caja.querySelectorAll('button, input')].filter((el) => !el.disabled);
+      const primero = lista[0];
+      const ultimo = lista[lista.length - 1];
+      if (e.shiftKey && (document.activeElement === primero || !caja.contains(document.activeElement))) { e.preventDefault(); ultimo.focus(); }
+      else if (!e.shiftKey && (document.activeElement === ultimo || !caja.contains(document.activeElement))) { e.preventDefault(); primero.focus(); }
+    };
+
+    caja.addEventListener('input', () => {
+      error.classList.add('oculto');
+      inputs.forEach((input) => input.removeAttribute('aria-invalid'));
+      actualizarHabilitado();
+    });
+    btnCancelar?.addEventListener('click', cancelarDialogo);
+    fondo.addEventListener('click', (e) => {
+      if (e.target === fondo && !campos.length) cancelarDialogo();
+    });
+    caja.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (procesando || btnAceptar.disabled) return;
+      const valores = valoresDe(inputs);
+      if (validar) {
+        procesando = true;
+        const texto = btnAceptar.textContent;
+        btnAceptar.disabled = true;
+        btnAceptar.textContent = textoProcesando;
+        btnAceptar.setAttribute('aria-busy', 'true');
+        if (btnCancelar) btnCancelar.disabled = true;
+        let problema;
+        try { problema = await validar(valores); }
+        catch (err) { problema = err?.message || 'Algo salió mal. Intenta de nuevo.'; }
+        procesando = false;
+        btnAceptar.textContent = texto;
+        btnAceptar.removeAttribute('aria-busy');
+        btnAceptar.disabled = false;
+        if (btnCancelar) btnCancelar.disabled = false;
+        actualizarHabilitado();
+        if (problema) {
+          error.textContent = typeof problema === 'string' ? problema : problema.mensaje;
+          error.classList.remove('oculto');
+          const campo = inputs.find((input) => input.name === problema.campo) || inputs.find((input) => input.type !== 'checkbox');
+          if (campo) {
+            campo.setAttribute('aria-invalid', 'true');
+            campo.focus();
+            campo.select?.();
+          }
+          return;
+        }
+      }
+      cerrar(valores);
+    });
+
+    abiertos.push(fondo);
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(fondo);
+    actualizarHabilitado();
+    const focoInicial = inputs.find((input) => input.type !== 'checkbox') || (peligro && btnCancelar) || btnAceptar;
+    focoInicial.focus();
+  });
+}
+
+async function pedirTexto({ campo = {}, validar = null, ...opciones } = {}) {
+  const r = await pedirFormulario({
+    ...opciones,
+    campos: [{ nombre: 'valor', ...campo }],
+    validar: validar && ((valores) => validar(valores.valor)),
+  });
+  return r ? r.valor : null;
+}
+
+async function pedirConfirmacion(opciones) {
+  return (await pedirFormulario({ ...opciones, campos: [] })) !== null;
+}
+
+async function mostrarAviso(opciones) {
+  await pedirFormulario({ aceptar: 'Entendido', ...opciones, campos: [], cancelar: null });
+}
+
+// Para lo que no tiene vuelta atrás: el botón se habilita solo cuando
+// escribes la palabra, en vez de fallar en silencio si la escribes mal.
+async function pedirConfirmacionEscrita({ palabra = 'BORRAR', ...opciones }) {
+  const r = await pedirFormulario({
+    peligro: true,
+    ...opciones,
+    campos: [{ nombre: 'palabra', etiqueta: `Escribe ${palabra} para confirmar`, placeholder: palabra, autocapitalize: 'characters' }],
+    habilitarSi: (valores) => valores.palabra.trim().toUpperCase() === palabra,
+  });
+  return r !== null;
+}
+
+let aviso = null;
+let avisoTimer = null;
+
+function avisoBreve(texto, { error = false } = {}) {
+  if (!aviso) {
+    aviso = crear('div', 'dlg-aviso');
+    aviso.setAttribute('role', 'status');
+    aviso.setAttribute('aria-live', 'polite');
+    document.body.appendChild(aviso);
+  }
+  clearTimeout(avisoTimer);
+  aviso.classList.toggle('dlg-aviso-error', error);
+  aviso.textContent = texto;
+  aviso.classList.add('visible');
+  avisoTimer = setTimeout(() => aviso.classList.remove('visible'), error ? 4500 : 2600);
+}
+
+  return { pedirFormulario, pedirTexto, pedirConfirmacion, mostrarAviso, pedirConfirmacionEscrita, avisoBreve };
+})();
+const pedirFormulario = __modulo_dialogo.pedirFormulario;
+const pedirTexto = __modulo_dialogo.pedirTexto;
+const pedirConfirmacion = __modulo_dialogo.pedirConfirmacion;
+const mostrarAviso = __modulo_dialogo.mostrarAviso;
+const pedirConfirmacionEscrita = __modulo_dialogo.pedirConfirmacionEscrita;
+const avisoBreve = __modulo_dialogo.avisoBreve;
 
 // ── peso/js/modelo.js ──────────────────────────────────────────
 const __modulo_modelo = (function () {
@@ -2215,11 +2498,27 @@ function ratioTrabajoDescansoHiit(hiits = []) {
   return { actividadProm: Math.round(actividad), descansoProm: Math.round(descanso), ratio: Math.round(ratio * 10) / 10, sistema };
 }
 
+// Día LOCAL (YYYY-MM-DD) de una marca de tiempo. Las sesiones guardan la
+// hora en UTC (toISOString); cortar ese texto daba el día de Greenwich: en
+// Tijuana un entrenamiento después de las 5 pm contaba como del día
+// siguiente, y por la tarde la racha salía en 0.
+function diaLocal(valor) {
+  if (typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor)) return valor;
+  const d = valor instanceof Date ? valor : new Date(valor || NaN);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function constancia(sesiones = [], hiits = [], ahora = new Date()) {
-  const fechas = new Set([...sesiones, ...hiits].filter((r) => r.estado === 'completada').map((r) => String(r.fecha || r.fin || '').slice(0, 10)));
+  const fechas = new Set([...sesiones, ...hiits].filter((r) => r.estado === 'completada').map((r) => diaLocal(r.fecha || r.fin)));
+  fechas.delete('');
   let racha = 0;
   const cursor = new Date(ahora);
-  while (fechas.has(cursor.toISOString().slice(0, 10))) { racha += 1; cursor.setDate(cursor.getDate() - 1); }
+  cursor.setHours(12, 0, 0, 0); // mediodía: restar días nunca cae en la hora que se salta el cambio de horario
+  // Igual que la racha de Peso: si hoy todavía no entrenas, la racha no se
+  // corta -- cuenta desde ayer (antes marcaba 0 toda la mañana).
+  if (!fechas.has(diaLocal(cursor))) cursor.setDate(cursor.getDate() - 1);
+  while (fechas.has(diaLocal(cursor))) { racha += 1; cursor.setDate(cursor.getDate() - 1); }
   const completadas = sesiones.filter((s) => s.estado === 'completada').length + hiits.filter((h) => h.estado === 'completada').length;
   const descartadas = sesiones.filter((s) => s.estado === 'descartada').length + hiits.filter((h) => h.estado === 'detenida').length;
   return { rachaDias: racha, completadas, descartadas, diasActivos: fechas.size };
@@ -2266,6 +2565,7 @@ const svgProgreso = __modulo_ejercicio_graficas.svgProgreso;
 // ── peso/js/ejercicio_ui.js ──────────────────────────────────────────
 const __modulo_ejercicio_ui = (function () {
 const api = __modulo_api;
+
 
 
 
@@ -2430,9 +2730,9 @@ function abrirEjercicios() {
     const ejercicios = (S.datos.ejercicios || []).filter((e) => e.activo !== false);
     c.querySelector('#lista-ejercicios').innerHTML = ejercicios.map((e) => `<div class="fila-selector-ejercicio"><button type="button" data-ejercicio="${e.id}"><span><b>${escapeHTML(e.nombre)}</b><small>${escapeHTML(S.datos.categorias.find((cat) => cat.id === e.categoriaId)?.nombre || '')} · ${escapeHTML(e.modalidad)}</small></span><i>Editar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-ejercicio="${e.id}" aria-label="Borrar ${escapeAtributo(e.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Todavía no hay ejercicios.</p>';
     c.querySelectorAll('[data-ejercicio]').forEach((b) => b.onclick = () => abrirFormularioEjercicio(b.dataset.ejercicio));
-    c.querySelectorAll('[data-borrar-ejercicio]').forEach((b) => b.onclick = () => {
+    c.querySelectorAll('[data-borrar-ejercicio]').forEach((b) => b.onclick = async () => {
       const ejercicio = S.datos.ejercicios.find((x) => x.id === b.dataset.borrarEjercicio);
-      if (!confirm(`¿Borrar "${ejercicio.nombre}"? Las rutinas que ya lo usan lo conservan en tu historial, pero ya no lo podrás agregar a rutinas nuevas.`)) return;
+      if (!(await pedirConfirmacion({ titulo: `¿Borrar "${ejercicio.nombre}"?`, mensaje: 'Las rutinas que ya lo usan lo conservan en tu historial, pero ya no lo podrás agregar a rutinas nuevas.', aceptar: 'Borrar', peligro: true }))) return;
       guardar((d) => { const x = d.ejercicios.find((y) => y.id === ejercicio.id); if (x) x.activo = false; }, 'borrar_ejercicio', ejercicio.id);
       pintar(c);
     });
@@ -2551,18 +2851,25 @@ function renderEntrenamientoActivo() {
   p.querySelector('#saltar-ejercicio')?.addEventListener('click', saltarEjercicio);
 }
 
-function salirRutina() {
+async function salirRutina() {
+  if (!S.entrenamiento.series.length) {
+    if (!(await pedirConfirmacion({ titulo: '¿Cancelar esta rutina?', mensaje: 'Todavía no completas ninguna serie, así que no se guarda nada.', aceptar: 'Cancelar rutina', cancelar: 'Seguir entrenando', peligro: true }))) return;
+    if (!S.entrenamiento) return;
+    S.entrenamiento = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); return renderEntrenar();
+  }
+  const n = S.entrenamiento.series.length;
+  if (!(await pedirConfirmacion({ titulo: '¿Terminar aquí?', mensaje: `Se guardan tus ${n} serie(s) completadas como rutina incompleta.`, aceptar: 'Guardar y salir', cancelar: 'Seguir entrenando' }))) return;
   const t = S.entrenamiento;
-  if (!t.series.length) { if (!confirm('¿Cancelar esta rutina sin guardarla?')) return; S.entrenamiento = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); return renderEntrenar(); }
-  if (!confirm(`¿Salir? Se guardarán ${t.series.length} serie(s) ya completadas como rutina incompleta.`)) return;
+  if (!t) return;
   const sesion = { id: t.id, rutinaId: t.rutinaId, nombre: t.nombre, fecha: t.fecha, fin: iso(), estado: calcularEstadoFinalSesion(t), series: t.series, omisiones: t.omisiones || [], creadoEn: t.creadoEn, modificadoEn: iso() };
   guardar((d) => d.sesiones.push(sesion), 'guardar_sesion', sesion.id);
   S.entrenamiento = null; S.descanso = null; borrarSesionActiva(getUsuario()); clearInterval(S.intervalo); liberarWake(); S.toast('Rutina guardada como incompleta'); renderEntrenar();
 }
 
-function saltarEjercicio() {
-  if (!confirm('¿Saltar este ejercicio? No se registrarán series para él.')) return;
+async function saltarEjercicio() {
+  if (!(await pedirConfirmacion({ titulo: '¿Saltar este ejercicio?', mensaje: 'No se registrarán series para él.', aceptar: 'Saltar' }))) return;
   const t = S.entrenamiento;
+  if (!t) return;
   t.omisiones.push({ ejercicioId: t.entradas[t.ejercicioIndice].ejercicioId, desdeSerie: t.serieNumero, en: iso() });
   Object.assign(t, { ejercicioIndice: t.ejercicioIndice + 1, serieNumero: 1, fase: 'serie' });
   persistirSesionActiva();
@@ -2641,8 +2948,8 @@ function renderWr() {
   p.innerHTML = `<section class="wr-config"><div class="wr-emblema">W/R</div><h1>Caminar y correr</h1><p>Arma tus propios intervalos. La app te avisa cuándo acelerar y cuándo bajar el ritmo, sin que tengas que ver la pantalla.</p><button type="button" id="wr-nueva" class="btn-primario ancho-completo">+ Nueva rutina</button><div class="lista-modal">${rutinas.map((r) => `<div class="fila-selector-ejercicio"><button type="button" data-usar-wr="${escapeAtributo(r.id)}"><span><b>${escapeHTML(r.nombre)}</b><small>${r.vueltas} vueltas · ${formatoDuracionWr(calcularDuracionWr(r))} · ${resumenFasesWr(r)}</small></span><i>Iniciar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-wr="${escapeAtributo(r.id)}" aria-label="Borrar ${escapeAtributo(r.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Crea tu primera rutina de caminar/correr.</p>'}</div></section>`;
   p.querySelector('#wr-nueva').onclick = () => abrirFormularioRutinaWr();
   p.querySelectorAll('[data-usar-wr]').forEach((b) => b.onclick = () => iniciarWr(S.datos.rutinasWr.find((r) => r.id === b.dataset.usarWr)));
-  p.querySelectorAll('[data-borrar-wr]').forEach((b) => b.onclick = () => {
-    if (!confirm('¿Borrar esta rutina de caminar/correr?')) return;
+  p.querySelectorAll('[data-borrar-wr]').forEach((b) => b.onclick = async () => {
+    if (!(await pedirConfirmacion({ titulo: '¿Borrar esta rutina de caminar/correr?', aceptar: 'Borrar', peligro: true }))) return;
     guardar((d) => { const x = (d.rutinasWr || []).find((y) => y.id === b.dataset.borrarWr); if (x) x.activo = false; }, 'borrar_rutina_wr', b.dataset.borrarWr);
     renderWr();
   });
@@ -2887,8 +3194,8 @@ function abrirRutinasHiit() {
   abrirModal('Rutinas HIIT', `<button type="button" id="nueva-rutina-hiit" class="btn-primario ancho-completo">+ Nueva rutina</button><div class="lista-modal">${rutinas.map((r) => `<div class="fila-selector-ejercicio"><button type="button" data-usar-hiit="${r.id}"><span><b>${escapeHTML(r.nombre)}</b><small>${r.vueltas} vueltas · ${r.actividadSeg}s/${r.descansoSeg}s · ${r.ejercicios.length} ejercicios</small></span><i>Usar</i></button><button type="button" class="btn-info-ejercicio" data-borrar-hiit="${r.id}" aria-label="Borrar ${escapeAtributo(r.nombre)}">🗑️</button></div>`).join('') || '<p class="estado-vacio">Sin rutinas todavía.</p>'}</div>`, (c) => {
     c.querySelector('#nueva-rutina-hiit').onclick = () => abrirFormularioRutinaHiit();
     c.querySelectorAll('[data-usar-hiit]').forEach((b) => b.onclick = () => { cerrarModal(); iniciarHiit(S.datos.rutinasHiit.find((r) => r.id === b.dataset.usarHiit)); });
-    c.querySelectorAll('[data-borrar-hiit]').forEach((b) => b.onclick = () => {
-      if (!confirm('¿Borrar esta rutina de HIIT?')) return;
+    c.querySelectorAll('[data-borrar-hiit]').forEach((b) => b.onclick = async () => {
+      if (!(await pedirConfirmacion({ titulo: '¿Borrar esta rutina de HIIT?', aceptar: 'Borrar', peligro: true }))) return;
       guardar((d) => { const x = d.rutinasHiit.find((y) => y.id === b.dataset.borrarHiit); if (x) x.activo = false; }, 'borrar_rutina_hiit', b.dataset.borrarHiit);
       abrirRutinasHiit();
     });
@@ -2969,7 +3276,7 @@ function renderProgreso() {
   p.querySelectorAll('[data-periodo]').forEach((b) => b.onclick = () => { S.periodo = b.dataset.periodo; renderProgreso(); });
   p.querySelector('#ver-analisis-completo').onclick = abrirAnalisisCompleto;
   p.querySelectorAll('[data-editar-registro]').forEach((b) => b.onclick = () => abrirEditarRegistro(b.dataset.editarRegistro));
-  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = () => { if (!confirm('¿Eliminar este registro?')) return; guardar((d) => { for (const lista of [d.sesiones, d.hiits, d.wrs || []]) { const x = lista?.find((registro) => registro.id === b.dataset.eliminar); if (x) { x.eliminadoEn = iso(); x.modificadoEn = x.eliminadoEn; } } }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
+  p.querySelectorAll('[data-eliminar]').forEach((b) => b.onclick = async () => { if (!(await pedirConfirmacion({ titulo: '¿Eliminar este registro?', aceptar: 'Eliminar', peligro: true }))) return; guardar((d) => { for (const lista of [d.sesiones, d.hiits, d.wrs || []]) { const x = lista?.find((registro) => registro.id === b.dataset.eliminar); if (x) { x.eliminadoEn = iso(); x.modificadoEn = x.eliminadoEn; } } }, 'eliminar_registro', b.dataset.eliminar); renderProgreso(); });
 }
 
 // Análisis deportivo completo: volumen semanal por músculo, balance,
@@ -3071,6 +3378,7 @@ const ui_helpers = __modulo_ui_helpers;
 
 
 const fondo = __modulo_fondo;
+
 
 
 
@@ -3252,6 +3560,7 @@ function renderCapturar() {
   document.getElementById('captura-usuario').textContent = getUsuario();
   document.getElementById('captura-unidad').textContent = unidad;
   document.getElementById('captura-fecha').value = E.captura.fecha;
+  document.getElementById('captura-fecha').max = hoyISO();
   document.getElementById('captura-fecha-texto').textContent = formatoFechaCorta(E.captura.fecha);
   document.getElementById('btn-guardar-captura').textContent = E.captura.editandoFechaOriginal ? 'Guardar cambios' : 'Registrar peso';
   document.getElementById('captura-modo-edicion').classList.toggle('oculto', !E.captura.editandoFechaOriginal);
@@ -3274,6 +3583,11 @@ async function guardarCaptura() {
     const unidad = miUnidad();
     const pesoKg = validarPeso(aKg(E.captura.pesoStr, unidad));
     const fecha = E.captura.fecha;
+    // El selector de fecha de iPhone tiene "Borrar" (deja la fecha vacía) y no
+    // siempre respeta `max` -- sin esto se encolaba un peso sin fecha o del
+    // futuro, y la cola se quedaba atorada reintentándolo.
+    if (!fechaISOValida(fecha)) throw new Error('Elige la fecha del peso');
+    if (fecha > hoyISO()) throw new Error('No puedes registrar un peso de una fecha futura');
     const operaciones = ui_helpers.planificarEdicion(E.captura.editandoFechaOriginal, fecha, pesoKg);
     for (const operacion of operaciones) {
       if (operacion.tipo === 'borrar') cola.encolarBorrado(getUsuario(), operacion.fecha);
@@ -3315,6 +3629,9 @@ function wireCapturar() {
     E.captura.pesoStr = limpio;
     renderCapturar();
     intentarRecargaDiferida();
+  });
+  document.getElementById('captura-peso-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-guardar-captura').click();
   });
   document.getElementById('captura-fecha').addEventListener('change', (e) => {
     E.captura.fecha = e.target.value;
@@ -3466,8 +3783,11 @@ function avatarMeta(pctAvance) {
 // si ya pasó). Compartida entre "Mi progreso" (kpi) y "Nuestro reto" (texto).
 function diasFaltanReto() {
   if (!E.datos.retoFin) return null;
-  const hoy = hoyISO();
-  return Math.ceil((new Date(`${E.datos.retoFin}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000);
+  // Días de calendario en UTC, no medianoches locales: cuando cambia el
+  // horario (noviembre) la resta de dos medianoches locales da 24 h ± 1, y
+  // con Math.ceil el conteo marcaba un día de más.
+  const dia = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((dia(E.datos.retoFin) - dia(hoyISO())) / 86400000);
 }
 
 function textoFechasReto() {
@@ -3725,23 +4045,29 @@ async function cambiarUnidadAjustes(unidad) {
 }
 
 async function cambiarPinAjustes() {
-  const actual = prompt('Tu contraseña actual:') || '';
-  const nuevo = prompt('Nueva contraseña (mínimo 6 caracteres):');
-  if (nuevo === null) return;
-  if (!pinNuevoValido(nuevo)) {
-    toast('La contraseña nueva debe tener al menos 6 caracteres', true);
-    return;
-  }
-  try {
-    const r = await api.cambiarPin(getUsuario(), actual, nuevo);
-    if (r.ok) {
-      try { await guardarAccesoLocal(getUsuario(), nuevo); } catch { /* La contraseña remota ya cambió correctamente. */ }
-      toast('Contraseña actualizada ✓');
-    }
-    else toast(r.error || 'Contraseña actual incorrecta', true);
-  } catch (e) {
-    toast('No se pudo cambiar (¿sin conexión?): ' + e.message, true);
-  }
+  const r = await pedirFormulario({
+    titulo: 'Cambiar contraseña',
+    mensaje: 'Es la que usas para entrar a Mis Apps.',
+    campos: [
+      { nombre: 'actual', tipo: 'password', etiqueta: 'Contraseña actual', autocomplete: 'current-password' },
+      { nombre: 'nueva', tipo: 'password', etiqueta: 'Nueva contraseña (mínimo 6)', autocomplete: 'new-password' },
+      { nombre: 'confirmar', tipo: 'password', etiqueta: 'Repite la nueva contraseña', autocomplete: 'new-password' },
+    ],
+    aceptar: 'Cambiar',
+    textoProcesando: 'Guardando…',
+    validar: async ({ actual, nueva, confirmar }) => {
+      if (!actual) return { mensaje: 'Escribe tu contraseña actual.', campo: 'actual' };
+      if (!pinNuevoValido(nueva)) return { mensaje: 'La nueva contraseña debe tener al menos 6 caracteres.', campo: 'nueva' };
+      if (nueva !== confirmar) return { mensaje: 'Las contraseñas nuevas no coinciden.', campo: 'confirmar' };
+      let respuesta;
+      try { respuesta = await api.cambiarPin(getUsuario(), actual, nueva); }
+      catch (e) { return 'No se pudo cambiar (¿sin conexión?): ' + e.message; }
+      return respuesta.ok ? null : { mensaje: respuesta.error || 'La contraseña actual es incorrecta.', campo: 'actual' };
+    },
+  });
+  if (!r) return;
+  try { await guardarAccesoLocal(getUsuario(), r.nueva); } catch { /* La contraseña remota ya cambió correctamente. */ }
+  toast('Contraseña actualizada ✓');
 }
 
 // Respaldo manual (Gastos ya tenía el suyo, a Peso le faltaba) -- descarga
@@ -3764,7 +4090,9 @@ function exportarMisDatosPeso() {
   a.href = url;
   a.download = `peso-respaldo-${usuario}-${hoyISO()}.json`;
   a.click();
-  URL.revokeObjectURL(url);
+  // Safari (iPhone) cancela la descarga si el enlace se revoca en el mismo
+  // instante del click -- se le da tiempo de abrir la hoja de "Guardar".
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 function wireAjustes() {
@@ -3796,8 +4124,12 @@ function wireAjustes() {
     location.href = '../index.html';
   });
   document.getElementById('btn-borrar-mis-datos').addEventListener('click', async () => {
-    const confirmacion = prompt('Esto borra TODOS tus pesos registrados (los de la otra persona no se tocan). Escribe BORRAR para confirmar:');
-    if (confirmacion !== 'BORRAR') return;
+    const ok = await pedirConfirmacionEscrita({
+      titulo: '¿Borrar todos tus pesos?',
+      mensaje: 'Se borran todos tus pesos registrados. Los de la otra persona no se tocan. No se puede deshacer.',
+      aceptar: 'Borrar pesos',
+    });
+    if (!ok) return;
     try {
       const r = await api.borrarPesos(getUsuario());
       if (!r.ok) throw new Error(r.error || 'el servidor no confirmó el borrado');
@@ -3807,15 +4139,23 @@ function wireAjustes() {
       toast('No se pudo borrar (¿sin conexión?): ' + e.message, true);
     }
   });
-  document.getElementById('btn-borrar-ejercicios').addEventListener('click', () => {
-    const confirmacion = prompt('Esto borra TODOS tus ejercicios (los del catálogo por defecto y los que hayas creado). Tus rutinas y tu historial se quedan igual. Escribe BORRAR para confirmar:');
-    if (confirmacion !== 'BORRAR') return;
+  document.getElementById('btn-borrar-ejercicios').addEventListener('click', async () => {
+    const ok = await pedirConfirmacionEscrita({
+      titulo: '¿Borrar tus ejercicios?',
+      mensaje: 'Se borran todos tus ejercicios: los del catálogo por defecto y los que creaste. Tus rutinas y tu historial se quedan igual.',
+      aceptar: 'Borrar ejercicios',
+    });
+    if (!ok) return;
     mutarLocal(getUsuario(), (d) => { d.ejercicios = []; }, { tipo: 'borrar_ejercicios' });
     toast('Tus ejercicios fueron borrados');
   });
-  document.getElementById('btn-borrar-rutinas').addEventListener('click', () => {
-    const confirmacion = prompt('Esto borra tus rutinas armadas y tu historial de entrenamientos/HIIT. Tu catálogo de ejercicios se queda igual. Escribe BORRAR para confirmar:');
-    if (confirmacion !== 'BORRAR') return;
+  document.getElementById('btn-borrar-rutinas').addEventListener('click', async () => {
+    const ok = await pedirConfirmacionEscrita({
+      titulo: '¿Borrar rutinas y entrenamientos?',
+      mensaje: 'Se borran tus rutinas armadas y tu historial de entrenamientos y HIIT. Tu catálogo de ejercicios se queda igual.',
+      aceptar: 'Borrar rutinas',
+    });
+    if (!ok) return;
     mutarLocal(getUsuario(), (d) => { d.rutinas = []; d.sesiones = []; d.hiits = []; }, { tipo: 'borrar_rutinas' });
     toast('Tus rutinas y entrenamientos fueron borrados');
   });

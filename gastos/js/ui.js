@@ -14,6 +14,7 @@ import * as fondo from '../../shared/fondo.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro } from '../../shared/ui_seguridad.js';
 import { leerMetadataActualizacion, formatearFechaActualizacion, obtenerEstadoActualizacion, buscarActualizacion } from '../../shared/actualizacion.js';
 import { mostrarCargando, ocultarCargando } from '../../shared/cargando.js';
+import { pedirTexto, pedirConfirmacion, pedirConfirmacionEscrita } from '../../shared/dialogo.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -46,6 +47,14 @@ const ICONOS_INSIGHT = {
 
 function fmt(n) {
   return new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }).format(n);
+}
+
+// Para la lista de movimientos: con centavos si los tiene ($45.50) y sin
+// ".00" si es cerrado ($120). fmt() redondea a pesos -- bien para totales y
+// gráficas, pero en la lista un gasto de $45.50 se veía como $46.
+function fmtMonto(n) {
+  const decimales = Math.round(Math.abs(n) * 100) % 100 === 0 ? 0 : 2;
+  return new Intl.NumberFormat('es-MX', { minimumFractionDigits: decimales, maximumFractionDigits: decimales }).format(n);
 }
 
 function categoriaObj(id) {
@@ -520,6 +529,9 @@ function wireCaptura() {
   document.getElementById('captura-nota').addEventListener('input', (e) => {
     E.captura.nota = e.target.value;
   });
+  document.getElementById('captura-nota').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-guardar-movimiento').click();
+  });
   document.getElementById('btn-guardar-movimiento').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarMovimientoCaptura));
 }
 
@@ -544,7 +556,7 @@ function filaMovimientoHTML(m) {
       <div class="nombre">${escapeHTML(cat?.nombre || m.categoria)}${m.nota ? ' · ' + escapeHTML(m.nota) : ''}</div>
       ${mostrarMetodo ? `<div class="sub">${escapeHTML(metodoLabel(m.metodo))}</div>` : ''}
     </div>
-    <div class="monto ${m.tipo === 'ingreso' ? 'ingreso' : 'gasto'}">${m.tipo === 'gasto' ? '-' : '+'}$${fmt(m.monto)}</div>
+    <div class="monto ${m.tipo === 'ingreso' ? 'ingreso' : 'gasto'}">${m.tipo === 'gasto' ? '-' : '+'}$${fmtMonto(m.monto)}</div>
   </div>`;
 }
 
@@ -557,7 +569,7 @@ function renderMovimientos() {
   const movs = movimientosFiltrados();
   const totalGasto = calculos.aPesos(calculos.sumaCentavos(movs.filter((m) => m.tipo === 'gasto')));
   const totalIngreso = calculos.aPesos(calculos.sumaCentavos(movs.filter((m) => m.tipo === 'ingreso')));
-  document.getElementById('mov-resumen').innerHTML = `<strong>${movs.length}</strong> movimientos · Gasto $${fmt(totalGasto)} · Ingreso $${fmt(totalIngreso)}`;
+  document.getElementById('mov-resumen').innerHTML = `<strong>${movs.length}</strong> movimientos · Gasto $${fmtMonto(totalGasto)} · Ingreso $${fmtMonto(totalIngreso)}`;
 
   const porDia = new Map();
   for (const m of movs) {
@@ -575,7 +587,7 @@ function renderMovimientos() {
       const totalDiaCent = lista.reduce((acc, m) => acc + (m.tipo === 'gasto' ? -1 : 1) * calculos.aCentavos(m.monto), 0);
       const signo = totalDiaCent < 0 ? '-' : '';
       return `<div class="grupo-dia">
-        <div class="grupo-dia-header"><span>${escapeHTML(formatoFechaLarga(fecha))}</span><span>${signo}$${fmt(Math.abs(totalDiaCent) / 100)}</span></div>
+        <div class="grupo-dia-header"><span>${escapeHTML(formatoFechaLarga(fecha))}</span><span>${signo}$${fmtMonto(Math.abs(totalDiaCent) / 100)}</span></div>
         ${lista.map(filaMovimientoHTML).join('')}
       </div>`;
     })
@@ -865,15 +877,20 @@ async function activarFaceIdDesdeAjustes() {
     toast(motivo, true);
     return;
   }
-  const pass = prompt('Escribe tu contraseña de Gastos para activar Face ID:');
-  if (!pass) return;
-  try {
-    await almacen.cargar(getUsuario(), pass); // avienta "Contraseña incorrecta" si no es la correcta
-  } catch (e) {
-    toast(e.message || 'Contraseña incorrecta', true);
-    return;
-  }
-  // El registro se hace hasta que toques el botón del popup: el prompt de
+  const pass = await pedirTexto({
+    titulo: 'Activar Face ID',
+    mensaje: 'Escribe tu contraseña de Gastos para activarlo en este dispositivo.',
+    campo: { tipo: 'password', etiqueta: 'Contraseña de Gastos', autocomplete: 'current-password' },
+    aceptar: 'Continuar',
+    validar: async (valor) => {
+      if (!valor) return 'Escribe tu contraseña.';
+      try { await almacen.cargar(getUsuario(), valor); } // avienta "Contraseña incorrecta" si no es la correcta
+      catch (e) { return e.message || 'Contraseña incorrecta.'; }
+      return null;
+    },
+  });
+  if (pass === null) return;
+  // El registro se hace hasta que toques el botón del popup: el diálogo de
   // arriba y la lectura del servidor ya "gastaron" el toque original.
   popupFaceId('Confirma para activar Face ID en este iPhone.', () => registrarFaceIdGastos(pass));
 }
@@ -926,7 +943,8 @@ async function borrarCategoria(id) {
     toast('No se puede borrar: hay movimientos con esta categoría', true);
     return;
   }
-  if (!confirm('¿Borrar esta categoría?')) return;
+  const nombre = categoriaNombre(id);
+  if (!(await pedirConfirmacion({ titulo: `¿Borrar la categoría "${nombre}"?`, aceptar: 'Borrar', peligro: true }))) return;
   E.datos.categorias = E.datos.categorias.filter((c) => c.id !== id);
   await guardarYRefrescar();
 }
@@ -965,7 +983,7 @@ function abrirModalRecurrente(id) {
     const btnBorrar = document.getElementById('btn-borrar-rec');
     if (btnBorrar) {
       btnBorrar.addEventListener('click', async () => {
-        if (!confirm('¿Eliminar este recurrente?')) return;
+        if (!(await pedirConfirmacion({ titulo: `¿Eliminar "${existente.nombre}"?`, mensaje: 'Deja de aparecer en tus pagos fijos. Los movimientos que ya registraste no se tocan.', aceptar: 'Eliminar', peligro: true }))) return;
         E.datos.recurrentes = E.datos.recurrentes.filter((r) => r.id !== id);
         await guardarYRefrescar();
         cerrarModal();
@@ -1008,7 +1026,8 @@ function wireAjustes() {
     const borrar = e.target.closest('[data-borrar-rec]');
     if (editar) abrirModalRecurrente(editar.dataset.editarRec);
     if (borrar) {
-      if (!confirm('¿Eliminar este recurrente?')) return;
+      const recurrente = E.datos.recurrentes.find((r) => r.id === borrar.dataset.borrarRec);
+      if (!(await pedirConfirmacion({ titulo: `¿Eliminar "${recurrente?.nombre || 'este recurrente'}"?`, mensaje: 'Deja de aparecer en tus pagos fijos. Los movimientos que ya registraste no se tocan.', aceptar: 'Eliminar', peligro: true }))) return;
       E.datos.recurrentes = E.datos.recurrentes.filter((r) => r.id !== borrar.dataset.borrarRec);
       await guardarYRefrescar();
     }
@@ -1024,15 +1043,30 @@ function wireAjustes() {
     if (!file) return;
     try {
       const paquete = await almacen.leerArchivoSubido(file);
-      let datos;
+      let datos = null;
       if (esPaqueteCifrado(paquete)) {
-        const passImport = prompt('Contraseña del archivo que estás importando:');
+        const passImport = await pedirTexto({
+          titulo: 'Contraseña del respaldo',
+          mensaje: `Escribe la contraseña con la que se creó "${file.name}".`,
+          campo: { tipo: 'password', etiqueta: 'Contraseña', autocomplete: 'off' },
+          aceptar: 'Abrir respaldo',
+          textoProcesando: 'Abriendo…',
+          validar: async (valor) => {
+            try { datos = await descifrar(paquete, valor); }
+            catch { return 'Esa contraseña no abre este respaldo.'; }
+            return null;
+          },
+        });
         if (passImport === null) return;
-        datos = await descifrar(paquete, passImport);
       } else {
         datos = paquete; // respaldo de una versión anterior sin cifrar
       }
-      if (!confirm('Esto reemplaza todos los datos actuales con el archivo importado. ¿Continuar?')) return;
+      if (!(await pedirConfirmacion({
+        titulo: '¿Reemplazar tus datos?',
+        mensaje: 'Todos tus movimientos, categorías y presupuestos actuales se reemplazan con los del respaldo.',
+        aceptar: 'Reemplazar',
+        peligro: true,
+      }))) return;
       E.datos = normalizarDatos(datos);
       await guardarYRefrescar();
       toast('Importado ✓');
@@ -1051,8 +1085,12 @@ function wireAjustes() {
     location.href = '../index.html';
   });
   document.getElementById('btn-borrar-todo').addEventListener('click', async () => {
-    const confirmacion = prompt('Esto borra TODOS tus movimientos, categorías y presupuestos (quedan los respaldos automáticos). Escribe BORRAR para confirmar:');
-    if (confirmacion !== 'BORRAR') return;
+    const ok = await pedirConfirmacionEscrita({
+      titulo: '¿Borrar todo?',
+      mensaje: 'Se borran todos tus movimientos, categorías y presupuestos. Los respaldos automáticos de tu Hoja de Gastos se conservan.',
+      aceptar: 'Borrar todo',
+    });
+    if (!ok) return;
     E.datos = crearDatosVacios();
     await guardarYRefrescar();
     toast('Todo borrado');

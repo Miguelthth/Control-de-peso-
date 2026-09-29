@@ -197,11 +197,27 @@ export function ratioTrabajoDescansoHiit(hiits = []) {
   return { actividadProm: Math.round(actividad), descansoProm: Math.round(descanso), ratio: Math.round(ratio * 10) / 10, sistema };
 }
 
+// Día LOCAL (YYYY-MM-DD) de una marca de tiempo. Las sesiones guardan la
+// hora en UTC (toISOString); cortar ese texto daba el día de Greenwich: en
+// Tijuana un entrenamiento después de las 5 pm contaba como del día
+// siguiente, y por la tarde la racha salía en 0.
+function diaLocal(valor) {
+  if (typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor)) return valor;
+  const d = valor instanceof Date ? valor : new Date(valor || NaN);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function constancia(sesiones = [], hiits = [], ahora = new Date()) {
-  const fechas = new Set([...sesiones, ...hiits].filter((r) => r.estado === 'completada').map((r) => String(r.fecha || r.fin || '').slice(0, 10)));
+  const fechas = new Set([...sesiones, ...hiits].filter((r) => r.estado === 'completada').map((r) => diaLocal(r.fecha || r.fin)));
+  fechas.delete('');
   let racha = 0;
   const cursor = new Date(ahora);
-  while (fechas.has(cursor.toISOString().slice(0, 10))) { racha += 1; cursor.setDate(cursor.getDate() - 1); }
+  cursor.setHours(12, 0, 0, 0); // mediodía: restar días nunca cae en la hora que se salta el cambio de horario
+  // Igual que la racha de Peso: si hoy todavía no entrenas, la racha no se
+  // corta -- cuenta desde ayer (antes marcaba 0 toda la mañana).
+  if (!fechas.has(diaLocal(cursor))) cursor.setDate(cursor.getDate() - 1);
+  while (fechas.has(diaLocal(cursor))) { racha += 1; cursor.setDate(cursor.getDate() - 1); }
   const completadas = sesiones.filter((s) => s.estado === 'completada').length + hiits.filter((h) => h.estado === 'completada').length;
   const descartadas = sesiones.filter((s) => s.estado === 'descartada').length + hiits.filter((h) => h.estado === 'detenida').length;
   return { rachaDias: racha, completadas, descartadas, diasActivos: fechas.size };

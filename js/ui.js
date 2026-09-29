@@ -5,8 +5,9 @@ import * as api from '../shared/api.js';
 import * as passkey from '../shared/passkey.js';
 import * as candado from '../shared/candado.js';
 import * as fondo from '../shared/fondo.js';
-import { exigirBackendActual, guardarToken, borrarToken, pinNuevoValido } from '../shared/autorizacion.js';
+import { exigirBackendActual, guardarToken, borrarToken, pinNuevoValido, usuarioValido } from '../shared/autorizacion.js';
 import { mostrarCargando, ocultarCargando } from '../shared/cargando.js';
+import { pedirFormulario, pedirTexto, mostrarAviso, avisoBreve } from '../shared/dialogo.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -78,7 +79,7 @@ async function autenticarConFaceId(usuario, mostrarError) {
   }
   if (!accesoFaceIdValido(acceso)) {
     ocultarCargando();
-    mostrarError('La sesión expiró. Entra con tu PIN para continuar.');
+    mostrarError('La sesión expiró. Entra con tu contraseña para continuar.');
     return false;
   }
   candado.marcarFaceIdConfirmado(); // Gastos no lo vuelve a pedir si entras ahí en los próximos minutos
@@ -161,10 +162,10 @@ async function activarFaceIdConPin(usuario, rol, pin) {
     if (!passkey.tieneRegistro(usuario)) await passkey.registrar(usuario); // reusa el de Gastos si ya existe
     candado.guardarCandado('launcher', usuario, { pin, rol });
     candado.marcarFaceIdConfirmado();
-    alert('Face ID activado ✓ — la próxima vez que abras la app te lo va a pedir.');
+    avisoBreve('Face ID activado ✓ — te lo pedirá la próxima vez que abras la app.');
     actualizarBotonesFaceId();
   } catch (e) {
-    alert('No se pudo activar Face ID: ' + e.message);
+    mostrarAviso({ titulo: 'No se pudo activar Face ID', mensaje: e.message });
   }
 }
 
@@ -180,7 +181,7 @@ async function ofrecerFaceId(usuario, rol, pin) {
   }
   if (!(await passkey.disponible())) return;
   popupFaceId(
-    '¿Activar Face ID en este iPhone para no volver a teclear tu PIN?',
+    '¿Activar Face ID en este iPhone para no volver a teclear tu contraseña?',
     () => activarFaceIdConPin(usuario, rol, pin)
   );
 }
@@ -189,24 +190,25 @@ async function activarFaceId() {
   const usuario = getUsuario();
   const motivo = await passkey.porQueNoDisponible();
   if (motivo) {
-    alert('No se puede activar Face ID aquí:\n\n' + motivo);
+    mostrarAviso({ titulo: 'Face ID no está disponible aquí', mensaje: motivo });
     return;
   }
-  const pin = prompt('Para activar Face ID, confirma tu PIN actual:') || '';
-  try {
-    const r = await api.validarPin(usuario, pin);
-    exigirBackendActual(r, { requiereToken: true });
-    if (!r.ok) {
-      alert('PIN incorrecto');
-      return;
-    }
-  } catch (e) {
-    alert('No se pudo confirmar: ' + e.message);
-    return;
-  }
-  // El PIN ya quedó validado arriba; el registro se hace hasta que toques
-  // el botón del popup, porque Safari lo exige (el prompt y la llamada de
-  // red de arriba ya "gastaron" el toque original del botón de Ajustes).
+  const pin = await pedirTexto({
+    titulo: 'Activar Face ID',
+    mensaje: 'Confirma tu contraseña actual para activarlo en este dispositivo.',
+    campo: { tipo: 'password', etiqueta: 'Contraseña', autocomplete: 'current-password' },
+    aceptar: 'Continuar',
+    validar: async (valor) => {
+      if (!valor) return 'Escribe tu contraseña.';
+      const r = await api.validarPin(usuario, valor);
+      exigirBackendActual(r, { requiereToken: true });
+      return r.ok ? null : 'Contraseña incorrecta.';
+    },
+  });
+  if (pin === null) return;
+  // La contraseña ya quedó validada arriba; el registro se hace hasta que
+  // toques el botón del popup, porque Safari lo exige (el diálogo y la
+  // llamada de red ya "gastaron" el toque original del botón de Ajustes).
   popupFaceId('Confirma para activar Face ID en este iPhone.', () => activarFaceIdConPin(usuario, getRol(), pin));
 }
 
@@ -254,17 +256,34 @@ function mostrarInicio() {
 }
 
 async function agregarUsuario() {
-  const nombreNuevo = prompt('Nombre del usuario nuevo:');
-  if (!nombreNuevo || !nombreNuevo.trim()) return;
-  const esOtroAdmin = confirm('¿Este usuario también es administrador?\n\nAceptar = sí, administrador.\nCancelar = no, usuario normal.');
-  try {
-    const r = await api.crearUsuario(nombreNuevo.trim(), esOtroAdmin ? 'admin' : 'normal');
-    exigirBackendActual(r);
-    if (r.ok && r.codigoActivacion) alert(`Usuario creado. Código de activación de un solo uso para ${nombreNuevo.trim()}:\n\n${r.codigoActivacion}\n\nEntrégaselo por un canal privado; no volverá a mostrarse.`);
-    else alert(r.error || 'No se pudo crear');
-  } catch (e) {
-    alert('No se pudo crear: ' + e.message);
-  }
+  let creado = null;
+  const datos = await pedirFormulario({
+    titulo: 'Agregar usuario',
+    mensaje: 'Se genera un código de un solo uso para que la persona cree su propia contraseña.',
+    campos: [
+      { nombre: 'nombre', etiqueta: 'Nombre de usuario', autocomplete: 'off' },
+      { nombre: 'admin', tipo: 'checkbox', etiqueta: 'También es administrador' },
+    ],
+    aceptar: 'Crear usuario',
+    textoProcesando: 'Creando…',
+    validar: async ({ nombre, admin }) => {
+      const limpio = nombre.trim();
+      if (!limpio) return 'Escribe el nombre del usuario.';
+      if (!usuarioValido(limpio)) return 'Usa solo letras, números, espacios, punto, guion o guion bajo.';
+      const r = await api.crearUsuario(limpio, admin ? 'admin' : 'normal');
+      exigirBackendActual(r);
+      if (!r.ok || !r.codigoActivacion) return r.error || 'No se pudo crear el usuario.';
+      creado = { nombre: limpio, codigo: String(r.codigoActivacion) };
+      return null;
+    },
+  });
+  if (!datos || !creado) return;
+  await mostrarAviso({
+    titulo: `${creado.nombre} ya tiene cuenta`,
+    mensaje: 'Entrégale este código de activación por un canal privado. Es de un solo uso y no se volverá a mostrar.',
+    codigo: creado.codigo,
+    aceptar: 'Ya lo guardé',
+  });
 }
 
 function mostrarErrorUsuario(msg) {
@@ -275,6 +294,15 @@ function mostrarErrorUsuario(msg) {
 
 function mostrarErrorPin(msg) {
   const el = document.getElementById('pin-error');
+  el.textContent = msg;
+  el.classList.remove('oculto');
+  const input = document.getElementById('pin-input');
+  input.focus();
+  input.select();
+}
+
+function mostrarErrorActivacion(msg) {
+  const el = document.getElementById('activacion-error');
   el.textContent = msg;
   el.classList.remove('oculto');
 }
@@ -332,12 +360,14 @@ function volverAUsuario() {
 
 async function continuarPin() {
   const pin = document.getElementById('pin-input').value;
-  const boton = document.getElementById('btn-pin-continuar');
-  boton.textContent = 'Verificando…';
+  if (!pin) {
+    mostrarErrorPin('Escribe tu contraseña.');
+    return;
+  }
   try {
     if (!navigator.onLine) {
       if (!(await validarAccesoLocal(usuarioTemp, pin))) {
-        mostrarErrorPin('PIN incorrecto o este teléfono no está preparado para entrar sin internet.');
+        mostrarErrorPin('Contraseña incorrecta, o este teléfono todavía no puede entrar sin internet (entra una vez con conexión).');
         return;
       }
       iniciarSesionLocal(usuarioTemp, rolTemp);
@@ -348,7 +378,7 @@ async function continuarPin() {
     const r = await api.validarPin(usuarioTemp, pin);
     exigirBackendActual(r, { requiereToken: true });
     if (!r.ok) {
-      mostrarErrorPin('PIN incorrecto');
+      mostrarErrorPin('Contraseña incorrecta.');
       return;
     }
     iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
@@ -358,18 +388,14 @@ async function continuarPin() {
     ofrecerFaceId(usuarioTemp, rolTemp, pin);
   } catch (e) {
     mostrarErrorPin('No se pudo validar: ' + e.message);
-  } finally {
-    boton.textContent = 'Entrar';
   }
 }
 
 async function validarCodigoActivacion() {
-  const codigo = document.getElementById('codigo-activacion-input').value.trim();
-  const error = document.getElementById('activacion-error');
-  error.classList.add('oculto');
+  const codigo = document.getElementById('codigo-activacion-input').value.replace(/\s+/g, '');
+  document.getElementById('activacion-error').classList.add('oculto');
   if (!/^\d{8,}$/.test(codigo)) {
-    error.textContent = 'El código de activación debe tener al menos 8 dígitos.';
-    error.classList.remove('oculto');
+    mostrarErrorActivacion('El código de activación debe tener al menos 8 dígitos.');
     return;
   }
   try {
@@ -384,20 +410,27 @@ async function validarCodigoActivacion() {
     document.getElementById('pin-nuevo-input').focus();
   } catch (e) {
     borrarToken();
-    error.textContent = e.message;
-    error.classList.remove('oculto');
+    mostrarErrorActivacion(e.message);
   }
 }
 
 async function guardarPinNuevo() {
   const pin = document.getElementById('pin-nuevo-input').value;
+  document.getElementById('activacion-error').classList.add('oculto');
   if (!pinNuevoValido(pin)) {
-    alert('La contraseña debe tener al menos 6 caracteres');
+    mostrarErrorActivacion('La contraseña debe tener al menos 6 caracteres.');
+    document.getElementById('pin-nuevo-input').focus();
     return;
   }
-  const r = await api.crearPin(usuarioTemp, pin);
-  exigirBackendActual(r, { requiereToken: true });
-  if (!r.ok || !r.token) throw new Error(r.error || 'No se pudo crear el PIN');
+  let r;
+  try {
+    r = await api.crearPin(usuarioTemp, pin);
+    exigirBackendActual(r, { requiereToken: true });
+    if (!r.ok || !r.token) throw new Error(r.error || 'No se pudo crear la contraseña.');
+  } catch (e) {
+    mostrarErrorActivacion(e.message);
+    return;
+  }
   iniciarSesion(usuarioTemp, r.rol || rolTemp, r.token);
   try { await guardarAccesoLocal(usuarioTemp, pin); } catch { /* El acceso en línea sigue siendo válido. */ }
   guardarClaveSesion(pin); // Gastos la prueba sola al abrir, sin volver a preguntar
@@ -406,16 +439,25 @@ async function guardarPinNuevo() {
 }
 
 function wireEventos() {
-  document.getElementById('btn-url-continuar').addEventListener('click', () => {
+  const continuarUrl = () => {
     const v = document.getElementById('url-input').value.trim();
     if (!v) return;
     setUrl(v);
     mostrarPantalla('pantalla-usuario');
+  };
+  document.getElementById('btn-url-continuar').addEventListener('click', continuarUrl);
+  document.getElementById('url-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') continuarUrl();
   });
 
   document.getElementById('btn-usuario-continuar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, continuarUsuario));
   document.getElementById('usuario-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-usuario-continuar').click();
+  });
+  // Borra el error en cuanto vuelves a escribir -- antes se quedaba pegado
+  // en pantalla aunque ya hubieras corregido el usuario.
+  document.getElementById('usuario-input').addEventListener('input', () => {
+    document.getElementById('usuario-error').classList.add('oculto');
   });
   document.getElementById('btn-mostrar-usuario-form').addEventListener('click', (e) => {
     e.currentTarget.classList.add('oculto');
@@ -429,9 +471,20 @@ function wireEventos() {
   document.getElementById('pin-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-pin-continuar').click();
   });
+  document.getElementById('pin-input').addEventListener('input', () => {
+    document.getElementById('pin-error').classList.add('oculto');
+  });
 
   document.getElementById('btn-pin-nuevo-mostrar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, validarCodigoActivacion));
   document.getElementById('btn-pin-nuevo-guardar').addEventListener('click', (e) => ejecutarUnaVez(e.currentTarget, guardarPinNuevo));
+  for (const [campo, boton] of [['codigo-activacion-input', 'btn-pin-nuevo-mostrar'], ['pin-nuevo-input', 'btn-pin-nuevo-guardar']]) {
+    document.getElementById(campo).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById(boton).click();
+    });
+    document.getElementById(campo).addEventListener('input', () => {
+      document.getElementById('activacion-error').classList.add('oculto');
+    });
+  }
 
   document.getElementById('btn-cerrar-sesion').addEventListener('click', () => {
     document.getElementById('popup-ajustes').classList.add('oculto');
@@ -441,12 +494,22 @@ function wireEventos() {
     renderFaceIdUsuarios();
   });
 
+  const popupAjustes = document.getElementById('popup-ajustes');
+  const cerrarAjustes = () => {
+    popupAjustes.classList.add('oculto');
+    document.getElementById('btn-abrir-ajustes').focus();
+  };
   document.getElementById('btn-abrir-ajustes').addEventListener('click', () => {
     actualizarBotonesFaceId();
-    document.getElementById('popup-ajustes').classList.remove('oculto');
+    popupAjustes.classList.remove('oculto');
+    document.getElementById('btn-cerrar-ajustes').focus();
   });
-  document.getElementById('btn-cerrar-ajustes').addEventListener('click', () => {
-    document.getElementById('popup-ajustes').classList.add('oculto');
+  document.getElementById('btn-cerrar-ajustes').addEventListener('click', cerrarAjustes);
+  popupAjustes.addEventListener('click', (e) => {
+    if (e.target === popupAjustes) cerrarAjustes();
+  });
+  popupAjustes.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') cerrarAjustes();
   });
 
   document.getElementById('btn-agregar-usuario').addEventListener('click', agregarUsuario);
@@ -500,11 +563,10 @@ async function init() {
   renderFaceIdUsuarios();
 }
 
-// Ver comentario igual en gastos/js/ui.js -- aquí con alert() porque el
-// launcher no tiene toast propio (usa alert() para todo su feedback).
+// Ver comentario igual en gastos/js/ui.js.
 window.addEventListener('unhandledrejection', (e) => {
   console.error('Error sin atrapar:', e.reason);
-  alert('Ocurrió un error: ' + (e.reason?.message || e.reason));
+  mostrarAviso({ titulo: 'Algo salió mal', mensaje: String(e.reason?.message || e.reason) });
 });
 
 document.addEventListener('DOMContentLoaded', init);

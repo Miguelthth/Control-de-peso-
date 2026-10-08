@@ -3285,6 +3285,7 @@ function abrirModalCategoria(id) {
       else E.datos.categorias.push({ id: generarId('cat'), nombre, icono, color, tipo });
       await guardarYRefrescar();
       cerrarModal();
+      toast('Categoría guardada ✓');
     });
   });
 }
@@ -3331,6 +3332,7 @@ function abrirModalRecurrente(id) {
       else E.datos.recurrentes.push({ id: generarId('rec'), nombre, monto, dia, categoria, metodo: 'debito', activo });
       await guardarYRefrescar();
       cerrarModal();
+      toast(existente ? 'Pago fijo actualizado ✓' : 'Pago fijo guardado ✓');
     });
     const btnBorrar = document.getElementById('btn-borrar-rec');
     if (btnBorrar) {
@@ -3339,6 +3341,7 @@ function abrirModalRecurrente(id) {
         E.datos.recurrentes = E.datos.recurrentes.filter((r) => r.id !== id);
         await guardarYRefrescar();
         cerrarModal();
+        toast('Pago fijo eliminado');
       });
     }
   });
@@ -3382,6 +3385,7 @@ function wireAjustes() {
       if (!(await pedirConfirmacion({ titulo: `¿Eliminar "${recurrente?.nombre || 'este recurrente'}"?`, mensaje: 'Deja de aparecer en tus pagos fijos. Los movimientos que ya registraste no se tocan.', aceptar: 'Eliminar', peligro: true }))) return;
       E.datos.recurrentes = E.datos.recurrentes.filter((r) => r.id !== borrar.dataset.borrarRec);
       await guardarYRefrescar();
+      toast('Pago fijo eliminado');
     }
   });
   document.getElementById('btn-exportar').addEventListener('click', async () => {

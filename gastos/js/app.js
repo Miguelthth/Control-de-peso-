@@ -2445,16 +2445,15 @@ function toast(msg, esError = false) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'toast-simple';
-    el.className = 'deshacer-toast';
     document.body.appendChild(el);
   }
+  el.className = `toast-lindo ${esError ? 'error' : 'exito'}`;
   el.setAttribute('role', esError ? 'alert' : 'status');
   el.setAttribute('aria-live', esError ? 'assertive' : 'polite');
-  el.style.background = esError ? 'var(--peligro)' : 'var(--texto)';
-  el.style.color = esError ? '#fff' : 'var(--fondo)';
-  el.innerHTML = `<span>${escapeHTML(msg)}</span>`;
-  el.classList.remove('oculto');
-  toastTimeout = setTimeout(() => el.classList.add('oculto'), 2200);
+  el.innerHTML = `<span class="toast-icono">${esError ? '!' : '✓'}</span><span class="toast-texto">${escapeHTML(String(msg).replace(/\s*✓$/, ''))}</span>`;
+  void el.offsetWidth; // reinicia la animación si ya estaba visible
+  el.classList.add('visible');
+  toastTimeout = setTimeout(() => el.classList.remove('visible'), esError ? 3400 : 2400);
 }
 
 function abrirModal(html, onMount) {
@@ -2842,7 +2841,7 @@ async function guardarMovimientoCaptura() {
     E.datos.movimientos.push(mov);
     E.captura.montoStr = '';
     E.captura.nota = '';
-    toast('Guardado ✓');
+    toast(`${mov.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'} guardado · $${fmtMonto(mov.monto)}`);
     renderCapturar();
     persistirEnSegundoPlano();
   } catch (e) {
@@ -3055,6 +3054,28 @@ function kpiTexto(label, texto, clase) {
   return `<div class="kpi"><div class="label">${label}</div><div class="valor ${clase || ''}">${texto}</div></div>`;
 }
 
+// Comparativa mes por mes (12 meses hasta el mes seleccionado, el más reciente
+// arriba): gasto, ingreso y variación del gasto contra el mes anterior.
+function renderTablaMeses(movimientos, mesRef) {
+  const meses = calculos.ultimosMeses(mesRef, 13);
+  const filas = meses.slice(1).map((mes, i) => {
+    const gasto = calculos.totalPorTipo(movimientos, 'gasto', mes);
+    const ingreso = calculos.totalPorTipo(movimientos, 'ingreso', mes);
+    const previo = calculos.totalPorTipo(movimientos, 'gasto', meses[i]);
+    const delta = previo > 0 ? ((gasto - previo) / previo) * 100 : null;
+    const [y, m] = mes.split('-').map(Number);
+    const nombre = new Intl.DateTimeFormat('es-MX', { month: 'short', year: '2-digit' }).format(new Date(y, m - 1, 1));
+    const deltaHTML = delta === null ? '<span class="texto-suave">—</span>'
+      : `<span style="color:var(--${delta > 0 ? 'peligro' : 'exito'})">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(0)}%</span>`;
+    return `<button class="fila-mes ${mes === mesRef ? 'activa' : ''}" data-mes="${mes}">
+      <span class="mes-nombre">${escapeHTML(nombre)}</span>
+      <span>$${fmt(gasto)}</span><span>$${fmt(ingreso)}</span>${deltaHTML}
+    </button>`;
+  }).reverse();
+  document.getElementById('tabla-meses').innerHTML =
+    `<div class="fila-mes cabecera"><span>Mes</span><span>Gastos</span><span>Ingresos</span><span>Vs ant.</span></div>` + filas.join('');
+}
+
 function renderTablero() {
   const { movimientos, presupuestos, recurrentes } = E.datos;
   const mes = E.mes;
@@ -3083,6 +3104,8 @@ function renderTablero() {
     .slice(0, 8)
     .map((d) => `<div class="leyenda-item"><span class="leyenda-punto" style="background:${colorSeguro(d.color)}"></span>${d.label} · $${fmt(d.value)}</div>`)
     .join('');
+
+  renderTablaMeses(movimientos, mes);
 
   const b12 = calculos.totalesPorMes(movimientos, 'gasto', mes, 12);
   document.getElementById('grafica-barras12').innerHTML = graficas.svgBarras12Meses(b12);
@@ -3552,6 +3575,12 @@ function wireGlobal() {
   });
   document.querySelectorAll('[data-vista]').forEach((b) => {
     b.addEventListener('click', () => cambiarVista(b.dataset.vista));
+  });
+  document.getElementById('tabla-meses').addEventListener('click', (e) => {
+    const fila = e.target.closest('[data-mes]');
+    if (!fila || !/^\d{4}-\d{2}$/.test(fila.dataset.mes)) return;
+    E.mes = fila.dataset.mes;
+    cambiarVista('movimientos');
   });
   document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
     a.addEventListener('click', (e) => {

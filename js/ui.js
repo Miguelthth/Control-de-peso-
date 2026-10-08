@@ -8,6 +8,7 @@ import * as fondo from '../shared/fondo.js';
 import { exigirBackendActual, guardarToken, borrarToken, pinNuevoValido, usuarioValido } from '../shared/autorizacion.js';
 import { mostrarCargando, ocultarCargando } from '../shared/cargando.js';
 import { pedirFormulario, pedirTexto, mostrarAviso, avisoBreve } from '../shared/dialogo.js';
+import { iniciarActualizaciones, revisarActualizacion, reintentarActualizacion } from '../shared/aviso_actualizacion.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -572,38 +573,7 @@ window.addEventListener('unhandledrejection', (e) => {
 document.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) {
-  // registration.update() fuerza a revisar si hay un sw.js más nuevo,
-  // saltándose el retraso normal del navegador -- sin cambiar la URL del
-  // service worker en cada carga (eso sí llegó a causar recargas de más:
-  // un ?ts= distinto cada vez podía hacer que el navegador tratara cada
-  // apertura como "service worker nuevo" aunque no hubiera cambiado nada).
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then((r) => {
-      // El navegador solo revisa sw.js por su cuenta cada ~24h -- una PWA
-      // abierta desde el ícono de inicio (retomada de segundo plano, sin
-      // recarga completa) puede tardar horas o días en notar que hay una
-      // versión nueva si no se le pregunta activamente. Mismo patrón que
-      // COTIZADOR (2.- COTIZADOR/remision.html).
-      const _revisar = () => r.update().catch(() => {});
-      setInterval(_revisar, 5 * 60 * 1000);
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _revisar(); });
-      window.addEventListener('online', _revisar);
-      return r.update();
-    }).catch(() => {});
+    iniciarActualizaciones({ rutaSW: 'sw.js' }).catch(() => {});
   });
-  // En cuanto el service worker NUEVO toma control, recarga la página sola
-  // -- así nadie tiene que cerrar y volver a abrir la app a mano. PERO si
-  // hay un campo de texto con algo escrito, se espera a que la app pase a
-  // segundo plano (visibilitychange) para no borrar lo que ibas a mandar.
-  let recargando = false;
-  function intentarRecargar() {
-    if (recargando) return;
-    const activo = document.activeElement;
-    const escribiendo = activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA') && activo.value;
-    if (escribiendo) return;
-    recargando = true;
-    location.reload();
-  }
-  navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargar(); });
 }

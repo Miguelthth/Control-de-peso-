@@ -14,6 +14,7 @@ import {
 } from './calculos.js';
 import { getUsuario, esAdmin, exigirSesion, cerrarSesionEnSegundoPlano, guardarAccesoLocal, debeConfirmarNavegacion, ejecutarUnaVez } from '../../shared/sesion.js';
 import * as fondo from '../../shared/fondo.js';
+import { iniciarActualizaciones, revisarActualizacion, reintentarActualizacion } from '../../shared/aviso_actualizacion.js';
 import { escapeHTML, escapeAtributo, idSeguro, colorSeguro, urlLocalSegura } from '../../shared/ui_seguridad.js';
 import { pinNuevoValido, fechaISOValida } from '../../shared/autorizacion.js';
 import { pedirFormulario, pedirConfirmacionEscrita } from '../../shared/dialogo.js';
@@ -562,6 +563,7 @@ async function buscarActualizacionManual() {
   renderAjustes();
   try {
     await actualizacion.buscarActualizacion(registroSW);
+    await revisarActualizacion();
     observarInstalacion(registroSW.installing);
     if (!registroSW.installing) E.actualizacion.buscando = false;
   } catch (e) {
@@ -898,50 +900,19 @@ window.addEventListener('unhandledrejection', (e) => {
 document.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) {
-  // Ver comentario igual en js/ui.js (launcher) -- update() fuerza la
-  // revisión sin cambiar la URL del service worker en cada carga.
+  intentarRecargaDiferida = reintentarActualizacion;
+  document.addEventListener('input', intentarRecargaDiferida);
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('../sw.js').then((r) => {
-      registroSW = r;
-      r.addEventListener('updatefound', () => observarInstalacion(r.installing));
-      observarInstalacion(r.installing);
-      releerMetadataActualizacion();
-      // El navegador solo revisa sw.js por su cuenta cada ~24h -- una PWA
-      // abierta desde el ícono de inicio (retomada de segundo plano, sin
-      // recarga completa) puede tardar horas o días en notar que hay una
-      // versión nueva si no se le pregunta activamente. Mismo patrón que
-      // COTIZADOR (2.- COTIZADOR/remision.html).
-      const _revisar = () => r.update().catch(() => {});
-      setInterval(_revisar, 5 * 60 * 1000);
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _revisar(); });
-      window.addEventListener('online', _revisar);
-      return r.update();
+    iniciarActualizaciones({
+      rutaSW: '../sw.js',
+      puedeActualizar: () => !actualizacion.hayCapturaPesoPendiente(E.captura)
+        && ajustesPendientes.size === 0 && !hayEntrenamientoActivo(),
+      alRegistrar: (r) => {
+        registroSW = r;
+        r.addEventListener('updatefound', () => observarInstalacion(r.installing));
+        observarInstalacion(r.installing);
+        releerMetadataActualizacion();
+      },
     }).catch(() => {});
   });
-  // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
-  // control un service worker nuevo, pero no si hay un campo con texto sin
-  // mandar: espera a que la app pase a segundo plano para no borrarlo.
-  let recargando = false;
-  let recargaDiferida = false;
-  function intentarRecargar() {
-    if (recargando) return;
-    const activo = document.activeElement;
-    const escribiendo = activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA') && activo.value;
-    const decision = actualizacion.decidirRecargaActualizacion({
-      capturaPendiente: actualizacion.hayCapturaPesoPendiente(E.captura),
-      formularioPendiente: ajustesPendientes.size > 0,
-      escribiendoActivo: Boolean(escribiendo), entrenamientoActivo: hayEntrenamientoActivo(), recargaDiferida,
-    });
-    recargaDiferida = decision.diferir;
-    if (!decision.recargar) return;
-    recargando = true;
-    releerMetadataActualizacion().finally(() => location.reload());
-  }
-  intentarRecargaDiferida = function () {
-    if (recargaDiferida && !actualizacion.hayCapturaPesoPendiente(E.captura) && ajustesPendientes.size === 0 && !hayEntrenamientoActivo()) intentarRecargar();
-  };
-  document.addEventListener('input', intentarRecargaDiferida);
-  navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargaDiferida(); });
-  window.addEventListener('pagehide', intentarRecargaDiferida);
 }

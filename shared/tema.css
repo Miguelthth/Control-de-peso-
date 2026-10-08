@@ -342,3 +342,18 @@ input:focus, select:focus, textarea:focus {
   .tarjeta, .popup-caja, .btn-secundario, .encabezado, .nav-inferior,
   .tarjeta-persona, .tarjeta-ejercicio-actual, .kpi, .modal-caja { background: var(--superficie); }
 }
+
+/* Aviso de actualización (shared/aviso_actualizacion.js): engrane mientras
+   la app se recarga con la versión nueva + confirmación breve al abrir. */
+#misapps-actualizacion { display: none; position: fixed; inset: 0; z-index: 2147483647; align-items: center; justify-content: center; padding: 24px; background: rgba(26, 29, 43, .94); color: #fff; text-align: center; }
+#misapps-actualizacion.activo { display: flex; }
+#misapps-actualizacion .misapps-actualizacion-tarjeta { max-width: 330px; }
+#misapps-actualizacion .misapps-engrane { display: block; font-size: 54px; line-height: 1; margin-bottom: 20px; }
+#misapps-actualizacion .misapps-engrane.girando { animation: misapps-girar 1.1s linear infinite; }
+#misapps-actualizacion strong { display: block; font-size: 19px; margin-bottom: 8px; }
+#misapps-actualizacion p { margin: 0; color: rgba(255, 255, 255, .76); font-size: 14px; }
+@keyframes misapps-girar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #misapps-actualizacion .misapps-engrane.girando { animation: none; } }
+
+#misapps-actualizacion button { margin-top: 20px; min-height: 44px; }
+#misapps-actualizacion button[hidden] { display: none; }

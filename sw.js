@@ -10,13 +10,41 @@
 // elimina las versiones anteriores (ver precachearAssets).
 // Antes todo vivía junto en CACHE: cada versión nueva volvía a bajar los
 // videos completos aunque no hubieran cambiado -- eso era la parte lenta.
-const CACHE = 'mis-apps-a4dfb82239';
+const CACHE = 'mis-apps-19ba9f6a67';
+const PREFIJO = 'mis-apps-';
 const CACHE_ASSETS = 'mis-apps-assets-v2';
-const VERSION = 'a4dfb82239';
+const VERSION = '19ba9f6a67';
 const URL_METADATA = './__app_meta__.json';
+
+const CACHE_CONTROL = PREFIJO.replace(/-$/, '') + '@aceptada';
+const CLAVE_ACEPTADA = './__version_aceptada__';
+const esCacheDeVersion = k => k.startsWith(PREFIJO) && !k.startsWith(PREFIJO + 'assets-');
+const codigoDe = nombre => String(nombre || '').slice(PREFIJO.length);
+let aceptadaMemoria = null;
+async function leerAceptada() {
+  if (aceptadaMemoria !== null) return aceptadaMemoria;
+  try {
+    const r = await (await caches.open(CACHE_CONTROL)).match(CLAVE_ACEPTADA);
+    aceptadaMemoria = r ? await r.text() : '';
+  } catch (_) { aceptadaMemoria = ''; }
+  return aceptadaMemoria;
+}
+async function guardarAceptada(nombre) {
+  await (await caches.open(CACHE_CONTROL)).put(CLAVE_ACEPTADA, new Response(nombre));
+  aceptadaMemoria = nombre;
+}
+// Se sirve la aceptada mientras exista; si no hay (primera vez) o el navegador la borró
+// por falta de espacio, la de esta versión.
+async function cacheServida() {
+  const aceptada = await leerAceptada();
+  return aceptada && aceptada !== CACHE && await caches.has(aceptada) ? aceptada : CACHE;
+}
+const abrirServida = () => cacheServida().then(nombre => caches.open(nombre));
+
 
 const ARCHIVOS = [
   './index.html',
+  './version.js',
   './css/estilos.css',
   './shared/tema.css',
   './js/app.js',
@@ -59,6 +87,7 @@ async function precachearShell() {
   const cache = await caches.open(CACHE);
   await Promise.all(ARCHIVOS.map(async (url) => {
     const resp = await fetch(url, { cache: 'reload' });
+    if (!resp.ok) throw new Error('Shell incompleto: ' + url);
     await cache.put(url, resp);
   }));
 }
@@ -69,34 +98,68 @@ self.addEventListener('install', (e) => {
       .then(async () => {
         const cache = await caches.open(CACHE);
         await cache.put(URL_METADATA, new Response(JSON.stringify({
-          version: 'a4dfb82239', installedAt: new Date().toISOString(),
+          version: '19ba9f6a67', installedAt: new Date().toISOString(),
         }), { headers: { 'Content-Type': 'application/json' } }));
       })
-      .then(() => self.skipWaiting())
+      .then(async () => {
+        // Migración desde la app que se actualizaba sola: aceptar esta primera
+        // versión permite que llegue el nuevo botón. Las siguientes esperan clic.
+        if (!(await leerAceptada())) await guardarAceptada(CACHE);
+        await self.skipWaiting();
+      })
   );
 });
 
+async function limpiarCachesAnteriores() {
+  const aceptada = await leerAceptada();
+  const claves = await caches.keys();
+  await Promise.all(claves.filter((k) =>
+    k.startsWith(PREFIJO) && k !== CACHE && k !== aceptada && k !== CACHE_ASSETS
+  ).map((k) => caches.delete(k)));
+}
+
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((claves) => Promise.all(claves.filter((k) => k !== CACHE && k !== CACHE_ASSETS).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    await limpiarCachesAnteriores();
+    await self.clients.claim();
+    (await self.clients.matchAll({ type: 'window' })).forEach((c) => c.postMessage({ type: 'VERSION_LISTA' }));
+  })());
+});
+
+self.addEventListener('message', (e) => {
+  const tipo = e.data?.type;
+  const responder = (datos) => e.ports?.[0]?.postMessage(datos);
+  if (tipo === 'ESTADO') e.waitUntil(cacheServida().then((n) => responder({ aceptada: codigoDe(n), lista: VERSION })));
+  if (tipo === 'ACEPTAR') e.waitUntil(guardarAceptada(CACHE).then(() => responder({ ok: true, lista: VERSION })));
+  if (tipo === 'ACTIVAR_ACTUALIZACION') self.skipWaiting();
+  if (tipo === 'CONFIRMAR_ARRANQUE') e.waitUntil(limpiarCachesAnteriores());
 });
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  // Nunca cachear llamadas al Web App de Apps Script -- siempre datos frescos.
-  if (e.request.url.includes('script.google.com')) return;
-  e.respondWith(
-    caches.match(e.request).then((cacheado) => {
-      const red = fetch(e.request)
-        .then((resp) => {
-          if (resp.ok) caches.open(CACHE).then((c) => c.put(e.request, resp.clone()));
-          return resp;
-        })
-        .catch(() => cacheado);
-      return cacheado || red;
-    })
-  );
+  const url = new URL(e.request.url);
+  // Solo archivos de esta app. El servidor y release.json siempre usan la red.
+  if (!url.href.startsWith(self.registration.scope) || url.pathname.endsWith('/release.json')) return;
+  e.respondWith((async () => {
+    // HTML y JS salen de la MISMA versión aceptada, incluso al volver a abrir.
+    const ruta = url.pathname.endsWith('/') ? new URL('index.html', url).href : e.request;
+    const cache = await abrirServida();
+    const shell = await cache.match(ruta, { ignoreSearch: true });
+    if (shell) {
+      // Al aceptar una versión, Chromium puede reutilizar scripts de memoria sin
+      // disparar fetch. El shell sigue offline en CacheStorage; no-store obliga
+      // al navegador a consultar al worker para usar la versión aceptada.
+      const headers = new Headers(shell.headers);
+      headers.set('Cache-Control', 'no-store');
+      return new Response(shell.body, { status: shell.status, statusText: shell.statusText, headers });
+    }
+    const assets = await caches.open(CACHE_ASSETS);
+    const asset = await assets.match(ruta);
+    if (asset) return asset;
+    const respuesta = await fetch(e.request);
+    if (respuesta.ok && /\/peso\/(assets|imagenes|audio)\//.test(url.pathname)) {
+      await assets.put(e.request, respuesta.clone());
+    }
+    return respuesta;
+  })());
 });

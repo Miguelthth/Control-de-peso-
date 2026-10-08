@@ -15,6 +15,7 @@ import { escapeHTML, escapeAtributo, idSeguro, colorSeguro } from '../../shared/
 import { leerMetadataActualizacion, formatearFechaActualizacion, obtenerEstadoActualizacion, buscarActualizacion } from '../../shared/actualizacion.js';
 import { mostrarCargando, ocultarCargando } from '../../shared/cargando.js';
 import { pedirTexto, pedirConfirmacion, pedirConfirmacionEscrita } from '../../shared/dialogo.js';
+import { iniciarActualizaciones, revisarActualizacion, reintentarActualizacion } from '../../shared/aviso_actualizacion.js';
 
 api.configurarManejadorAuth(() => {
   cerrarSesionEnSegundoPlano(() => undefined);
@@ -35,6 +36,8 @@ const E = {
   lecturaApertura: null,
   reintentandoApertura: false,
   cleanupSincronizacion: null,
+  guardadosPendientes: 0,
+  guardadoFallido: false,
   actualizacion: { metadata: null, buscando: false, preparada: false },
 };
 
@@ -93,16 +96,15 @@ function toast(msg, esError = false) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'toast-simple';
-    el.className = 'deshacer-toast';
     document.body.appendChild(el);
   }
+  el.className = `toast-lindo ${esError ? 'error' : 'exito'}`;
   el.setAttribute('role', esError ? 'alert' : 'status');
   el.setAttribute('aria-live', esError ? 'assertive' : 'polite');
-  el.style.background = esError ? 'var(--peligro)' : 'var(--texto)';
-  el.style.color = esError ? '#fff' : 'var(--fondo)';
-  el.innerHTML = `<span>${escapeHTML(msg)}</span>`;
-  el.classList.remove('oculto');
-  toastTimeout = setTimeout(() => el.classList.add('oculto'), 2200);
+  el.innerHTML = `<span class="toast-icono">${esError ? '!' : '✓'}</span><span class="toast-texto">${escapeHTML(String(msg).replace(/\s*✓$/, ''))}</span>`;
+  void el.offsetWidth; // reinicia la animación si ya estaba visible
+  el.classList.add('visible');
+  toastTimeout = setTimeout(() => el.classList.remove('visible'), esError ? 3400 : 2400);
 }
 
 function abrirModal(html, onMount) {
@@ -147,12 +149,18 @@ function restaurarFocoDialogo() {
 // ---------- persistencia ----------
 
 async function persistir() {
+  E.guardadosPendientes += 1;
   try {
     const r = await almacen.guardar(getUsuario(), E.datos, E.clave, E.saltCifrado);
+    E.guardadoFallido = false;
     if (!r.sincronizado) toast('Guardado en este dispositivo — sincronizando...', true);
   } catch (e) {
+    E.guardadoFallido = true;
     console.error(e);
     toast('No se pudo guardar.', true);
+  } finally {
+    E.guardadosPendientes -= 1;
+    reintentarActualizacion();
   }
 }
 
@@ -490,7 +498,7 @@ async function guardarMovimientoCaptura() {
     E.datos.movimientos.push(mov);
     E.captura.montoStr = '';
     E.captura.nota = '';
-    toast('Guardado ✓');
+    toast(`${mov.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'} guardado · $${fmtMonto(mov.monto)}`);
     renderCapturar();
     persistirEnSegundoPlano();
   } catch (e) {
@@ -703,6 +711,26 @@ function kpiTexto(label, texto, clase) {
   return `<div class="kpi"><div class="label">${label}</div><div class="valor ${clase || ''}">${texto}</div></div>`;
 }
 
+function renderTablaMeses(movimientos, mesRef) {
+  const meses = calculos.ultimosMeses(mesRef, 13);
+  const filas = meses.slice(1).map((mes, i) => {
+    const gasto = calculos.totalPorTipo(movimientos, 'gasto', mes);
+    const ingreso = calculos.totalPorTipo(movimientos, 'ingreso', mes);
+    const previo = calculos.totalPorTipo(movimientos, 'gasto', meses[i]);
+    const delta = previo > 0 ? ((gasto - previo) / previo) * 100 : null;
+    const [y, m] = mes.split('-').map(Number);
+    const nombre = new Intl.DateTimeFormat('es-MX', { month: 'short', year: '2-digit' }).format(new Date(y, m - 1, 1));
+    const deltaHTML = delta === null ? '<span class="texto-suave">—</span>'
+      : `<span style="color:var(--${delta > 0 ? 'peligro' : 'exito'})">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(0)}%</span>`;
+    return `<button class="fila-mes ${mes === mesRef ? 'activa' : ''}" data-mes="${mes}">
+      <span class="mes-nombre">${escapeHTML(nombre)}</span>
+      <span>$${fmt(gasto)}</span><span>$${fmt(ingreso)}</span>${deltaHTML}
+    </button>`;
+  }).reverse();
+  document.getElementById('tabla-meses').innerHTML =
+    `<div class="fila-mes cabecera"><span>Mes</span><span>Gastos</span><span>Ingresos</span><span>Vs ant.</span></div>` + filas.join('');
+}
+
 function renderTablero() {
   const { movimientos, presupuestos, recurrentes } = E.datos;
   const mes = E.mes;
@@ -731,6 +759,8 @@ function renderTablero() {
     .slice(0, 8)
     .map((d) => `<div class="leyenda-item"><span class="leyenda-punto" style="background:${colorSeguro(d.color)}"></span>${d.label} · $${fmt(d.value)}</div>`)
     .join('');
+
+  renderTablaMeses(movimientos, mes);
 
   const b12 = calculos.totalesPorMes(movimientos, 'gasto', mes, 12);
   document.getElementById('grafica-barras12').innerHTML = graficas.svgBarras12Meses(b12);
@@ -851,6 +881,7 @@ async function buscarActualizacionManual() {
   renderAjustes();
   try {
     await buscarActualizacion(registroSW);
+    await revisarActualizacion();
     observarInstalacionSW(registroSW.installing);
     if (!registroSW.installing) E.actualizacion.buscando = false;
   } catch (e) {
@@ -933,6 +964,7 @@ function abrirModalCategoria(id) {
       else E.datos.categorias.push({ id: generarId('cat'), nombre, icono, color, tipo });
       await guardarYRefrescar();
       cerrarModal();
+      toast('Categoría guardada ✓');
     });
   });
 }
@@ -979,6 +1011,7 @@ function abrirModalRecurrente(id) {
       else E.datos.recurrentes.push({ id: generarId('rec'), nombre, monto, dia, categoria, metodo: 'debito', activo });
       await guardarYRefrescar();
       cerrarModal();
+      toast(existente ? 'Pago fijo actualizado ✓' : 'Pago fijo guardado ✓');
     });
     const btnBorrar = document.getElementById('btn-borrar-rec');
     if (btnBorrar) {
@@ -987,6 +1020,7 @@ function abrirModalRecurrente(id) {
         E.datos.recurrentes = E.datos.recurrentes.filter((r) => r.id !== id);
         await guardarYRefrescar();
         cerrarModal();
+        toast('Pago fijo eliminado');
       });
     }
   });
@@ -1030,6 +1064,7 @@ function wireAjustes() {
       if (!(await pedirConfirmacion({ titulo: `¿Eliminar "${recurrente?.nombre || 'este recurrente'}"?`, mensaje: 'Deja de aparecer en tus pagos fijos. Los movimientos que ya registraste no se tocan.', aceptar: 'Eliminar', peligro: true }))) return;
       E.datos.recurrentes = E.datos.recurrentes.filter((r) => r.id !== borrar.dataset.borrarRec);
       await guardarYRefrescar();
+      toast('Pago fijo eliminado');
     }
   });
   document.getElementById('btn-exportar').addEventListener('click', async () => {
@@ -1197,6 +1232,12 @@ function wireGlobal() {
   document.querySelectorAll('[data-vista]').forEach((b) => {
     b.addEventListener('click', () => cambiarVista(b.dataset.vista));
   });
+  document.getElementById('tabla-meses').addEventListener('click', (e) => {
+    const fila = e.target.closest('[data-mes]');
+    if (!fila || !/^\d{4}-\d{2}$/.test(fila.dataset.mes)) return;
+    E.mes = fila.dataset.mes;
+    cambiarVista('movimientos');
+  });
   document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
     a.addEventListener('click', (e) => {
       const pendiente = `${E.captura.montoStr || ''}${E.captura.nota || ''}`;
@@ -1279,38 +1320,19 @@ window.addEventListener('pagehide', () => {
 });
 
 if ('serviceWorker' in navigator) {
-  // Ver comentario igual en js/ui.js (launcher) -- update() fuerza la
-  // revisión sin cambiar la URL del service worker en cada carga.
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('../sw.js').then((r) => {
-      registroSW = r;
-      r.addEventListener('updatefound', () => observarInstalacionSW(r.installing));
-      observarInstalacionSW(r.installing);
-      releerMetadataActualizacion();
-      // El navegador solo revisa sw.js por su cuenta cada ~24h -- una PWA
-      // abierta desde el ícono de inicio (retomada de segundo plano, sin
-      // recarga completa) puede tardar horas o días en notar que hay una
-      // versión nueva si no se le pregunta activamente. Mismo patrón que
-      // COTIZADOR (2.- COTIZADOR/remision.html).
-      const _revisar = () => r.update().catch(() => {});
-      setInterval(_revisar, 5 * 60 * 1000);
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _revisar(); });
-      window.addEventListener('online', _revisar);
-      return r.update();
+    iniciarActualizaciones({
+      rutaSW: '../sw.js',
+      puedeActualizar: () => !String(E.captura.montoStr || '').trim()
+        && !String(E.captura.nota || '').trim()
+        && E.guardadosPendientes === 0 && !E.guardadoFallido
+        && !document.getElementById('modal-root')?.childElementCount,
+      alRegistrar: (r) => {
+        registroSW = r;
+        r.addEventListener('updatefound', () => observarInstalacionSW(r.installing));
+        observarInstalacionSW(r.installing);
+        releerMetadataActualizacion();
+      },
     }).catch(() => {});
   });
-  // Ver comentario igual en js/ui.js (launcher) -- autorefresca cuando toma
-  // control un service worker nuevo, pero no si hay un campo con texto sin
-  // mandar: espera a que la app pase a segundo plano para no borrarlo.
-  let recargando = false;
-  function intentarRecargar() {
-    if (recargando) return;
-    const activo = document.activeElement;
-    const escribiendo = activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA') && activo.value;
-    if (escribiendo) return;
-    recargando = true;
-    location.reload();
-  }
-  navigator.serviceWorker.addEventListener('controllerchange', intentarRecargar);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) intentarRecargar(); });
 }

@@ -3055,6 +3055,28 @@ function kpiTexto(label, texto, clase) {
   return `<div class="kpi"><div class="label">${label}</div><div class="valor ${clase || ''}">${texto}</div></div>`;
 }
 
+// Comparativa mes por mes (12 meses hasta el mes seleccionado, el más reciente
+// arriba): gasto, ingreso y variación del gasto contra el mes anterior.
+function renderTablaMeses(movimientos, mesRef) {
+  const meses = calculos.ultimosMeses(mesRef, 13);
+  const filas = meses.slice(1).map((mes, i) => {
+    const gasto = calculos.totalPorTipo(movimientos, 'gasto', mes);
+    const ingreso = calculos.totalPorTipo(movimientos, 'ingreso', mes);
+    const previo = calculos.totalPorTipo(movimientos, 'gasto', meses[i]);
+    const delta = previo > 0 ? ((gasto - previo) / previo) * 100 : null;
+    const [y, m] = mes.split('-').map(Number);
+    const nombre = new Intl.DateTimeFormat('es-MX', { month: 'short', year: '2-digit' }).format(new Date(y, m - 1, 1));
+    const deltaHTML = delta === null ? '<span class="texto-suave">—</span>'
+      : `<span style="color:var(--${delta > 0 ? 'peligro' : 'exito'})">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(0)}%</span>`;
+    return `<button class="fila-mes ${mes === mesRef ? 'activa' : ''}" data-mes="${mes}">
+      <span class="mes-nombre">${escapeHTML(nombre)}</span>
+      <span>$${fmt(gasto)}</span><span>$${fmt(ingreso)}</span>${deltaHTML}
+    </button>`;
+  }).reverse();
+  document.getElementById('tabla-meses').innerHTML =
+    `<div class="fila-mes cabecera"><span>Mes</span><span>Gastos</span><span>Ingresos</span><span>Vs ant.</span></div>` + filas.join('');
+}
+
 function renderTablero() {
   const { movimientos, presupuestos, recurrentes } = E.datos;
   const mes = E.mes;
@@ -3083,6 +3105,8 @@ function renderTablero() {
     .slice(0, 8)
     .map((d) => `<div class="leyenda-item"><span class="leyenda-punto" style="background:${colorSeguro(d.color)}"></span>${d.label} · $${fmt(d.value)}</div>`)
     .join('');
+
+  renderTablaMeses(movimientos, mes);
 
   const b12 = calculos.totalesPorMes(movimientos, 'gasto', mes, 12);
   document.getElementById('grafica-barras12').innerHTML = graficas.svgBarras12Meses(b12);
@@ -3552,6 +3576,12 @@ function wireGlobal() {
   });
   document.querySelectorAll('[data-vista]').forEach((b) => {
     b.addEventListener('click', () => cambiarVista(b.dataset.vista));
+  });
+  document.getElementById('tabla-meses').addEventListener('click', (e) => {
+    const fila = e.target.closest('[data-mes]');
+    if (!fila || !/^\d{4}-\d{2}$/.test(fila.dataset.mes)) return;
+    E.mes = fila.dataset.mes;
+    cambiarVista('movimientos');
   });
   document.querySelectorAll('[data-confirmar-salida]').forEach((a) => {
     a.addEventListener('click', (e) => {

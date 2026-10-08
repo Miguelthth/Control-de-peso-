@@ -371,3 +371,14 @@ img, svg, video, canvas { max-width: 100%; }
 .nav-inferior { padding-top: 3px; padding-bottom: max(2px, calc(env(safe-area-inset-bottom) - 10px)); }
 .nav-inferior button, .nav-inferior-link { padding-block: 3px; }
 #app { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+
+/* ---- Comparativa por mes ---- */
+.fila-mes {
+  display: grid; grid-template-columns: 1.1fr 1fr 1fr 0.9fr; gap: 6px; align-items: center;
+  width: 100%; padding: 8px 6px; border: none; border-bottom: 1px solid var(--borde);
+  background: none; color: var(--texto); font: inherit; font-size: 0.8rem; text-align: right; cursor: pointer;
+}
+.fila-mes .mes-nombre { text-align: left; font-weight: 600; text-transform: capitalize; }
+.fila-mes.activa { background: var(--superficie-alt); border-radius: 8px; }
+.fila-mes.cabecera { color: var(--texto-suave); font-size: 0.7rem; cursor: default; padding-top: 0; }
+.fila-mes.cabecera span:first-child { text-align: left; }

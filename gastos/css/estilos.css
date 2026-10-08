@@ -333,3 +333,41 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
 img, svg, video, canvas { max-width: 100%; }
 @media (max-width: 390px) { .encabezado { gap: 4px; padding-inline: 10px; } .encabezado .icono { width: 44px; min-width: 44px; } .mes-selector { font-size: .78rem; } .fila { flex-wrap: wrap; } }
 @media (max-height: 520px) and (orientation: landscape) { .pantalla-conexion { justify-content: flex-start; overflow-y: auto; } .nav-inferior button, .nav-inferior-link { min-height: 48px; padding-block: 4px; } }
+
+/* ---- Captura a una mano: todo cabe en una pantalla, sin scroll ----
+   La vista ocupa exactamente el alto libre entre el encabezado y la
+   navegación; el teclado absorbe lo que sobre (flex:1) y se encoge si
+   la pantalla es chica. */
+#vista-capturar.activa {
+  display: flex; flex-direction: column; gap: 6px;
+  height: calc(100dvh - 52px - 54px - env(safe-area-inset-bottom));
+  padding-top: 0; padding-bottom: 6px; overflow: hidden;
+}
+#vista-capturar .fila-superior { margin: 0; }
+#vista-capturar .captura-tipo button { padding: 5px 16px; }
+#vista-capturar > h3, #vista-capturar .campo-label, #vista-capturar .campo > label {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+#vista-capturar .categorias-grid {
+  display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto);
+  grid-template-columns: none; grid-auto-columns: 60px; gap: 5px;
+  overflow-x: auto; margin: 0; padding-bottom: 2px; flex: none;
+}
+#vista-capturar .categoria-btn { min-height: 0; padding: 4px 2px; font-size: 0.6rem; }
+#vista-capturar .categoria-btn .emoji { font-size: 1rem; }
+#vista-capturar .captura-monto { font-size: 2rem; padding: 2px 0; flex: none; }
+#vista-capturar .teclado {
+  flex: 1; min-height: 0; margin: 0; gap: 5px; grid-auto-rows: minmax(0, 1fr);
+}
+#vista-capturar .teclado button { min-height: 0; padding: 0; font-size: 1.05rem; }
+#vista-capturar .teclado button.borrar { font-size: 0.9rem; }
+#vista-capturar .campo { margin: 0; flex: none; }
+#vista-capturar .metodo-grupo { flex-wrap: nowrap; gap: 4px; }
+#vista-capturar .metodo-grupo button { flex: 1; min-height: 34px; padding: 4px 2px; font-size: 0.72rem; }
+#vista-capturar .campo input { min-height: 38px; padding: 6px 12px; }
+#vista-capturar .btn-primario { min-height: 42px; padding: 10px; flex: none; }
+
+/* Navegación inferior: un poco más abajo y más compacta */
+.nav-inferior { padding-top: 3px; padding-bottom: max(2px, calc(env(safe-area-inset-bottom) - 10px)); }
+.nav-inferior button, .nav-inferior-link { padding-block: 3px; }
+#app { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }

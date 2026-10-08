@@ -133,14 +133,20 @@ export function crearColaGuardados(dependencias = {}) {
   const guardarLocalCache = dependencias.guardarCache || guardarCache;
   const registroColas = dependencias.registroColas || crearRegistroColas();
   const versiones = new Map();
+  const colasLocales = crearRegistroColas();
   return {
-    guardar(usuario, datos, clave, saltB64) {
+    guardar(usuario, datos, clave, saltB64, soloLocal = false) {
       const version = (versiones.get(usuario) || 0) + 1;
       versiones.set(usuario, version);
-      const operacion = registroColas.encolar(usuario, async () => {
-        const paquete = await cifrar(datos, clave, saltB64);
+      // Captura el cambio ahora: el usuario puede seguir editando mientras se cifra.
+      const copia = JSON.parse(JSON.stringify(datos));
+      const local = colasLocales.encolar(usuario, async () => {
+        const paquete = await cifrar(copia, clave, saltB64);
         const blobStr = JSON.stringify(paquete);
         guardarLocal(usuario, blobStr);
+        return blobStr;
+      });
+      const operacion = local.then((blobStr) => registroColas.encolar(usuario, async () => {
         try {
           const r = await enviar(usuario, blobStr);
           if (r.ok) {
@@ -156,7 +162,12 @@ export function crearColaGuardados(dependencias = {}) {
           // queda en la cola local
         }
         return { sincronizado: false };
-      });
+      }));
+      if (soloLocal) {
+        // El envío conserva su orden, pero la interfaz espera solo la copia cifrada.
+        operacion.catch(() => {});
+        return local.then(() => ({ sincronizado: false }));
+      }
       return operacion;
     },
   };
@@ -192,7 +203,7 @@ export function crearAlmacenSesion(dependencias = {}) {
   const colaGuardados = crearColaGuardados({ ...dependencias, registroColas });
   const estados = new Map();
   return {
-    guardar: (usuario, datos, clave, saltB64) => colaGuardados.guardar(usuario, datos, clave, saltB64),
+    guardar: (usuario, datos, clave, saltB64, soloLocal = false) => colaGuardados.guardar(usuario, datos, clave, saltB64, soloLocal),
     sincronizarPendiente(usuario, estado = null) {
       const estadoUsuario = estado || estados.get(usuario) || { sincronizando: false };
       estados.set(usuario, estadoUsuario);
@@ -203,8 +214,8 @@ export function crearAlmacenSesion(dependencias = {}) {
 
 const almacenSesion = crearAlmacenSesion();
 
-export function guardar(usuario, datos, clave, saltB64) {
-  return almacenSesion.guardar(usuario, datos, clave, saltB64);
+export function guardar(usuario, datos, clave, saltB64, soloLocal = false) {
+  return almacenSesion.guardar(usuario, datos, clave, saltB64, soloLocal);
 }
 
 export function sincronizarPendiente(usuario, estado = { sincronizando: false }, dependencias) {

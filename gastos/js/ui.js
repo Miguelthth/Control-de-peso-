@@ -38,6 +38,7 @@ const E = {
   cleanupSincronizacion: null,
   guardadosPendientes: 0,
   guardadoFallido: false,
+  ultimoGuardado: null,
   actualizacion: { metadata: null, buscando: false, preparada: false },
 };
 
@@ -107,6 +108,12 @@ function toast(msg, esError = false) {
   toastTimeout = setTimeout(() => el.classList.remove('visible'), esError ? 3400 : 2400);
 }
 
+function escucharGuardado(id, accion) {
+  document.getElementById(id).addEventListener('click', (e) => {
+    ejecutarUnaVez(e.currentTarget, accion).catch((error) => toast(error.message || 'No se pudo guardar.', true));
+  });
+}
+
 function abrirModal(html, onMount) {
   const root = document.getElementById('modal-root');
   root.innerHTML = `<div class="modal-fondo" id="modal-fondo" role="dialog" aria-modal="true" aria-labelledby="modal-titulo"><div class="modal-caja" tabindex="-1">
@@ -150,29 +157,32 @@ function restaurarFocoDialogo() {
 
 async function persistir() {
   E.guardadosPendientes += 1;
+  const copia = JSON.stringify(E.datos);
   try {
-    const r = await almacen.guardar(getUsuario(), E.datos, E.clave, E.saltCifrado);
+    await almacen.guardar(getUsuario(), E.datos, E.clave, E.saltCifrado, true);
     E.guardadoFallido = false;
-    if (!r.sincronizado) toast('Guardado en este dispositivo — sincronizando...', true);
+    E.ultimoGuardado = copia;
   } catch (e) {
     E.guardadoFallido = true;
+    if (E.ultimoGuardado) E.datos = JSON.parse(E.ultimoGuardado);
     console.error(e);
-    toast('No se pudo guardar.', true);
+    toast('No se pudo guardar. Intenta de nuevo.', true);
+    throw e;
   } finally {
     E.guardadosPendientes -= 1;
     reintentarActualizacion();
   }
 }
 
-// No espera a persistir() -- guardar cifra + sube al servidor y eso tarda;
-// la UI ya reflejó el cambio antes de llamar esto (ver guardarMovimientoCaptura).
+// No espera a persistir(): usado por cambios que ya actualizaron la interfaz.
 function persistirEnSegundoPlano() {
-  persistir();
+  persistir().catch(() => {});
 }
 
 async function guardarYRefrescar() {
   await persistir();
   render();
+  toast('Cambios guardados');
 }
 
 // ---------- candado (contraseña de cifrado) ----------
@@ -321,6 +331,7 @@ function mostrarVerificandoPassword(verificando) {
 }
 
 function finalizarConexion(pendienteDeSincronizar, sinConexion = false) {
+  E.ultimoGuardado = JSON.stringify(E.datos);
   ocultarCargando();
   document.getElementById('pantalla-password').classList.add('oculto');
   document.getElementById('app').classList.remove('oculto');
@@ -496,11 +507,15 @@ async function guardarMovimientoCaptura() {
       nota: E.captura.nota,
     });
     E.datos.movimientos.push(mov);
+    try { await persistir(); }
+    catch (error) {
+      E.datos.movimientos = E.datos.movimientos.filter((m) => m.id !== mov.id);
+      throw error;
+    }
     E.captura.montoStr = '';
     E.captura.nota = '';
     toast(`${mov.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'} guardado · $${fmtMonto(mov.monto)}`);
     renderCapturar();
-    persistirEnSegundoPlano();
   } catch (e) {
     toast(e.message, true);
   }
@@ -633,7 +648,7 @@ function abrirEditarMovimiento(id) {
     <button class="btn-secundario btn-peligro" id="btn-eliminar-mov" style="margin-top:8px;">Eliminar</button>
   `;
   abrirModal(html, () => {
-    document.getElementById('btn-guardar-edicion').addEventListener('click', async () => {
+    escucharGuardado('btn-guardar-edicion', async () => {
       try {
         const actualizado = validarMovimiento({
           ...m,
@@ -951,7 +966,7 @@ function abrirModalCategoria(id) {
     <button class="btn-primario" id="btn-guardar-cat">Guardar</button>
   `;
   abrirModal(html, () => {
-    document.getElementById('btn-guardar-cat').addEventListener('click', async () => {
+    escucharGuardado('btn-guardar-cat', async () => {
       const nombre = document.getElementById('cat-nombre').value.trim();
       if (!nombre) {
         toast('El nombre es obligatorio', true);
@@ -979,6 +994,7 @@ async function borrarCategoria(id) {
   if (!(await pedirConfirmacion({ titulo: `¿Borrar la categoría "${nombre}"?`, aceptar: 'Borrar', peligro: true }))) return;
   E.datos.categorias = E.datos.categorias.filter((c) => c.id !== id);
   await guardarYRefrescar();
+  toast('Categoría eliminada');
 }
 
 function abrirModalRecurrente(id) {
@@ -997,7 +1013,7 @@ function abrirModalRecurrente(id) {
     ${existente ? '<button class="btn-secundario btn-peligro" id="btn-borrar-rec" style="margin-top:8px;">Eliminar</button>' : ''}
   `;
   abrirModal(html, () => {
-    document.getElementById('btn-guardar-rec').addEventListener('click', async () => {
+    escucharGuardado('btn-guardar-rec', async () => {
       const nombre = document.getElementById('rec-nombre').value.trim();
       const monto = parseFloat(document.getElementById('rec-monto').value);
       const dia = Math.min(31, Math.max(1, parseInt(document.getElementById('rec-dia').value, 10) || 1));
@@ -1140,7 +1156,7 @@ function abrirModalCambiarPassword() {
     <button class="btn-primario" id="btn-guardar-nueva-pass">Guardar nueva contraseña</button>
   `;
   abrirModal(html, () => {
-    document.getElementById('btn-guardar-nueva-pass').addEventListener('click', async () => {
+    escucharGuardado('btn-guardar-nueva-pass', async () => {
       const p1 = document.getElementById('nueva-pass').value;
       const p2 = document.getElementById('nueva-pass-confirmar').value;
       if (!p1 || p1.length < 4) {

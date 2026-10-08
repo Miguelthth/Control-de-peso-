@@ -161,7 +161,9 @@ export async function revisarActualizacion() {
       } };
     } else {
       const estado = await preguntarSW('ESTADO');
-      if (!estado?.lista || estado.lista === estado.aceptada) return;
+      if (!estado?.lista) return;
+      const versionAbierta = typeof VERSION_CODIGO !== 'undefined' ? VERSION_CODIGO : '';
+      if (estado.lista === estado.aceptada && (!versionAbierta || versionAbierta === estado.lista)) return;
       pendiente = { version: estado.lista, aceptar: () => preguntarSW('ACEPTAR') };
     }
     reintentarActualizacion();

@@ -2445,16 +2445,15 @@ function toast(msg, esError = false) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'toast-simple';
-    el.className = 'deshacer-toast';
     document.body.appendChild(el);
   }
+  el.className = `toast-lindo ${esError ? 'error' : 'exito'}`;
   el.setAttribute('role', esError ? 'alert' : 'status');
   el.setAttribute('aria-live', esError ? 'assertive' : 'polite');
-  el.style.background = esError ? 'var(--peligro)' : 'var(--texto)';
-  el.style.color = esError ? '#fff' : 'var(--fondo)';
-  el.innerHTML = `<span>${escapeHTML(msg)}</span>`;
-  el.classList.remove('oculto');
-  toastTimeout = setTimeout(() => el.classList.add('oculto'), 2200);
+  el.innerHTML = `<span class="toast-icono">${esError ? '!' : '✓'}</span><span class="toast-texto">${escapeHTML(String(msg).replace(/\s*✓$/, ''))}</span>`;
+  void el.offsetWidth; // reinicia la animación si ya estaba visible
+  el.classList.add('visible');
+  toastTimeout = setTimeout(() => el.classList.remove('visible'), esError ? 3400 : 2400);
 }
 
 function abrirModal(html, onMount) {
@@ -2842,7 +2841,7 @@ async function guardarMovimientoCaptura() {
     E.datos.movimientos.push(mov);
     E.captura.montoStr = '';
     E.captura.nota = '';
-    toast('Guardado ✓');
+    toast(`${mov.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'} guardado · $${fmtMonto(mov.monto)}`);
     renderCapturar();
     persistirEnSegundoPlano();
   } catch (e) {

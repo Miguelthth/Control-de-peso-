@@ -2637,6 +2637,11 @@ function fmtMonto(n) {
   return new Intl.NumberFormat('es-MX', { minimumFractionDigits: decimales, maximumFractionDigits: decimales }).format(n);
 }
 
+function fmtCaptura(monto) {
+  const [entero, decimales] = (monto || '0').split('.');
+  return fmt(Number(entero || 0)) + (decimales === undefined ? '' : '.' + decimales);
+}
+
 function categoriaObj(id) {
   return E.datos.categorias.find((c) => c.id === id);
 }
@@ -2681,7 +2686,7 @@ function toast(msg, esError = false) {
   el.innerHTML = `<span class="toast-icono">${esError ? '!' : '✓'}</span><span class="toast-texto">${escapeHTML(String(msg).replace(/\s*✓$/, ''))}</span>`;
   void el.offsetWidth; // reinicia la animación si ya estaba visible
   el.classList.add('visible');
-  toastTimeout = setTimeout(() => el.classList.remove('visible'), esError ? 3400 : 2400);
+  toastTimeout = setTimeout(() => el.classList.remove('visible'), esError ? 3400 : E.vista === 'ajustes' ? 1200 : 2400);
 }
 
 function escucharGuardado(id, accion) {
@@ -3041,11 +3046,11 @@ function tecla(t) {
     if (E.captura.montoStr.replace('.', '').length >= 8) return;
     E.captura.montoStr += t;
   }
-  document.getElementById('captura-monto').textContent = '$' + (E.captura.montoStr || '0');
+  document.getElementById('captura-monto').textContent = '$' + fmtCaptura(E.captura.montoStr);
 }
 
 function renderCapturar() {
-  document.getElementById('captura-monto').textContent = '$' + (E.captura.montoStr || '0');
+  document.getElementById('captura-monto').textContent = '$' + fmtCaptura(E.captura.montoStr);
   document.querySelectorAll('.captura-tipo button').forEach((b) => {
     const activo = b.dataset.tipo === E.captura.tipo;
     b.classList.toggle('activo', activo); b.setAttribute('aria-pressed', String(activo));

@@ -11,7 +11,7 @@ import * as api from '../../shared/api.js';
 import * as passkey from '../../shared/passkey.js';
 import * as candado from '../../shared/candado.js';
 import * as fondo from '../../shared/fondo.js';
-import { escapeHTML, escapeAtributo, idSeguro, colorSeguro } from '../../shared/ui_seguridad.js';
+import { escapeHTML, escapeAtributo, colorSeguro } from '../../shared/ui_seguridad.js';
 import { leerMetadataActualizacion, formatearFechaActualizacion, obtenerEstadoActualizacion, buscarActualizacion } from '../../shared/actualizacion.js';
 import { mostrarCargando, ocultarCargando } from '../../shared/cargando.js';
 import { pedirTexto, pedirConfirmacion, pedirConfirmacionEscrita } from '../../shared/dialogo.js';
@@ -478,7 +478,7 @@ function renderCapturar() {
   const cats = E.datos.categorias.filter((c) => c.tipo === E.captura.tipo && c.activo !== false);
   if (!cats.some((c) => c.id === E.captura.categoria)) E.captura.categoria = cats[0]?.id || null;
   document.getElementById('categorias-grid').innerHTML = cats
-    .map((c) => `<button class="categoria-btn ${c.id === E.captura.categoria ? 'activa' : ''}" data-id="${escapeAtributo(idSeguro(c.id))}" aria-pressed="${c.id === E.captura.categoria}">
+    .map((c) => `<button class="categoria-btn ${c.id === E.captura.categoria ? 'activa' : ''}" data-id="${escapeAtributo(c.id)}" aria-pressed="${c.id === E.captura.categoria}">
       <span class="emoji">${escapeHTML(c.icono)}</span>${escapeHTML(c.nombre)}
     </button>`)
     .join('');
@@ -573,7 +573,7 @@ function movimientosFiltrados() {
 function filaMovimientoHTML(m) {
   const cat = categoriaObj(m.categoria);
   const mostrarMetodo = E.datos.config.mostrarMetodo !== false;
-  return `<div class="movimiento-fila" data-id="${escapeAtributo(idSeguro(m.id))}">
+  return `<div class="movimiento-fila" data-id="${escapeAtributo(m.id)}">
     <div class="emoji-cat" style="background:${colorSeguro(cat?.color)}22;">${escapeHTML(cat?.icono || '❓')}</div>
     <div class="detalle">
       <div class="nombre">${escapeHTML(cat?.nombre || m.categoria)}${m.nota ? ' · ' + escapeHTML(m.nota) : ''}</div>
@@ -586,7 +586,7 @@ function filaMovimientoHTML(m) {
 function renderMovimientos() {
   const select = document.getElementById('mov-filtro-categoria');
   const valPrevio = select.value;
-  select.innerHTML = '<option value="">Todas</option>' + E.datos.categorias.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('');
+  select.innerHTML = '<option value="">Todas</option>' + E.datos.categorias.map((c) => `<option value="${escapeAtributo(c.id)}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('');
   select.value = valPrevio;
 
   const movs = movimientosFiltrados();
@@ -640,7 +640,7 @@ function abrirEditarMovimiento(id) {
   const html = `
     <h2 id="modal-titulo">Editar movimiento</h2>
     <div class="campo"><label for="edit-monto">Monto</label><input type="number" step="0.01" min="0.01" id="edit-monto" value="${escapeAtributo(m.monto)}"></div>
-    <div class="campo"><label for="edit-categoria">Categoría</label><select id="edit-categoria">${cats.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}" ${c.id === m.categoria ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
+    <div class="campo"><label for="edit-categoria">Categoría</label><select id="edit-categoria">${cats.map((c) => `<option value="${escapeAtributo(c.id)}" ${c.id === m.categoria ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
     ${mostrarMetodo ? `<div class="campo"><label for="edit-metodo">Método</label><select id="edit-metodo">${METODOS.map((mm) => `<option value="${escapeAtributo(mm)}" ${mm === m.metodo ? 'selected' : ''}>${escapeHTML(metodoLabel(mm))}</option>`).join('')}</select></div>` : ''}
     <div class="campo"><label for="edit-fecha">Fecha</label><input type="date" id="edit-fecha" value="${escapeAtributo(m.fecha)}"></div>
     <div class="campo"><label for="edit-nota">Nota</label><input type="text" id="edit-nota" value="${escapeAtributo(m.nota)}"></div>
@@ -828,10 +828,10 @@ function renderAjustes() {
       <span>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)} <span class="badge">${escapeHTML(c.tipo)}</span></span>
       <span>
         <label class="switch" title="${c.activo === false ? 'Desactivada' : 'Activa'}">
-          <input type="checkbox" data-activar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`${c.activo === false ? 'Activar' : 'Desactivar'} ${c.nombre}`)}" ${c.activo === false ? '' : 'checked'}>
+          <input type="checkbox" data-activar-cat="${escapeAtributo(c.id)}" aria-label="${escapeAtributo(`${c.activo === false ? 'Activar' : 'Desactivar'} ${c.nombre}`)}" ${c.activo === false ? '' : 'checked'}>
           <span class="switch-riel"></span>
         </label>
-        <button class="icono" data-editar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`Editar categoría ${c.nombre}`)}">✏️</button><button class="icono" data-borrar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`Borrar categoría ${c.nombre}`)}">🗑️</button>
+        <button class="icono" data-editar-cat="${escapeAtributo(c.id)}" aria-label="${escapeAtributo(`Editar categoría ${c.nombre}`)}">✏️</button><button class="icono" data-borrar-cat="${escapeAtributo(c.id)}" aria-label="${escapeAtributo(`Borrar categoría ${c.nombre}`)}">🗑️</button>
       </span>
     </div>`
     )
@@ -844,8 +844,8 @@ function renderAjustes() {
   document.getElementById('ajustes-presupuestos').innerHTML = catsGasto
     .map(
       (c) => `<div class="campo">
-      <label for="presupuesto-${escapeAtributo(idSeguro(c.id))}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</label>
-      <input id="presupuesto-${escapeAtributo(idSeguro(c.id))}" type="number" min="0" step="50" data-presupuesto-cat="${escapeAtributo(idSeguro(c.id))}" value="${escapeAtributo(topes[c.id] || '')}" placeholder="Sin tope">
+      <label for="presupuesto-${escapeAtributo(c.id)}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</label>
+      <input id="presupuesto-${escapeAtributo(c.id)}" type="number" min="0" step="50" data-presupuesto-cat="${escapeAtributo(c.id)}" value="${escapeAtributo(topes[c.id] || '')}" placeholder="Sin tope">
     </div>`
     )
     .join('');
@@ -855,7 +855,7 @@ function renderAjustes() {
         .map(
           (r) => `<div class="lista-item">
         <span>${escapeHTML(r.nombre)} · $${fmt(r.monto)} · día ${escapeHTML(r.dia)} ${!r.activo ? '<span class="badge">pausado</span>' : ''}</span>
-        <span><button class="icono" data-editar-rec="${escapeAtributo(idSeguro(r.id))}" aria-label="${escapeAtributo(`Editar recurrente ${r.nombre}`)}">✏️</button><button class="icono" data-borrar-rec="${escapeAtributo(idSeguro(r.id))}" aria-label="${escapeAtributo(`Borrar recurrente ${r.nombre}`)}">🗑️</button></span>
+        <span><button class="icono" data-editar-rec="${escapeAtributo(r.id)}" aria-label="${escapeAtributo(`Editar recurrente ${r.nombre}`)}">✏️</button><button class="icono" data-borrar-rec="${escapeAtributo(r.id)}" aria-label="${escapeAtributo(`Borrar recurrente ${r.nombre}`)}">🗑️</button></span>
       </div>`
         )
         .join('')
@@ -1007,7 +1007,7 @@ function abrirModalRecurrente(id) {
       <div class="campo"><label for="rec-monto">Monto</label><input type="number" step="0.01" min="0.01" id="rec-monto" value="${escapeAtributo(existente?.monto ?? '')}"></div>
       <div class="campo"><label for="rec-dia">Día del mes</label><input type="number" min="1" max="31" id="rec-dia" value="${escapeAtributo(existente?.dia ?? 1)}"></div>
     </div>
-    <div class="campo"><label for="rec-categoria">Categoría</label><select id="rec-categoria">${cats.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}" ${existente?.categoria === c.id ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
+    <div class="campo"><label for="rec-categoria">Categoría</label><select id="rec-categoria">${cats.map((c) => `<option value="${escapeAtributo(c.id)}" ${existente?.categoria === c.id ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
     <div class="campo"><label><input type="checkbox" id="rec-activo" ${!existente || existente.activo ? 'checked' : ''}> Activo</label></div>
     <button class="btn-primario" id="btn-guardar-rec">Guardar</button>
     ${existente ? '<button class="btn-secundario btn-peligro" id="btn-borrar-rec" style="margin-top:8px;">Eliminar</button>' : ''}
@@ -1054,7 +1054,8 @@ function wireAjustes() {
     const chk = e.target.closest('[data-activar-cat]');
     if (!chk) return;
     const cat = categoriaObj(chk.dataset.activarCat);
-    if (cat) cat.activo = chk.checked;
+    if (!cat) { toast('No se encontró la categoría. Vuelve a abrir Gastos.', true); return; }
+    cat.activo = chk.checked;
     await guardarYRefrescar();
   });
   document.getElementById('chk-mostrar-metodo').addEventListener('change', async (e) => {

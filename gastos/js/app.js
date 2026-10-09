@@ -1307,6 +1307,152 @@ const reintentarActualizacion = __modulo_aviso_actualizacion.reintentarActualiza
 const revisarActualizacion = __modulo_aviso_actualizacion.revisarActualizacion;
 const iniciarActualizaciones = __modulo_aviso_actualizacion.iniciarActualizaciones;
 
+// ── shared/pantallas.js ──────────────────────────────────────────
+// Distribuye los bloques existentes en páginas según el espacio real disponible.
+// Conserva los mismos elementos, valores y eventos; no corta ni copia formularios.
+(() => {
+  const estados = new WeakMap();
+  let marco = 0;
+  const selector = '.vista.activa, .pantalla:not(.oculto), #pantalla-password:not(.oculto), .popup-fondo:not(.oculto) > .popup-caja, .modal-caja, .dlg-caja, #modal-cuerpo';
+  const ocultar = (el, si) => el.toggleAttribute('data-pagina-oculta', si);
+  const visible = (el) => el.getClientRects().length && getComputedStyle(el).display !== 'none';
+  const observar = () => observador.observe(document.body, { subtree: true, childList: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'hidden', 'open'] });
+
+  function ajustar(host) {
+    host.querySelectorAll('[data-pagina-oculta]').forEach((el) => ocultar(el, false));
+    let estado = estados.get(host);
+    if (!estado) {
+      const barra = document.createElement('nav');
+      barra.className = 'paginas-pantalla';
+      barra.setAttribute('aria-label', 'Páginas de esta pantalla');
+      const anterior = document.createElement('button');
+      anterior.type = 'button'; anterior.textContent = '‹ Anterior';
+      const indicador = document.createElement('span');
+      indicador.setAttribute('role', 'status'); indicador.setAttribute('aria-live', 'polite');
+      const siguiente = document.createElement('button');
+      siguiente.type = 'button'; siguiente.textContent = 'Siguiente ›';
+      barra.append(anterior, indicador, siguiente);
+      host.append(barra);
+      estado = { pagina: 0, barra, anterior, siguiente, indicador, paginas: [] };
+      estados.set(host, estado);
+      anterior.onclick = () => { estado.pagina--; programar(); };
+      siguiente.onclick = () => { estado.pagina++; programar(); };
+    }
+    const { barra, anterior, siguiente, indicador } = estado;
+    if (!host.contains(barra)) host.append(barra);
+    barra.hidden = true;
+    host.classList.add('pantalla-ajustada');
+    const nav = document.querySelector('.nav-inferior');
+    const esVista = host.matches('.vista');
+    const alto = window.visualViewport?.height || innerHeight;
+    const limiteInferior = esVista && nav && visible(nav) ? nav.getBoundingClientRect().top : alto - 12;
+    if (esVista) {
+      host.style.height = Math.max(100, limiteInferior - host.getBoundingClientRect().top) + 'px';
+    } else if (host.id === 'modal-cuerpo' && host.closest('dialog')) {
+      const cabecera = host.closest('dialog').querySelector('header');
+      host.style.height = Math.max(100, alto - 28 - (cabecera?.getBoundingClientRect().height || 0)) + 'px';
+    } else {
+      host.style.height = Math.max(100, alto - (host.matches('.pantalla, #pantalla-password') ? 0 : 40)) + 'px';
+    }
+    host.style.setProperty('--alto-contenido', Math.max(44, host.clientHeight - 140) + 'px');
+    host.classList.remove('con-paginas');
+    const hijos = [...host.children].filter((el) => el !== barra && visible(el));
+    const cabe = () => {
+      const fin = host.getBoundingClientRect().bottom - (barra.hidden ? 8 : 60);
+      return hijos.filter(visible).every((el) => el.getBoundingClientRect().bottom <= fin + 1)
+        && hijos.filter(visible).every((el) => el.getBoundingClientRect().top >= host.getBoundingClientRect().top - 1);
+    };
+    if (cabe()) { estado.paginas = []; return; }
+    barra.hidden = false;
+    host.classList.add('con-paginas');
+    const capacidad = Math.max(44, host.clientHeight - 140);
+    const envolturas = [];
+    function recoger(el) {
+      const cs = getComputedStyle(el);
+      const hijosVisibles = [...el.children].filter(visible);
+      if (!hijosVisibles.length || [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || el.matches('svg, canvas, img, video, input, textarea, select, button, a, .campo, .teclado, .fila-superior, .popup-botones, .dlg-botones') ||
+          el.getBoundingClientRect().height + parseFloat(cs.marginTop || 0) + parseFloat(cs.marginBottom || 0) <= capacidad) return [[el]];
+      envolturas.push(el);
+      const resultado = [];
+      for (let i = 0; i < hijosVisibles.length; i++) {
+        const hijo = hijosVisibles[i];
+        if (hijo.tagName === 'LABEL' && hijosVisibles[i + 1]?.matches('input, select, textarea, .dlg-envoltura-pass')) {
+          resultado.push([hijo, hijosVisibles[++i]]);
+        } else resultado.push(...recoger(hijo));
+      }
+      return resultado;
+    }
+    const unidades = hijos.flatMap(recoger);
+    const mostrar = (grupo) => {
+      const elegidos = new Set(grupo.flat());
+      for (const unidad of unidades) for (const el of unidad) ocultar(el, !elegidos.has(el));
+      for (const el of [...envolturas].reverse()) ocultar(el, ![...elegidos].some((nodo) => el.contains(nodo)));
+    };
+    const paginas = [];
+    let pagina = [];
+    // ponytail: mide cada bloque; virtualizar solo si las listas llegan a miles de filas.
+    for (const unidad of unidades) {
+      mostrar([...pagina, unidad]);
+      if (pagina.length && !cabe()) { paginas.push(pagina); pagina = []; }
+      pagina.push(unidad);
+    }
+    if (pagina.length) paginas.push(pagina);
+    const activo = estado.enfocar || document.activeElement;
+    const enfocada = paginas.findIndex((p) => p.flat().some((el) => el.contains(activo)));
+    if (enfocada >= 0 && activo !== anterior && activo !== siguiente) estado.pagina = enfocada;
+    estado.pagina = Math.max(0, Math.min(estado.pagina, paginas.length - 1));
+    estado.paginas = paginas;
+    mostrar(paginas[estado.pagina] || []);
+    anterior.disabled = estado.pagina === 0;
+    siguiente.disabled = estado.pagina >= paginas.length - 1;
+    indicador.textContent = (estado.pagina + 1) + ' / ' + paginas.length;
+    host.scrollTop = 0;
+    if (estado.enfocar) {
+      const campo = estado.enfocar; estado.enfocar = null;
+      campo.focus(); campo.reportValidity?.();
+    }
+  }
+
+  function actualizar() {
+    marco = 0;
+    observador.disconnect();
+    const alto = window.visualViewport?.height || innerHeight;
+    document.documentElement.style.setProperty('--alto-pantalla', alto + 'px');
+    const modalNativo = document.querySelector('dialog[open]');
+    document.querySelectorAll(selector).forEach((host) => {
+      if (visible(host) && !(modalNativo && host.matches('.vista'))) ajustar(host);
+    });
+    window.scrollTo(0, 0);
+    observar();
+  }
+  function programar() { if (!marco) marco = requestAnimationFrame(actualizar); }
+  const observador = new MutationObserver((cambios) => {
+    const clases = (valor) => String(valor || '').replace(/\blg-activa\b/g, '').trim();
+    if (cambios.some((c) => c.type !== 'attributes' || c.attributeName !== 'class'
+        || clases(c.oldValue) !== clases(c.target.className))) programar();
+  });
+  function iniciar() {
+    observar(); programar();
+    document.addEventListener('invalid', (e) => {
+      if (visible(e.target)) return;
+      const host = e.target.closest('.pantalla-ajustada');
+      const estado = host && estados.get(host);
+      if (estado) {
+        e.preventDefault();
+        if (!estado.enfocar) estado.enfocar = e.target;
+        programar();
+      }
+    }, true);
+    window.addEventListener('resize', programar);
+    window.visualViewport?.addEventListener('resize', programar);
+    window.visualViewport?.addEventListener('scroll', programar);
+    document.addEventListener('load', programar, true);
+    document.addEventListener('focusin', (e) => { if (!e.target.closest('.paginas-pantalla')) programar(); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
+  else iniciar();
+})();
+
 // ── shared/liquid.js ──────────────────────────────────────────
 // Liquid Glass: reflejo de luz que sigue al cursor sobre las superficies de
 // cristal (.tarjeta, .popup-caja, .btn-primario, .btn-secundario, .encabezado,
@@ -1753,10 +1899,10 @@ function normalizarDatos(datos) {
   return {
     version: datos.version || 1,
     config: { ...base.config, ...(datos.config || {}) },
-    movimientos: Array.isArray(datos.movimientos) ? datos.movimientos : [],
-    categorias: Array.isArray(datos.categorias) && datos.categorias.length ? datos.categorias : base.categorias,
+    movimientos: Array.isArray(datos.movimientos) ? datos.movimientos.map((m) => ({ ...m, id: String(m.id), categoria: String(m.categoria), recurrenteId: m.recurrenteId == null ? null : String(m.recurrenteId) })) : [],
+    categorias: Array.isArray(datos.categorias) && datos.categorias.length ? datos.categorias.map((c) => ({ ...c, id: String(c.id) })) : base.categorias,
     presupuestos: datos.presupuestos && typeof datos.presupuestos === 'object' ? datos.presupuestos : {},
-    recurrentes: Array.isArray(datos.recurrentes) ? datos.recurrentes : [],
+    recurrentes: Array.isArray(datos.recurrentes) ? datos.recurrentes.map((r) => ({ ...r, id: String(r.id), categoria: String(r.categoria) })) : [],
   };
 }
 
@@ -3048,7 +3194,7 @@ function renderCapturar() {
   const cats = E.datos.categorias.filter((c) => c.tipo === E.captura.tipo && c.activo !== false);
   if (!cats.some((c) => c.id === E.captura.categoria)) E.captura.categoria = cats[0]?.id || null;
   document.getElementById('categorias-grid').innerHTML = cats
-    .map((c) => `<button class="categoria-btn ${c.id === E.captura.categoria ? 'activa' : ''}" data-id="${escapeAtributo(idSeguro(c.id))}" aria-pressed="${c.id === E.captura.categoria}">
+    .map((c) => `<button class="categoria-btn ${c.id === E.captura.categoria ? 'activa' : ''}" data-id="${escapeAtributo(c.id)}" aria-pressed="${c.id === E.captura.categoria}">
       <span class="emoji">${escapeHTML(c.icono)}</span>${escapeHTML(c.nombre)}
     </button>`)
     .join('');
@@ -3143,7 +3289,7 @@ function movimientosFiltrados() {
 function filaMovimientoHTML(m) {
   const cat = categoriaObj(m.categoria);
   const mostrarMetodo = E.datos.config.mostrarMetodo !== false;
-  return `<div class="movimiento-fila" data-id="${escapeAtributo(idSeguro(m.id))}">
+  return `<div class="movimiento-fila" data-id="${escapeAtributo(m.id)}">
     <div class="emoji-cat" style="background:${colorSeguro(cat?.color)}22;">${escapeHTML(cat?.icono || '❓')}</div>
     <div class="detalle">
       <div class="nombre">${escapeHTML(cat?.nombre || m.categoria)}${m.nota ? ' · ' + escapeHTML(m.nota) : ''}</div>
@@ -3156,7 +3302,7 @@ function filaMovimientoHTML(m) {
 function renderMovimientos() {
   const select = document.getElementById('mov-filtro-categoria');
   const valPrevio = select.value;
-  select.innerHTML = '<option value="">Todas</option>' + E.datos.categorias.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('');
+  select.innerHTML = '<option value="">Todas</option>' + E.datos.categorias.map((c) => `<option value="${escapeAtributo(c.id)}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('');
   select.value = valPrevio;
 
   const movs = movimientosFiltrados();
@@ -3210,7 +3356,7 @@ function abrirEditarMovimiento(id) {
   const html = `
     <h2 id="modal-titulo">Editar movimiento</h2>
     <div class="campo"><label for="edit-monto">Monto</label><input type="number" step="0.01" min="0.01" id="edit-monto" value="${escapeAtributo(m.monto)}"></div>
-    <div class="campo"><label for="edit-categoria">Categoría</label><select id="edit-categoria">${cats.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}" ${c.id === m.categoria ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
+    <div class="campo"><label for="edit-categoria">Categoría</label><select id="edit-categoria">${cats.map((c) => `<option value="${escapeAtributo(c.id)}" ${c.id === m.categoria ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
     ${mostrarMetodo ? `<div class="campo"><label for="edit-metodo">Método</label><select id="edit-metodo">${METODOS.map((mm) => `<option value="${escapeAtributo(mm)}" ${mm === m.metodo ? 'selected' : ''}>${escapeHTML(metodoLabel(mm))}</option>`).join('')}</select></div>` : ''}
     <div class="campo"><label for="edit-fecha">Fecha</label><input type="date" id="edit-fecha" value="${escapeAtributo(m.fecha)}"></div>
     <div class="campo"><label for="edit-nota">Nota</label><input type="text" id="edit-nota" value="${escapeAtributo(m.nota)}"></div>
@@ -3398,10 +3544,10 @@ function renderAjustes() {
       <span>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)} <span class="badge">${escapeHTML(c.tipo)}</span></span>
       <span>
         <label class="switch" title="${c.activo === false ? 'Desactivada' : 'Activa'}">
-          <input type="checkbox" data-activar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`${c.activo === false ? 'Activar' : 'Desactivar'} ${c.nombre}`)}" ${c.activo === false ? '' : 'checked'}>
+          <input type="checkbox" data-activar-cat="${escapeAtributo(c.id)}" aria-label="${escapeAtributo(`${c.activo === false ? 'Activar' : 'Desactivar'} ${c.nombre}`)}" ${c.activo === false ? '' : 'checked'}>
           <span class="switch-riel"></span>
         </label>
-        <button class="icono" data-editar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`Editar categoría ${c.nombre}`)}">✏️</button><button class="icono" data-borrar-cat="${escapeAtributo(idSeguro(c.id))}" aria-label="${escapeAtributo(`Borrar categoría ${c.nombre}`)}">🗑️</button>
+        <button class="icono" data-editar-cat="${escapeAtributo(c.id)}" aria-label="${escapeAtributo(`Editar categoría ${c.nombre}`)}">✏️</button><button class="icono" data-borrar-cat="${escapeAtributo(c.id)}" aria-label="${escapeAtributo(`Borrar categoría ${c.nombre}`)}">🗑️</button>
       </span>
     </div>`
     )
@@ -3414,8 +3560,8 @@ function renderAjustes() {
   document.getElementById('ajustes-presupuestos').innerHTML = catsGasto
     .map(
       (c) => `<div class="campo">
-      <label for="presupuesto-${escapeAtributo(idSeguro(c.id))}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</label>
-      <input id="presupuesto-${escapeAtributo(idSeguro(c.id))}" type="number" min="0" step="50" data-presupuesto-cat="${escapeAtributo(idSeguro(c.id))}" value="${escapeAtributo(topes[c.id] || '')}" placeholder="Sin tope">
+      <label for="presupuesto-${escapeAtributo(c.id)}">${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</label>
+      <input id="presupuesto-${escapeAtributo(c.id)}" type="number" min="0" step="50" data-presupuesto-cat="${escapeAtributo(c.id)}" value="${escapeAtributo(topes[c.id] || '')}" placeholder="Sin tope">
     </div>`
     )
     .join('');
@@ -3425,7 +3571,7 @@ function renderAjustes() {
         .map(
           (r) => `<div class="lista-item">
         <span>${escapeHTML(r.nombre)} · $${fmt(r.monto)} · día ${escapeHTML(r.dia)} ${!r.activo ? '<span class="badge">pausado</span>' : ''}</span>
-        <span><button class="icono" data-editar-rec="${escapeAtributo(idSeguro(r.id))}" aria-label="${escapeAtributo(`Editar recurrente ${r.nombre}`)}">✏️</button><button class="icono" data-borrar-rec="${escapeAtributo(idSeguro(r.id))}" aria-label="${escapeAtributo(`Borrar recurrente ${r.nombre}`)}">🗑️</button></span>
+        <span><button class="icono" data-editar-rec="${escapeAtributo(r.id)}" aria-label="${escapeAtributo(`Editar recurrente ${r.nombre}`)}">✏️</button><button class="icono" data-borrar-rec="${escapeAtributo(r.id)}" aria-label="${escapeAtributo(`Borrar recurrente ${r.nombre}`)}">🗑️</button></span>
       </div>`
         )
         .join('')
@@ -3577,7 +3723,7 @@ function abrirModalRecurrente(id) {
       <div class="campo"><label for="rec-monto">Monto</label><input type="number" step="0.01" min="0.01" id="rec-monto" value="${escapeAtributo(existente?.monto ?? '')}"></div>
       <div class="campo"><label for="rec-dia">Día del mes</label><input type="number" min="1" max="31" id="rec-dia" value="${escapeAtributo(existente?.dia ?? 1)}"></div>
     </div>
-    <div class="campo"><label for="rec-categoria">Categoría</label><select id="rec-categoria">${cats.map((c) => `<option value="${escapeAtributo(idSeguro(c.id))}" ${existente?.categoria === c.id ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
+    <div class="campo"><label for="rec-categoria">Categoría</label><select id="rec-categoria">${cats.map((c) => `<option value="${escapeAtributo(c.id)}" ${existente?.categoria === c.id ? 'selected' : ''}>${escapeHTML(c.icono)} ${escapeHTML(c.nombre)}</option>`).join('')}</select></div>
     <div class="campo"><label><input type="checkbox" id="rec-activo" ${!existente || existente.activo ? 'checked' : ''}> Activo</label></div>
     <button class="btn-primario" id="btn-guardar-rec">Guardar</button>
     ${existente ? '<button class="btn-secundario btn-peligro" id="btn-borrar-rec" style="margin-top:8px;">Eliminar</button>' : ''}
@@ -3624,7 +3770,8 @@ function wireAjustes() {
     const chk = e.target.closest('[data-activar-cat]');
     if (!chk) return;
     const cat = categoriaObj(chk.dataset.activarCat);
-    if (cat) cat.activo = chk.checked;
+    if (!cat) { toast('No se encontró la categoría. Vuelve a abrir Gastos.', true); return; }
+    cat.activo = chk.checked;
     await guardarYRefrescar();
   });
   document.getElementById('chk-mostrar-metodo').addEventListener('change', async (e) => {

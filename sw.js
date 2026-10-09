@@ -10,10 +10,10 @@
 // elimina las versiones anteriores (ver precachearAssets).
 // Antes todo vivía junto en CACHE: cada versión nueva volvía a bajar los
 // videos completos aunque no hubieran cambiado -- eso era la parte lenta.
-const CACHE = 'mis-apps-ef60fcc541';
+const CACHE = 'mis-apps-dc37202b3e';
 const PREFIJO = 'mis-apps-';
 const CACHE_ASSETS = 'mis-apps-assets-v2';
-const VERSION = 'ef60fcc541';
+const VERSION = 'dc37202b3e';
 const URL_METADATA = './__app_meta__.json';
 
 const CACHE_CONTROL = PREFIJO.replace(/-$/, '') + '@aceptada';
@@ -98,7 +98,7 @@ self.addEventListener('install', (e) => {
       .then(async () => {
         const cache = await caches.open(CACHE);
         await cache.put(URL_METADATA, new Response(JSON.stringify({
-          version: 'ef60fcc541', installedAt: new Date().toISOString(),
+          version: 'dc37202b3e', installedAt: new Date().toISOString(),
         }), { headers: { 'Content-Type': 'application/json' } }));
       })
       .then(async () => {

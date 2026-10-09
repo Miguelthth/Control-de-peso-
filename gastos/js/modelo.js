@@ -77,9 +77,9 @@ export function normalizarDatos(datos) {
   return {
     version: datos.version || 1,
     config: { ...base.config, ...(datos.config || {}) },
-    movimientos: Array.isArray(datos.movimientos) ? datos.movimientos : [],
-    categorias: Array.isArray(datos.categorias) && datos.categorias.length ? datos.categorias : base.categorias,
+    movimientos: Array.isArray(datos.movimientos) ? datos.movimientos.map((m) => ({ ...m, id: String(m.id), categoria: String(m.categoria), recurrenteId: m.recurrenteId == null ? null : String(m.recurrenteId) })) : [],
+    categorias: Array.isArray(datos.categorias) && datos.categorias.length ? datos.categorias.map((c) => ({ ...c, id: String(c.id) })) : base.categorias,
     presupuestos: datos.presupuestos && typeof datos.presupuestos === 'object' ? datos.presupuestos : {},
-    recurrentes: Array.isArray(datos.recurrentes) ? datos.recurrentes : [],
+    recurrentes: Array.isArray(datos.recurrentes) ? datos.recurrentes.map((r) => ({ ...r, id: String(r.id), categoria: String(r.categoria) })) : [],
   };
 }

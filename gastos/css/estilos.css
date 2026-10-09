@@ -64,7 +64,7 @@ button, input, select, textarea { font-family: inherit; }
   position: fixed; bottom: 0; left: 0; right: 0;
   display: flex; justify-content: center;
   background: var(--superficie); border-top: 1px solid var(--borde);
-  padding: 6px 6px max(6px, env(safe-area-inset-bottom));
+  padding: 6px 6px max(4px, calc(env(safe-area-inset-bottom) - 6px));
   padding-left: max(6px, env(safe-area-inset-left));
   padding-right: max(6px, env(safe-area-inset-right));
   z-index: 20;
@@ -121,7 +121,7 @@ button, input, select, textarea { font-family: inherit; }
 
 .teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 16px; }
 .teclado button {
-  padding: 16px 0; font-size: 1.3rem; border-radius: 12px; border: 1px solid var(--borde);
+  padding: 16px 0; font-size: 1.2rem; border-radius: 12px; border: 1px solid var(--borde);
   background: var(--superficie-alt); color: var(--texto); cursor: pointer;
 }
 .teclado button:active { background: var(--borde); }
@@ -245,7 +245,7 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
 .badge { font-size: 0.68rem; padding: 2px 8px; border-radius: 999px; background: var(--superficie-alt); color: var(--texto-suave); }
 
 .switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
-.switch input { position: absolute; inset: 0; z-index: 1; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch input { position: absolute; inset: 0; z-index: 1; opacity: 0; width: 100%; height: 100%; min-height: 0; margin: 0; cursor: pointer; }
 .switch:focus-within { outline: 2px solid var(--exito); outline-offset: 3px; border-radius: 999px; }
 .switch-riel {
   position: absolute; inset: 0; background: var(--borde); border-radius: 999px; cursor: pointer;
@@ -314,7 +314,7 @@ svg text.grafica-fila-valor { font-size: 11px; fill: var(--texto-suave); }
 .modal-cerrar .barra { width: 40px; height: 4px; background: var(--borde); border-radius: 999px; margin: 0 auto; }
 
 /* Armonización con el sistema visual compartido */
-#app { width: 100%; max-width: 520px; padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+#app { width: 100%; max-width: 520px; padding-bottom: calc(70px + max(0px, calc(env(safe-area-inset-bottom) - 6px))); }
 .pantalla-conexion { min-height: 100dvh; padding: max(28px, env(safe-area-inset-top)) 24px max(28px, env(safe-area-inset-bottom)); background: var(--fondo); }
 .pantalla-conexion::before { content: ''; position: absolute; inset: 18px; z-index: -1; border-radius: var(--radio-lg); background: var(--superficie); box-shadow: var(--sombra-elevada); }
 .encabezado { min-height: 64px; padding-inline: 16px; background: color-mix(in srgb, var(--fondo) 86%, transparent); backdrop-filter: blur(14px); }
@@ -365,3 +365,15 @@ img, svg, video, canvas { max-width: 100%; }
 .toast-lindo.error .toast-icono { background: #dc2626; }
 .toast-texto { line-height: 1.4; }
 @media (prefers-reduced-motion: reduce) { .toast-lindo { transition: none; } }
+
+/* Captura compacta: conserva categorías legibles y botones táctiles. */
+#vista-capturar { padding-top: 0; }
+#vista-capturar .fila-superior { margin-top: 0; }
+#vista-capturar > h3 { margin: 4px 0; font-size: .8rem; }
+#vista-capturar .categorias-grid { margin-bottom: 4px; }
+#vista-capturar .captura-monto { font-size: 2rem; padding: 4px 0; }
+#vista-capturar .teclado { gap: 5px; margin: 4px 0; }
+#vista-capturar .teclado button { padding: 8px 0; min-height: 44px; }
+#vista-capturar .campo { margin-bottom: 6px; }
+#vista-capturar .campo-label, #vista-capturar .campo > label { margin-bottom: 2px; font-size: .75rem; }
+#vista-capturar .campo input { min-height: 44px; }

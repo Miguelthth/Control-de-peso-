@@ -366,14 +366,6 @@ img, svg, video, canvas { max-width: 100%; }
 .toast-texto { line-height: 1.4; }
 @media (prefers-reduced-motion: reduce) { .toast-lindo { transition: none; } }
 
-/* Captura compacta: conserva categorías legibles y botones táctiles. */
-#vista-capturar { padding-top: 0; }
-#vista-capturar .fila-superior { margin-top: 0; }
-#vista-capturar > h3 { margin: 4px 0; font-size: .8rem; }
-#vista-capturar .categorias-grid { margin-bottom: 4px; }
-#vista-capturar .captura-monto { font-size: 2rem; padding: 4px 0; }
-#vista-capturar .teclado { gap: 5px; margin: 4px 0; }
-#vista-capturar .teclado button { padding: 8px 0; min-height: 44px; }
-#vista-capturar .campo { margin-bottom: 6px; }
-#vista-capturar .campo-label, #vista-capturar .campo > label { margin-bottom: 2px; font-size: .75rem; }
-#vista-capturar .campo input { min-height: 44px; }
+/* Tamaño intermedio de los botones del teclado. */
+#vista-capturar .teclado { gap: 6px; }
+#vista-capturar .teclado button { padding: 12px 0; min-height: 50px; }

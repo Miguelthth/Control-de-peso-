@@ -358,36 +358,10 @@ input:focus, select:focus, textarea:focus {
 #misapps-actualizacion button { margin-top: 20px; min-height: 44px; }
 #misapps-actualizacion button[hidden] { display: none; }
 
-/* Pantallas del dispositivo: los bloques largos se recorren por páginas. */
-html, body { height: var(--alto-pantalla, 100dvh); min-height: 0; overflow: hidden; }
-body #app { height: var(--alto-pantalla, 100dvh); min-height: 0; display: flex; flex-direction: column; padding-bottom: 0; }
-#app > .encabezado { flex-shrink: 0; }
-body .pantalla-ajustada { position: relative; flex: none; min-height: 0 !important; max-height: none; overflow: clip !important; box-sizing: border-box; }
-#app .vista.pantalla-ajustada { padding-bottom: 12px; }
-body .pantalla-ajustada.con-paginas { padding-bottom: 64px; justify-content: flex-start; }
-[data-pagina-oculta] { display: none !important; }
-.paginas-pantalla {
-  position: absolute; bottom: 8px; left: 12px; right: 12px; z-index: 10;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px; padding: 4px;
+#misapps-actualizacion .misapps-perro-actualizacion {
+  display: block; width: 112px; height: 112px; max-width: 100%; max-height: 20dvh;
+  object-fit: contain; margin: 0 auto 14px;
 }
-.paginas-pantalla[hidden] { display: none; }
-.paginas-pantalla button { width: auto; min-height: 44px; padding: 6px 12px; color: var(--texto); background: transparent; border: 0; border-radius: 8px; font-size: .82rem; }
-.paginas-pantalla span { font-size: .8rem; white-space: nowrap; }
-.pantalla-ajustada svg, .pantalla-ajustada canvas, .pantalla-ajustada video, .pantalla-ajustada img { max-height: var(--alto-contenido); max-width: 100%; object-fit: contain; }
-.pantalla-ajustada .grafica-scroll, .pantalla-ajustada #grafica-calor { overflow: clip !important; }
-.pantalla-ajustada .grafica-envoltura { min-width: 0 !important; width: 100%; }
-.pantalla-ajustada .grafica-envoltura svg { width: 100%; height: auto; }
-.pantalla-ajustada .grafica-tabs { flex-wrap: wrap; overflow: visible; }
-.pantalla-ajustada .campo, .pantalla-ajustada .tarjeta { min-width: 0; }
-.pantalla-ajustada.con-paginas .tarjeta { margin-bottom: 8px; }
-body .pantalla-centrada.pantalla-ajustada, body .pantalla-conexion.pantalla-ajustada { min-height: 0; }
-body .modal-app { max-height: calc(var(--alto-pantalla, 100dvh) - 16px); }
-
-html:root, html body { height: var(--alto-pantalla, 100dvh); }
-body .ejercicio-modal { height: calc(var(--alto-pantalla, 100dvh) - 24px); max-height: calc(var(--alto-pantalla, 100dvh) - 24px); overflow: clip; }
-
-.pantalla-ajustada .grafica-ejercicio { min-height: 0; }
-.pantalla-ajustada .cuenta-gigante, .pantalla-ajustada .descanso-pantalla, .pantalla-ajustada .hiit-activo, .pantalla-ajustada .timer-display { min-height: 0; }
-
-.pantalla-ajustada .wr-activo { min-height: 0; }
+@media (max-height: 500px) {
+  #misapps-actualizacion .misapps-engrane { font-size: 32px; margin-bottom: 8px; }
+}

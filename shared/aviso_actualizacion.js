@@ -21,6 +21,12 @@ function obtenerCapa() {
   capa.setAttribute('aria-live', 'assertive');
   const tarjeta = document.createElement('div');
   tarjeta.className = 'misapps-actualizacion-tarjeta';
+  const imagen = document.createElement('img');
+  imagen.className = 'misapps-perro-actualizacion';
+  const manifiesto = document.querySelector?.('link[rel="manifest"]')?.href;
+  imagen.src = manifiesto ? new URL('shared/perro-actualizacion.png', manifiesto).href : 'shared/perro-actualizacion.png';
+  imagen.alt = '';
+  imagen.setAttribute('aria-hidden', 'true');
   const engrane = document.createElement('span');
   engrane.className = 'misapps-engrane';
   engrane.setAttribute('aria-hidden', 'true');
@@ -36,7 +42,7 @@ function obtenerCapa() {
   capa.addEventListener('keydown', (e) => {
     if (e.key === 'Tab' && !boton.hidden) { e.preventDefault(); boton.focus(); }
   });
-  tarjeta.append(engrane, titulo, mensaje, boton);
+  tarjeta.append(imagen, engrane, titulo, mensaje, boton);
   capa.append(tarjeta);
   document.body.append(capa);
   return capa;
